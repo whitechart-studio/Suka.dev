@@ -196,6 +196,13 @@ Suka is in early architecture and product development. The initial repository is
 
 No stable release is available yet.
 
+## Open Source Resources
+
+- Wiki source: [`docs/wiki`](docs/wiki)
+- Architecture notes: [`docs/architecture`](docs/architecture)
+- Social preview template: [`docs/assets/social-preview.svg`](docs/assets/social-preview.svg)
+- Social preview image: [`docs/assets/social-preview.png`](docs/assets/social-preview.png)
+
 ## License
 
 This project is pre-release. License selection is pending.
