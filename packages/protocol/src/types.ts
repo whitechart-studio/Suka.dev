@@ -1,0 +1,110 @@
+import type {
+  DECISION_CONFIDENCE_LEVELS,
+  DECISION_STATUSES,
+  EVENT_TYPES,
+  POINTER_TYPES,
+  PRESENCE_STATUSES
+} from "./constants.js";
+
+export type PointerType = (typeof POINTER_TYPES)[number];
+export type PresenceStatus = (typeof PRESENCE_STATUSES)[number];
+export type EventType = (typeof EVENT_TYPES)[number];
+export type DecisionStatus = (typeof DECISION_STATUSES)[number];
+export type DecisionConfidence = (typeof DECISION_CONFIDENCE_LEVELS)[number];
+
+export type IsoTimestamp = string;
+export type PointerId = string;
+export type AgentId = string;
+
+export interface PointerScope {
+  paths?: string[];
+  apis?: string[];
+  domains?: string[];
+  tables?: string[];
+  env?: string[];
+}
+
+export interface BasePointer {
+  id: PointerId;
+  type: PointerType;
+}
+
+export interface PresencePointer extends BasePointer {
+  type: "presence";
+  agent_id: AgentId;
+  user_id?: string;
+  tool: string;
+  repo: string;
+  branch?: string;
+  task?: string;
+  status: PresenceStatus;
+  current_files: string[];
+  last_seen: IsoTimestamp;
+  expires_at: IsoTimestamp;
+}
+
+export interface ClaimPointer extends BasePointer {
+  type: "claim";
+  agent_id: AgentId;
+  scope: PointerScope;
+  reason: string;
+  kind: "soft_claim";
+  created_at: IsoTimestamp;
+  expires_at: IsoTimestamp;
+}
+
+export interface EventPointer extends BasePointer {
+  type: "event";
+  event_type: EventType;
+  summary: string;
+  affected_paths: string[];
+  affected_apis: string[];
+  affected_tables: string[];
+  affected_env: string[];
+  agent_id: AgentId;
+  created_at: IsoTimestamp;
+}
+
+export interface DecisionPointer extends BasePointer {
+  type: "decision";
+  title: string;
+  body: string;
+  scope: PointerScope;
+  status: DecisionStatus;
+  confidence: DecisionConfidence;
+  evidence: string[];
+  created_by: AgentId;
+  approved_by?: string;
+  created_at: IsoTimestamp;
+  updated_at?: IsoTimestamp;
+}
+
+export type Pointer =
+  | PresencePointer
+  | ClaimPointer
+  | EventPointer
+  | DecisionPointer;
+
+export type ValidationIssueCode =
+  | "invalid_type"
+  | "missing_field"
+  | "invalid_value"
+  | "invalid_timestamp"
+  | "empty_scope";
+
+export interface ValidationIssue {
+  code: ValidationIssueCode;
+  path: string;
+  message: string;
+}
+
+export type ValidationResult<T> =
+  | {
+      ok: true;
+      value: T;
+    }
+  | {
+      ok: false;
+      issues: ValidationIssue[];
+    };
+

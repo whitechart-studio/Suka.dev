@@ -1,0 +1,4 @@
+interface:
+  display_name: "Suka Backend"
+  short_description: "Server and protocol implementation guide"
+  default_prompt: "Use $suka-backend to implement Suka server, protocol, MCP, or conflict-engine changes."

@@ -1,0 +1,346 @@
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { createRequire } from "node:module";
+import { readFile } from "node:fs/promises";
+import { extname, join, resolve } from "node:path";
+import { URL } from "node:url";
+import { dashboardHtml } from "./dashboard.js";
+import { buildRepoMap } from "./repo-map.js";
+import { createSukaService, type SukaService } from "./service.js";
+
+const require = createRequire(import.meta.url);
+const cytoscapeBundlePath = require.resolve("cytoscape/dist/cytoscape.min.js");
+const lucideBundlePath = require.resolve("lucide/dist/umd/lucide.min.js");
+const dashboardDistPath = resolve(process.cwd(), "apps/dashboard/dist");
+
+export interface HttpServerOptions {
+  service?: SukaService;
+}
+
+export interface ListenOptions {
+  host?: string;
+  port: number;
+}
+
+export interface RunningHttpServer {
+  server: Server;
+  url: string;
+  close(): Promise<void>;
+}
+
+export function createSukaHttpServer(options: HttpServerOptions = {}): Server {
+  const service = options.service ?? createSukaService();
+
+  return createServer(async (request, response) => {
+    try {
+      await routeRequest(service, request, response);
+    } catch (error) {
+      writeJson(response, 500, {
+        error: {
+          code: "internal_error",
+          message: error instanceof Error ? error.message : "Unexpected server error."
+        }
+      });
+    }
+  });
+}
+
+export async function listen(options: ListenOptions, server = createSukaHttpServer()): Promise<RunningHttpServer> {
+  const host = options.host ?? "127.0.0.1";
+
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(options.port, host, () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+
+  const address = server.address();
+  const port = typeof address === "object" && address !== null ? address.port : options.port;
+  const url = `http://${host}:${port}`;
+
+  return {
+    server,
+    url,
+    close() {
+      return new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+    }
+  };
+}
+
+async function routeRequest(service: SukaService, request: IncomingMessage, response: ServerResponse): Promise<void> {
+  const method = request.method ?? "GET";
+  const url = new URL(request.url ?? "/", "http://localhost");
+
+  if (method === "GET" && url.pathname === "/healthz") {
+    writeJson(response, 200, {
+      status: "ok"
+    });
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/") {
+    const served = await tryServeDashboardAsset("/index.html", response);
+    if (!served) {
+      writeHtml(response, 200, dashboardHtml());
+    }
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/vendor/cytoscape.min.js") {
+    const source = await readFile(cytoscapeBundlePath, "utf8");
+    writeJavaScript(response, 200, source);
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/vendor/lucide.min.js") {
+    const source = await readFile(lucideBundlePath, "utf8");
+    writeJavaScript(response, 200, source);
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/api/state") {
+    service.expire();
+    writeJson(response, 200, {
+      data: service.getState()
+    });
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/api/repo-map") {
+    writeJson(response, 200, {
+      data: await buildRepoMap()
+    });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/pointers") {
+    const body = await readJson(request);
+    const result = service.publish(body);
+    if (!result.ok) {
+      writeJson(response, 400, {
+        error: {
+          code: "validation_failed",
+          message: "Pointer validation failed.",
+          issues: result.issues
+        }
+      });
+      return;
+    }
+
+    writeJson(response, 201, {
+      data: result.value
+    });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/conflicts/check") {
+    const body = await readJson(request);
+    const warnings = service.checkConflicts(parseConflictSubject(body));
+    writeJson(response, 200, {
+      data: warnings
+    });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/expire") {
+    const body = await readJson(request);
+    service.expire(parseNow(body));
+    writeJson(response, 200, {
+      data: service.getState()
+    });
+    return;
+  }
+
+  const claimMatch = /^\/api\/claims\/([^/]+)$/.exec(url.pathname);
+  if (method === "DELETE" && claimMatch?.[1] !== undefined) {
+    const released = service.releaseClaim(decodeURIComponent(claimMatch[1]));
+    if (!released) {
+      writeJson(response, 404, {
+        error: {
+          code: "claim_not_found",
+          message: "Claim was not found."
+        }
+      });
+      return;
+    }
+
+    writeJson(response, 200, {
+      data: {
+        released: true
+      }
+    });
+    return;
+  }
+
+  if (method === "GET" && await tryServeDashboardAsset(url.pathname, response)) {
+    return;
+  }
+
+  writeJson(response, 404, {
+    error: {
+      code: "not_found",
+      message: "Route not found."
+    }
+  });
+}
+
+async function tryServeDashboardAsset(pathname: string, response: ServerResponse): Promise<boolean> {
+  const relativePath = decodeURIComponent(pathname).replace(/^\/+/, "");
+  const filePath = resolve(join(dashboardDistPath, relativePath));
+  if (!filePath.startsWith(`${dashboardDistPath}/`) && filePath !== join(dashboardDistPath, "index.html")) {
+    return false;
+  }
+
+  try {
+    const source = await readFile(filePath);
+    writeStatic(response, 200, source, contentTypeFor(filePath));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function readJson(request: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+
+  if (chunks.length === 0) {
+    return {};
+  }
+
+  const raw = Buffer.concat(chunks).toString("utf8");
+  if (raw.trim().length === 0) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    throw new HttpInputError("invalid_json", "Request body must be valid JSON.");
+  }
+}
+
+function parseConflictSubject(body: unknown): Parameters<SukaService["checkConflicts"]>[0] {
+  if (!isRecord(body)) {
+    throw new HttpInputError("invalid_body", "Conflict check body must be an object.");
+  }
+
+  const subject: Parameters<SukaService["checkConflicts"]>[0] = {};
+  if (typeof body.agent_id === "string") {
+    subject.agent_id = body.agent_id;
+  }
+  if (typeof body.task === "string") {
+    subject.task = body.task;
+  }
+  if (isStringArray(body.paths)) {
+    subject.paths = body.paths;
+  }
+  if (isStringArray(body.apis)) {
+    subject.apis = body.apis;
+  }
+  if (isStringArray(body.tables)) {
+    subject.tables = body.tables;
+  }
+  if (isStringArray(body.env)) {
+    subject.env = body.env;
+  }
+  if (isStringArray(body.domains)) {
+    subject.domains = body.domains;
+  }
+
+  return subject;
+}
+
+function parseNow(body: unknown): Date {
+  if (!isRecord(body) || body.now === undefined) {
+    return new Date();
+  }
+
+  if (typeof body.now !== "string") {
+    throw new HttpInputError("invalid_body", "now must be an ISO timestamp when provided.");
+  }
+
+  const parsed = new Date(body.now);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new HttpInputError("invalid_body", "now must be a valid ISO timestamp.");
+  }
+
+  return parsed;
+}
+
+function writeJson(response: ServerResponse, statusCode: number, payload: unknown): void {
+  response.writeHead(statusCode, {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+  });
+  response.end(JSON.stringify(payload));
+}
+
+function writeHtml(response: ServerResponse, statusCode: number, html: string): void {
+  response.writeHead(statusCode, {
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "no-store"
+  });
+  response.end(html);
+}
+
+function writeJavaScript(response: ServerResponse, statusCode: number, source: string): void {
+  response.writeHead(statusCode, {
+    "content-type": "text/javascript; charset=utf-8",
+    "cache-control": "public, max-age=31536000, immutable"
+  });
+  response.end(source);
+}
+
+function writeStatic(response: ServerResponse, statusCode: number, source: Buffer, contentType: string): void {
+  response.writeHead(statusCode, {
+    "content-type": contentType,
+    "cache-control": "no-store"
+  });
+  response.end(source);
+}
+
+function contentTypeFor(filePath: string): string {
+  switch (extname(filePath)) {
+    case ".css":
+      return "text/css; charset=utf-8";
+    case ".html":
+      return "text/html; charset=utf-8";
+    case ".js":
+      return "text/javascript; charset=utf-8";
+    case ".json":
+      return "application/json; charset=utf-8";
+    case ".map":
+      return "application/json; charset=utf-8";
+    case ".svg":
+      return "image/svg+xml";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+class HttpInputError extends Error {
+  constructor(readonly code: string, message: string) {
+    super(message);
+  }
+}
