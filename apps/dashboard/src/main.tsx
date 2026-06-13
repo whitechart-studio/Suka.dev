@@ -69,7 +69,7 @@ type PresencePointer = {
 type ClaimPointer = {
   id: string;
   agent_id: string;
-  reason?: string;
+  reason: string;
   scope: Scope;
   expires_at?: string;
 };
