@@ -326,6 +326,43 @@ test("POST /api/pointers returns validation issues for invalid pointers", async 
   }
 });
 
+test("POST /api/pointers returns client error and structured log for invalid JSON", async () => {
+  const logs: Array<{ level: string; message: string; fields?: Record<string, unknown> }> = [];
+  const running = await listen({ port: 0 }, createSukaHttpServer({
+    logger: {
+      log(level, message, fields) {
+        const entry: { level: string; message: string; fields?: Record<string, unknown> } = { level, message };
+        if (fields !== undefined) {
+          entry.fields = fields;
+        }
+        logs.push(entry);
+      }
+    }
+  }));
+  try {
+    const response = await fetch(`${running.url}/api/pointers`, {
+      body: "{",
+      headers: {
+        "content-type": "application/json"
+      },
+      method: "POST"
+    });
+    const body = await response.json() as { error: { code: string; message: string } };
+
+    assert.equal(response.status, 400);
+    assert.equal(body.error.code, "invalid_json");
+    assert.match(body.error.message, /valid JSON/);
+    assert.equal(logs.length, 1);
+    assert.equal(logs[0]?.level, "error");
+    assert.equal(logs[0]?.message, "request failed");
+    assert.equal(logs[0]?.fields?.error_code, "invalid_json");
+    assert.equal(logs[0]?.fields?.method, "POST");
+    assert.equal(logs[0]?.fields?.path, "/api/pointers");
+  } finally {
+    await running.close();
+  }
+});
+
 test("POST /api/conflicts/check returns claim conflicts", async () => {
   const running = await listen({ port: 0 }, createSukaHttpServer());
   try {

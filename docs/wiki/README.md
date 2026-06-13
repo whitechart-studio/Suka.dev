@@ -17,6 +17,8 @@ Recommended GitHub Wiki page mapping:
 - `CLI-and-Agent-Pointers.md` -> CLI and Agent Pointers.
 - `Team-Connection-and-Hosted-Mode.md` -> Team Connection and Hosted Mode.
 - `Project-Configuration.md` -> Project Configuration.
+- `Self-Hosting.md` -> Self-Hosting.
+- `Release-Workflow.md` -> Release Workflow.
 - `Roadmap.md` -> Roadmap.
 - `Contributing.md` -> Contributing.
 - `Security-and-Privacy.md` -> Security and Privacy.

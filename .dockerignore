@@ -1,0 +1,12 @@
+node_modules/
+**/node_modules/
+**/dist/
+coverage/
+.git/
+.github/
+.suka/
+.env
+.env.*
+*.log
+*.tsbuildinfo
+docs/assets/

@@ -14,6 +14,12 @@ npm test
 
 For dashboard changes, also run visual QA where possible.
 
+For server, Docker, or workflow changes, also run:
+
+```bash
+docker build --tag suka:local .
+```
+
 ## Contribution Areas
 
 - Protocol validation.
@@ -31,4 +37,6 @@ For dashboard changes, also run visual QA where possible.
 - Avoid committing generated output.
 - Keep local runtime state out of git.
 - Prefer explicit contracts over implicit behavior.
-
+- Keep GitHub Actions pinned to full commit SHAs.
+- Keep workflow `permissions` scoped to the minimum needed.
+- Update Self-Hosting, Release Workflow, or Security and Privacy docs when operator behavior changes.

@@ -39,6 +39,9 @@ jobs:
       - name: Verify workspace
         run: npm run ci:verify
 
+      - name: Build Docker image
+        run: docker build --pull --tag suka:${{ github.sha }} .
+
       - name: Upload build artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
