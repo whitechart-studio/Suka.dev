@@ -314,6 +314,17 @@ function Dashboard(): React.ReactElement {
     setDismissedInsightIds((current) => new Set(current).add(insightId));
   }, []);
 
+  const toggleTeamPanel = useCallback(() => {
+    setTeamPanelOpen((open) => {
+      if (!open && teamConnection.inviteToken.length === 0) {
+        setTeamConnection((current) => current.inviteToken.length > 0
+          ? current
+          : { ...current, inviteToken: createInviteToken(repoMap.root ?? "workspace") });
+      }
+      return !open;
+    });
+  }, [repoMap.root, teamConnection.inviteToken.length]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => fitView({ duration: 180, padding: focusMode ? 0.18 : 0.12 }), 80);
     return () => window.clearTimeout(timer);
@@ -365,7 +376,7 @@ function Dashboard(): React.ReactElement {
             {teamConnection.mode === "team" ? "team connected" : "local only"}
           </Badge>
           <Badge tone={status === "connected" ? "live" : status === "error" ? "fail" : "neutral"} icon={<Wifi size={13} />}>{status}</Badge>
-          <button type="button" onClick={() => setTeamPanelOpen((value) => !value)}>
+          <button type="button" onClick={toggleTeamPanel}>
             <Link2 size={14} />
             Team
           </button>
@@ -531,7 +542,7 @@ function TeamConnectionPanel({
   serverStatus: string;
 }): React.ReactElement {
   const connected = connection.mode === "team";
-  const inviteToken = useMemo(() => connection.inviteToken || createInviteToken(repoName), [connection.inviteToken, repoName]);
+  const inviteToken = connection.inviteToken;
   const inviteLink = `suka://join/${inviteToken}`;
   const teammates = agents.length > 0 ? agents : [{
     agent_id: "local-agent",
