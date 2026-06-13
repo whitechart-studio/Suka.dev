@@ -55,6 +55,28 @@ Claims can cover:
 - Environment variables.
 - Product/domain areas.
 
+## Decisions
+
+Decisions are durable project memory. They should capture accepted engineering constraints, architectural choices, and project rules that future agents should respect before editing related areas.
+
+Record an accepted decision:
+
+```bash
+node packages/cli/dist/bin.js decision "Webhook handlers must be idempotent" \
+  --body "Payment webhook handlers must tolerate duplicate delivery." \
+  --path "src/billing/**" \
+  --evidence docs/payments.md \
+  --agent codex-local \
+  --approved-by trent
+```
+
+Accepted decisions require at least one evidence reference. Decision scope can use `--path`, `--api`, `--table`, `--env`, or `--domain`.
+
+The server also exposes:
+
+- `GET /api/decisions`
+- `POST /api/decisions`
+
 ## Conflict Checks
 
 The conflict engine detects overlaps between planned work and existing claims.
@@ -64,7 +86,3 @@ Examples:
 - Two agents editing the same path family.
 - API endpoint overlap.
 - Shared domain scope overlap.
-
-## Next CLI Work
-
-The next major task is live agent presence publishing so Codex, Cursor, terminal agents, and future adapters can publish state automatically.

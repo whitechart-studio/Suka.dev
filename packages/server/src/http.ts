@@ -131,6 +131,48 @@ async function routeRequest(
     return;
   }
 
+  if (method === "GET" && url.pathname === "/api/decisions") {
+    writeJson(response, 200, {
+      data: service.getState().decisions
+    });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/decisions") {
+    const body = await readJson(request);
+    if (isRecord(body) && body.type !== undefined && body.type !== "decision") {
+      writeJson(response, 400, {
+        error: {
+          code: "invalid_decision",
+          message: "Decision endpoint only accepts decision pointers."
+        }
+      });
+      return;
+    }
+
+    const pointer = isRecord(body) && body.type === undefined ? { ...body, type: "decision" } : body;
+    const result = service.publish(pointer);
+    if (!result.ok) {
+      writeJson(response, 400, {
+        error: {
+          code: "validation_failed",
+          message: "Decision validation failed.",
+          issues: result.issues
+        }
+      });
+      return;
+    }
+
+    writeJson(response, 201, {
+      data: result.value
+    });
+    realtime.broadcast({
+      data: result.value,
+      type: "pointer.published"
+    });
+    return;
+  }
+
   if (method === "POST" && url.pathname === "/api/pointers") {
     const body = await readJson(request);
     const result = service.publish(body);
