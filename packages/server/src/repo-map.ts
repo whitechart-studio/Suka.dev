@@ -1,5 +1,5 @@
 import { readdir, stat } from "node:fs/promises";
-import { basename, dirname, join, relative, sep } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 
 export interface RepoMapDomain {
   color: string;
@@ -109,7 +109,7 @@ async function discoverDomains(root: string): Promise<Array<{
       const children = await readdir(absolutePath, { withFileTypes: true });
       for (const child of children) {
         if (!child.isDirectory() || ignoredNames.has(child.name)) continue;
-        const childPath = join(entry.name, child.name);
+        const childPath = normalizeRepoPath(join(entry.name, child.name));
         domains.push({
           kind: kindFor(childPath),
           metrics: await measureDirectory(join(root, childPath), root),
@@ -197,8 +197,8 @@ function edge(source: string, target: string): RepoMapEdge {
 }
 
 function kindFor(path: string): RepoMapDomain["kind"] {
-  if (path.startsWith(`apps${sep}`) || path.startsWith("apps/")) return "app";
-  if (path.startsWith(`packages${sep}`) || path.startsWith("packages/")) return "package";
+  if (path.startsWith("apps/")) return "app";
+  if (path.startsWith("packages/")) return "package";
   if (path === "docs" || path.endsWith("-docs")) return "docs";
   if (path === ".agents" || path === "scripts" || path === "project-skills" || path.startsWith("project-skills/")) return "tooling";
   if (path.startsWith(".")) return "config";
@@ -253,4 +253,8 @@ function titleFor(value: string): string {
 
 function isGeneratedPath(path: string): boolean {
   return path.split(/[\\/]/).some((part) => ignoredNames.has(part));
+}
+
+function normalizeRepoPath(path: string): string {
+  return path.replace(/\\/g, "/");
 }

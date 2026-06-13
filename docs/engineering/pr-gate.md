@@ -7,9 +7,15 @@ Suka uses pull requests as the only path into `main`. Every PR should pass the a
 - `PR Gate / Quality (ubuntu-latest, Node 20.x)`
 - `PR Gate / Quality (macos-latest, Node 20.x)`
 - `PR Gate / Quality (windows-latest, Node 20.x)`
-- `PR Gate / Dependency Review`
 - `PR Gate / npm Audit`
 - `CodeQL / Analyze JavaScript And TypeScript`
+
+## Advisory Checks
+
+- Dependency Review
+
+Dependency Review requires GitHub Dependency Graph to be enabled in repository settings. Until that setting is enabled, `npm Audit` remains the blocking dependency security gate. After Dependency Graph is enabled, add `actions/dependency-review-action` back to the PR workflow and require it in branch protection.
+
 
 ## Local Verification
 

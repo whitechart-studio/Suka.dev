@@ -51,26 +51,6 @@ jobs:
       - name: Verify workspace
         run: npm run ci:verify
 
-  dependency-review:
-    name: Dependency Review
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    permissions:
-      contents: read
-      pull-requests: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Review dependency changes
-        uses: actions/dependency-review-action@v4
-        with:
-          fail-on-severity: high
-          license-check: true
-
   audit:
     name: npm Audit
     runs-on: ubuntu-latest
