@@ -3,6 +3,7 @@ import type {
   DECISION_STATUSES,
   EVENT_TYPES,
   POINTER_TYPES,
+  SUKA_CONFIG_MODES,
   PRESENCE_STATUSES
 } from "./constants.js";
 
@@ -11,6 +12,7 @@ export type PresenceStatus = (typeof PRESENCE_STATUSES)[number];
 export type EventType = (typeof EVENT_TYPES)[number];
 export type DecisionStatus = (typeof DECISION_STATUSES)[number];
 export type DecisionConfidence = (typeof DECISION_CONFIDENCE_LEVELS)[number];
+export type SukaConfigMode = (typeof SUKA_CONFIG_MODES)[number];
 
 export type IsoTimestamp = string;
 export type PointerId = string;
@@ -108,3 +110,28 @@ export type ValidationResult<T> =
       issues: ValidationIssue[];
     };
 
+export interface SukaConfigDomain {
+  id: string;
+  name: string;
+  paths: string[];
+  apis: string[];
+  tables: string[];
+  env: string[];
+}
+
+export interface SukaPrivacyConfig {
+  publish_file_paths: boolean;
+  publish_code_content: false;
+  publish_terminal_logs: false;
+}
+
+export interface SukaConfig {
+  version: 1;
+  repo: string;
+  mode: SukaConfigMode;
+  server_url: string;
+  data_file: string;
+  ignored_paths: string[];
+  domains: SukaConfigDomain[];
+  privacy: SukaPrivacyConfig;
+}

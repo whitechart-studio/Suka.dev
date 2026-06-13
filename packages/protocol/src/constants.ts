@@ -43,3 +43,4 @@ export const DECISION_STATUSES = [
 
 export const DECISION_CONFIDENCE_LEVELS = ["low", "medium", "high"] as const;
 
+export const SUKA_CONFIG_MODES = ["local", "self_hosted", "hosted"] as const;
