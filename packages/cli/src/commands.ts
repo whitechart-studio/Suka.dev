@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { FileSukaStore, createSukaHttpServer, createSukaService, listen } from "@suka/server";
-import type { DecisionConfidence, DecisionStatus, EventType, PresenceStatus } from "@suka/protocol";
+import { hasAnyScope, type DecisionConfidence, type DecisionStatus, type EventType, type PresenceStatus } from "@suka/protocol";
 import { initProject, loadConfig, resolveProjectPath } from "./config.js";
 import { createPointerId } from "./ids.js";
 import { SukaApiClient } from "./client.js";
@@ -291,10 +291,6 @@ function buildPresencePointer(options: {
     last_seen: options.now.toISOString(),
     expires_at: new Date(options.now.getTime() + ttlSeconds * 1000).toISOString()
   };
-}
-
-function hasAnyScope(scope: Record<string, string[]>): boolean {
-  return Object.values(scope).some((items) => items.length > 0);
 }
 
 function detectAgentTool(env: NodeJS.ProcessEnv): string {

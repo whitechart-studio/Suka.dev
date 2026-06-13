@@ -176,7 +176,7 @@ function requireScope(record: Record<string, unknown>, key: string, issues: Muta
   }
 }
 
-function hasAnyScope(scope: PointerScope): boolean {
+export function hasAnyScope(scope: PointerScope): boolean {
   return [scope.paths, scope.apis, scope.domains, scope.tables, scope.env].some(
     (items) => Array.isArray(items) && items.length > 0
   );
