@@ -11,6 +11,7 @@
   ],
   "scripts": {
     "build": "tsc -b && npm run build --workspace @suka/dashboard",
+    "ci:verify": "npm run typecheck && npm run build && npm test",
     "clean": "npm run clean --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "tsc -b --pretty false && npm run typecheck --workspace @suka/dashboard"
