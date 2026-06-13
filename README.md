@@ -200,6 +200,7 @@ No stable release is available yet.
 
 - Wiki source: [`docs/wiki`](docs/wiki)
 - Architecture notes: [`docs/architecture`](docs/architecture)
+- PR gate and CI/CD standards: [`docs/engineering/pr-gate.md`](docs/engineering/pr-gate.md)
 - Social preview template: [`docs/assets/social-preview.svg`](docs/assets/social-preview.svg)
 - Social preview image: [`docs/assets/social-preview.png`](docs/assets/social-preview.png)
 
