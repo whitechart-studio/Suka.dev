@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { URL } from "node:url";
 import { dashboardHtml } from "./dashboard.js";
+import type { SukaLogger } from "./logger.js";
 import { RealtimeHub } from "./realtime.js";
 import { buildRepoMap } from "./repo-map.js";
 import { createSukaService, type SukaService } from "./service.js";
@@ -14,6 +15,7 @@ const lucideBundlePath = require.resolve("lucide/dist/umd/lucide.min.js");
 const dashboardDistPath = resolve(process.cwd(), "apps/dashboard/dist");
 
 export interface HttpServerOptions {
+  logger?: SukaLogger;
   service?: SukaService;
 }
 
@@ -31,11 +33,27 @@ export interface RunningHttpServer {
 export function createSukaHttpServer(options: HttpServerOptions = {}): Server {
   const service = options.service ?? createSukaService();
   const realtime = new RealtimeHub({ service });
+  const logger = options.logger;
 
   const server = createServer(async (request, response) => {
     try {
       await routeRequest(service, realtime, request, response);
     } catch (error) {
+      logger?.log("error", "request failed", {
+        error_code: error instanceof HttpInputError ? error.code : "internal_error",
+        error_message: error instanceof Error ? error.message : "Unexpected server error.",
+        method: request.method ?? "GET",
+        path: request.url ?? "/"
+      });
+      if (error instanceof HttpInputError) {
+        writeJson(response, 400, {
+          error: {
+            code: error.code,
+            message: error.message
+          }
+        });
+        return;
+      }
       writeJson(response, 500, {
         error: {
           code: "internal_error",

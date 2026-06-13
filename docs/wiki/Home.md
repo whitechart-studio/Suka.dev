@@ -24,7 +24,10 @@ It helps a team answer the operational questions that matter during agentic deve
 2. [[Architecture]]
 3. [[Dashboard]]
 4. [[CLI and Agent Pointers]]
-5. [[Roadmap]]
+5. [[Self-Hosting]]
+6. [[Security and Privacy]]
+7. [[Release Workflow]]
+8. [[Roadmap]]
 
 ## Current Status
 
@@ -36,6 +39,6 @@ Suka is in early foundation stage. The repository includes:
 - Local HTTP server.
 - CLI package.
 - React dashboard with repo map and inspector.
+- Docker self-hosting path.
 - Project-specific Codex skills.
 - Visual QA script for the dashboard.
-

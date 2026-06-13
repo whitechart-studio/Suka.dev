@@ -1,0 +1,16 @@
+services:
+  suka:
+    build:
+      context: .
+    environment:
+      SUKA_DATA_FILE: /data/state.json
+      SUKA_HOST: 0.0.0.0
+      SUKA_PORT: "4366"
+    ports:
+      - "4366:4366"
+    restart: unless-stopped
+    volumes:
+      - suka-data:/data
+
+volumes:
+  suka-data:

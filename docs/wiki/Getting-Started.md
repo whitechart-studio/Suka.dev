@@ -36,6 +36,14 @@ Open:
 http://127.0.0.1:4366/
 ```
 
+## Start With Docker
+
+```bash
+docker compose up --build
+```
+
+Docker binds the server to port `4366`, persists state in the `suka-data` volume, and uses `/healthz` for container health checks. See Self-Hosting for operational notes.
+
 ## Development Loop
 
 Recommended local loop:
@@ -53,4 +61,3 @@ PLAYWRIGHT_MODULE_DIR=/path/to/node_modules node scripts/dashboard-visual-qa.mjs
 ```
 
 The Codex desktop runtime can provide the Playwright module path during local development.
-
