@@ -118,6 +118,8 @@ code {
   justify-content: space-between;
   min-height: 58px;
   padding: 9px 12px;
+  position: relative;
+  z-index: 20;
 }
 
 .brand,
@@ -460,6 +462,127 @@ code {
   gap: 5px;
 }
 
+.team-panel {
+  background: rgba(251, 252, 253, 0.98);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.18);
+  color: var(--ink);
+  display: grid;
+  gap: 9px;
+  max-height: calc(100dvh - 78px);
+  overflow: auto;
+  padding: 10px;
+  position: absolute;
+  right: 12px;
+  top: calc(100% + 8px);
+  width: min(360px, calc(100vw - 24px));
+}
+
+.team-panel-head {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.team-panel-head > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.team-panel-head p,
+.team-health,
+.teammate-row p,
+.team-field span,
+.invite-box span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.team-mode-grid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mode-option {
+  justify-content: center;
+}
+
+.mode-option.active {
+  border-color: rgba(15, 118, 110, 0.42);
+  color: var(--teal);
+}
+
+.team-field,
+.invite-box {
+  display: grid;
+  gap: 4px;
+}
+
+.team-field span,
+.invite-box span {
+  font-weight: 680;
+  text-transform: uppercase;
+}
+
+.invite-box {
+  background: #f8fafc;
+  border: 1px solid #e5ebf2;
+  border-radius: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 7px;
+}
+
+.invite-box > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.invite-box button {
+  align-self: end;
+}
+
+.team-health {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.team-health span {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+}
+
+.teammate-list {
+  display: grid;
+  gap: 5px;
+}
+
+.teammate-row {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e5ebf2;
+  border-radius: 6px;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px;
+}
+
+.teammate-row > div {
+  min-width: 0;
+}
+
+.teammate-row strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
 .canvas-shell {
   background: var(--canvas);
   color: #f8fafc;
@@ -686,6 +809,13 @@ code {
 
   .top-actions button svg {
     flex: 0 0 auto;
+  }
+
+  .team-panel {
+    left: 6px;
+    right: 6px;
+    top: calc(100% + 6px);
+    width: auto;
   }
 
   .app-shell {
