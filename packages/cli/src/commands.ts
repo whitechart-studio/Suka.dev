@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { FileSukaStore, createSukaHttpServer, createSukaService, listen } from "@suka/server";
 import type { EventType, PresenceStatus } from "@suka/protocol";
 import { initProject, loadConfig, resolveProjectPath } from "./config.js";
@@ -8,6 +9,8 @@ import { parseArgv, readCsvFlag, readNumberFlag, readStringFlag } from "./parse.
 import type { CliContext, CliResult } from "./types.js";
 
 const DEFAULT_SERVER_URL = "http://127.0.0.1:4366";
+const DEFAULT_PRESENCE_TTL_SECONDS = 120;
+const DEFAULT_PRESENCE_HEARTBEAT_SECONDS = 15;
 
 export async function runCli(context: CliContext): Promise<CliResult> {
   const parsed = parseArgv(context.argv);
@@ -85,25 +88,8 @@ export async function runCli(context: CliContext): Promise<CliResult> {
         return { exitCode: 0 };
       }
 
-      case "presence": {
-        const ttlSeconds = readNumberFlag(parsed.flags, "ttl", 120);
-        const pointer = {
-          type: "presence",
-          id: createPointerId("presence", now),
-          agent_id: readStringFlag(parsed.flags, "agent") ?? defaultAgentId(),
-          tool: readStringFlag(parsed.flags, "tool") ?? "unknown",
-          repo: readStringFlag(parsed.flags, "repo") ?? process.cwd(),
-          branch: readStringFlag(parsed.flags, "branch"),
-          task: readStringFlag(parsed.flags, "task"),
-          status: (readStringFlag(parsed.flags, "status") ?? "online") as PresenceStatus,
-          current_files: readCsvFlag(parsed.flags, "file"),
-          last_seen: now.toISOString(),
-          expires_at: new Date(now.getTime() + ttlSeconds * 1000).toISOString()
-        };
-        const result = await client.publishPointer(pointer);
-        context.io.stdout.write(formatJson(result));
-        return { exitCode: 0 };
-      }
+      case "presence":
+        return await presenceCommand(context, client, parsed.flags, config, now);
 
       case "event": {
         const eventType = parsed.args[0];
@@ -163,7 +149,7 @@ export async function runCli(context: CliContext): Promise<CliResult> {
 
 async function serveCommand(
   context: CliContext,
-  flags: Record<string, string | boolean>,
+  flags: Parameters<typeof readStringFlag>[0],
   config: ReturnType<typeof loadConfig>
 ): Promise<CliResult> {
   const host = readStringFlag(flags, "host") ?? "127.0.0.1";
@@ -191,6 +177,103 @@ async function serveCommand(
   return { exitCode: 0 };
 }
 
-function defaultAgentId(): string {
-  return process.env.SUKA_AGENT_ID ?? `agent-${process.pid}`;
+async function presenceCommand(
+  context: CliContext,
+  client: SukaApiClient,
+  flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>,
+  initialNow: Date
+): Promise<CliResult> {
+  const watch = flags.watch === true;
+  const intervalSeconds = readNumberFlag(flags, "interval", DEFAULT_PRESENCE_HEARTBEAT_SECONDS);
+  const publish = async (timestamp: Date): Promise<unknown> => {
+    const pointer = buildPresencePointer({
+      config,
+      env: context.env,
+      flags,
+      now: timestamp
+    });
+    return await client.publishPointer(pointer);
+  };
+
+  const firstResult = await publish(initialNow);
+  context.io.stdout.write(formatJson(firstResult));
+
+  if (!watch) {
+    return { exitCode: 0 };
+  }
+
+  context.io.stdout.write(`Publishing presence every ${intervalSeconds}s. Press Ctrl+C to stop.\n`);
+  while (true) {
+    await sleep(intervalSeconds * 1000);
+    await publish(new Date());
+  }
+}
+
+function buildPresencePointer(options: {
+  config: ReturnType<typeof loadConfig>;
+  env: NodeJS.ProcessEnv;
+  flags: Parameters<typeof readStringFlag>[0];
+  now: Date;
+}): Record<string, unknown> {
+  const ttlSeconds = readNumberFlag(options.flags, "ttl", DEFAULT_PRESENCE_TTL_SECONDS);
+  const explicitFiles = readCsvFlag(options.flags, "file");
+  return {
+    type: "presence",
+    id: createPointerId("presence", options.now),
+    agent_id: readStringFlag(options.flags, "agent") ?? defaultAgentId(options.env),
+    tool: readStringFlag(options.flags, "tool") ?? detectAgentTool(options.env),
+    repo: readStringFlag(options.flags, "repo") ?? options.config?.repo ?? detectGitRepoName(),
+    branch: readStringFlag(options.flags, "branch") ?? detectGitBranch(),
+    task: readStringFlag(options.flags, "task"),
+    status: (readStringFlag(options.flags, "status") ?? "online") as PresenceStatus,
+    current_files: explicitFiles.length > 0 ? explicitFiles : detectChangedFiles(),
+    last_seen: options.now.toISOString(),
+    expires_at: new Date(options.now.getTime() + ttlSeconds * 1000).toISOString()
+  };
+}
+
+function detectAgentTool(env: NodeJS.ProcessEnv): string {
+  if (env.CURSOR_TRACE_ID !== undefined || env.CURSOR_AGENT !== undefined) return "cursor";
+  if (env.GITHUB_COPILOT_TOKEN !== undefined) return "github-copilot";
+  if (env.CODEX_SANDBOX !== undefined || env.CODEX_ENV_PYTHON_VERSION !== undefined) return "codex";
+  return env.SUKA_AGENT_TOOL ?? "terminal";
+}
+
+function detectGitBranch(): string | undefined {
+  return gitOutput(["branch", "--show-current"]);
+}
+
+function detectGitRepoName(): string {
+  return gitOutput(["config", "--get", "remote.origin.url"])?.replace(/\.git$/, "").split(/[/:]/).filter(Boolean).at(-1) ?? process.cwd().split(/[\\/]/).at(-1) ?? "workspace";
+}
+
+function detectChangedFiles(): string[] {
+  const output = gitOutput(["status", "--short"]);
+  if (output === undefined) return [];
+  return output
+    .split("\n")
+    .map((line) => line.slice(3).trim())
+    .filter((line) => line.length > 0 && !line.includes(" -> "))
+    .slice(0, 20);
+}
+
+function gitOutput(args: string[]): string | undefined {
+  try {
+    const output = execFileSync("git", args, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    return output.length > 0 ? output : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function defaultAgentId(env: NodeJS.ProcessEnv = process.env): string {
+  return env.SUKA_AGENT_ID ?? `agent-${process.pid}`;
 }

@@ -19,6 +19,32 @@ Presence should answer:
 - Which branch is it on?
 - Which files are currently in focus?
 
+Publish a one-shot presence update:
+
+```bash
+node packages/cli/dist/bin.js presence \
+  --agent codex-local \
+  --tool codex \
+  --status editing \
+  --task "Implement live presence publishing" \
+  --file packages/cli/src/commands.ts \
+  --file packages/cli/src/commands.test.ts
+```
+
+Run as a heartbeat publisher:
+
+```bash
+node packages/cli/dist/bin.js presence \
+  --agent codex-local \
+  --tool codex \
+  --status editing \
+  --task "Work on Suka" \
+  --watch \
+  --interval 15
+```
+
+If `--repo`, `--branch`, or `--file` are omitted, the CLI attempts to detect them from the local Git repository. Repeated `--file` flags and comma-separated file lists are both supported.
+
 ## Claims
 
 Claims can cover:
@@ -42,4 +68,3 @@ Examples:
 ## Next CLI Work
 
 The next major task is live agent presence publishing so Codex, Cursor, terminal agents, and future adapters can publish state automatically.
-

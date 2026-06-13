@@ -18,3 +18,8 @@ test("reads comma-separated flag values", () => {
   assert.deepEqual(readCsvFlag(parsed.flags, "path"), ["a.ts", "b.ts"]);
 });
 
+test("reads repeated comma-separated flag values", () => {
+  const parsed = parseArgv(["presence", "--file", "a.ts,b.ts", "--file", "c.ts"]);
+
+  assert.deepEqual(readCsvFlag(parsed.flags, "file"), ["a.ts", "b.ts", "c.ts"]);
+});

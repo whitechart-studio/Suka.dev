@@ -22,5 +22,5 @@ export interface CliResult {
 export interface ParsedOptions {
   command: string;
   args: string[];
-  flags: Record<string, string | boolean>;
+  flags: Record<string, string | boolean | string[]>;
 }

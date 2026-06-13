@@ -33,7 +33,7 @@ Usage:
   suka serve [--host 127.0.0.1] [--port 4366]
   suka status [--server http://127.0.0.1:4366] [--json]
   suka claim <path> [--agent AGENT] [--reason TEXT] [--ttl 45] [--server URL]
-  suka presence [--agent AGENT] [--tool TOOL] [--repo REPO] [--status editing] [--task TEXT] [--file PATH] [--server URL]
+  suka presence [--agent AGENT] [--tool TOOL] [--repo REPO] [--status editing] [--task TEXT] [--file PATH] [--watch] [--interval 15] [--server URL]
   suka event <type> <summary> [--agent AGENT] [--path PATH] [--api API] [--server URL]
   suka conflicts [--path PATH] [--api API] [--table TABLE] [--env NAME] [--domain DOMAIN] [--server URL]
   suka release <claim-id> [--server URL]
@@ -41,5 +41,7 @@ Usage:
 Environment:
   SUKA_SERVER_URL  Default server URL
   SUKA_DATA_FILE   Server persistence file
+  SUKA_AGENT_ID    Default agent identity
+  SUKA_AGENT_TOOL  Default agent tool name
 `;
 }
