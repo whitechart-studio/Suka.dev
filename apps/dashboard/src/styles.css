@@ -717,8 +717,17 @@ code {
 .canvas-toolbar button {
   background: transparent;
   border-color: transparent;
+  color: #111827;
   min-height: 28px;
   padding: 4px 8px;
+}
+
+.canvas-toolbar button svg,
+.canvas-rail-toggle svg,
+.react-flow__controls-button svg {
+  color: currentColor;
+  stroke: currentColor;
+  stroke-width: 2.4;
 }
 
 .canvas-rail-toggle {
@@ -734,6 +743,29 @@ code {
   top: 12px;
   width: 34px;
   z-index: 12;
+}
+
+.canvas-rail-toggle:hover {
+  background: #fff;
+  border-color: #cbd5e1;
+  color: #020617;
+}
+
+.react-flow__controls {
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+}
+
+.react-flow__controls-button {
+  background: rgba(248, 250, 252, 0.96);
+  border-bottom-color: #dbe2ea;
+  color: #0f172a;
+  height: 30px;
+  width: 30px;
+}
+
+.react-flow__controls-button:hover {
+  background: #fff;
+  color: #020617;
 }
 
 .canvas-rail-toggle.left {

@@ -13,6 +13,8 @@ export interface CliContext {
   io: CliIo;
   now?: Date;
   fetch?: typeof fetch;
+  signal?: AbortSignal;
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
 }
 
 export interface CliResult {

@@ -246,6 +246,9 @@ async function presenceCommand(
 ): Promise<CliResult> {
   const watch = flags.watch === true;
   const intervalSeconds = readNumberFlag(flags, "interval", DEFAULT_PRESENCE_HEARTBEAT_SECONDS);
+  if (intervalSeconds < 1) {
+    throw new Error("--interval must be at least 1 second.");
+  }
   const publish = async (timestamp: Date): Promise<unknown> => {
     const pointer = buildPresencePointer({
       config,
@@ -264,10 +267,15 @@ async function presenceCommand(
   }
 
   context.io.stdout.write(`Publishing presence every ${intervalSeconds}s. Press Ctrl+C to stop.\n`);
-  while (true) {
-    await sleep(intervalSeconds * 1000);
+  while (!isAborted(context.signal)) {
+    await (context.sleep ?? sleep)(intervalSeconds * 1000, context.signal);
+    if (isAborted(context.signal)) {
+      break;
+    }
     await publish(new Date());
   }
+  context.io.stdout.write("Presence watch stopped.\n");
+  return { exitCode: 0 };
 }
 
 function buildPresencePointer(options: {
@@ -277,6 +285,9 @@ function buildPresencePointer(options: {
   now: Date;
 }): Record<string, unknown> {
   const ttlSeconds = readNumberFlag(options.flags, "ttl", DEFAULT_PRESENCE_TTL_SECONDS);
+  if (ttlSeconds < 1) {
+    throw new Error("--ttl must be at least 1 second.");
+  }
   const explicitFiles = readCsvFlag(options.flags, "file");
   return {
     type: "presence",
@@ -330,8 +341,21 @@ function gitOutput(args: string[]): string | undefined {
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (isAborted(signal)) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const timeout = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(timeout);
+      resolve();
+    }, { once: true });
+  });
+}
+
+function isAborted(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true;
 }
 
 function defaultAgentId(env: NodeJS.ProcessEnv = process.env): string {

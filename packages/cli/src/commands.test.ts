@@ -142,6 +142,81 @@ test("presence uses environment defaults for agent identity and tool", async () 
   assert.equal(body.tool, "cursor");
 });
 
+test("presence watch stops cleanly when aborted", async () => {
+  const controller = new AbortController();
+  const requests: Array<{ init?: RequestInit }> = [];
+  const output: string[] = [];
+  const result = await runCli({
+    argv: ["presence", "--server", "http://suka.test", "--repo", "suka", "--watch", "--interval", "15"],
+    env: {
+      SUKA_AGENT_ID: "codex-watch",
+      SUKA_AGENT_TOOL: "codex"
+    },
+    now: new Date("2026-06-12T10:00:00.000Z"),
+    fetch: async (_url, init) => {
+      const request: { init?: RequestInit } = {};
+      if (init !== undefined) {
+        request.init = init;
+      }
+      requests.push(request);
+      if (requests.length === 2) {
+        controller.abort();
+      }
+      return jsonResponse(201, JSON.parse(String(init?.body)) as unknown);
+    },
+    io: {
+      stdout: { write: (value: string) => output.push(value) },
+      stderr: { write: () => undefined }
+    },
+    signal: controller.signal,
+    sleep: async () => undefined
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(requests.length, 2);
+  assert.match(output.join(""), /Publishing presence every 15s/);
+  assert.match(output.join(""), /Presence watch stopped/);
+});
+
+test("presence rejects unsafe watch interval and ttl values", async () => {
+  const requests: unknown[] = [];
+  const errors: string[] = [];
+  const intervalResult = await runCli({
+    argv: ["presence", "--server", "http://suka.test", "--watch", "--interval", "0"],
+    env: {},
+    fetch: async (url, init) => {
+      requests.push({ init, url });
+      return jsonResponse(201, {});
+    },
+    io: {
+      stdout: { write: () => undefined },
+      stderr: { write: (value: string) => errors.push(value) }
+    }
+  });
+
+  assert.equal(intervalResult.exitCode, 1);
+  assert.match(errors.join(""), /--interval must be at least 1 second/);
+  assert.equal(requests.length, 0);
+
+  errors.length = 0;
+  const ttlResult = await runCli({
+    argv: ["presence", "--server", "http://suka.test", "--ttl", "0"],
+    env: {},
+    fetch: async (url, init) => {
+      requests.push({ init, url });
+      return jsonResponse(201, {});
+    },
+    io: {
+      stdout: { write: () => undefined },
+      stderr: { write: (value: string) => errors.push(value) }
+    }
+  });
+
+  assert.equal(ttlResult.exitCode, 1);
+  assert.match(errors.join(""), /--ttl must be at least 1 second/);
+  assert.equal(requests.length, 0);
+});
+
 test("decision publishes accepted decision memory", async () => {
   const requests: Array<{ init?: RequestInit; url: string }> = [];
   const result = await runCli({
