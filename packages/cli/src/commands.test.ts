@@ -142,6 +142,115 @@ test("presence uses environment defaults for agent identity and tool", async () 
   assert.equal(body.tool, "cursor");
 });
 
+test("decision publishes accepted decision memory", async () => {
+  const requests: Array<{ init?: RequestInit; url: string }> = [];
+  const result = await runCli({
+    argv: [
+      "decision",
+      "Webhook handlers must be idempotent",
+      "--server",
+      "http://suka.test",
+      "--body",
+      "Payment webhook handlers must tolerate duplicate delivery.",
+      "--path",
+      "src/billing/**",
+      "--evidence",
+      "docs/payments.md",
+      "--agent",
+      "codex-01",
+      "--approved-by",
+      "trent"
+    ],
+    env: {},
+    now: new Date("2026-06-12T10:00:00.000Z"),
+    fetch: async (url, init) => {
+      const request: { init?: RequestInit; url: string } = { url: String(url) };
+      if (init !== undefined) {
+        request.init = init;
+      }
+      requests.push(request);
+      return jsonResponse(201, JSON.parse(String(init?.body)) as unknown);
+    },
+    io: silentIo()
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(requests[0]?.url, "http://suka.test/api/decisions");
+  const body = JSON.parse(String(requests[0]?.init?.body)) as {
+    approved_by: string;
+    created_by: string;
+    evidence: string[];
+    scope: { paths: string[] };
+    status: string;
+    title: string;
+    type: string;
+  };
+  assert.equal(body.type, "decision");
+  assert.equal(body.title, "Webhook handlers must be idempotent");
+  assert.equal(body.status, "accepted");
+  assert.equal(body.created_by, "codex-01");
+  assert.equal(body.approved_by, "trent");
+  assert.deepEqual(body.scope.paths, ["src/billing/**"]);
+  assert.deepEqual(body.evidence, ["docs/payments.md"]);
+});
+
+test("decision rejects accepted decision without evidence before publishing", async () => {
+  const requests: unknown[] = [];
+  const errors: string[] = [];
+  const result = await runCli({
+    argv: [
+      "decision",
+      "Webhook handlers must be idempotent",
+      "--server",
+      "http://suka.test",
+      "--body",
+      "Payment webhook handlers must tolerate duplicate delivery.",
+      "--path",
+      "src/billing/**"
+    ],
+    env: {},
+    now: new Date("2026-06-12T10:00:00.000Z"),
+    fetch: async (url, init) => {
+      requests.push({ init, url });
+      return jsonResponse(201, {});
+    },
+    io: {
+      stdout: { write: () => undefined },
+      stderr: { write: (value: string) => errors.push(value) }
+    }
+  });
+
+  assert.equal(result.exitCode, 1);
+  assert.equal(requests.length, 0);
+  assert.match(errors.join(""), /accepted decisions require/);
+});
+
+test("decisions lists shared decision memory", async () => {
+  const output: string[] = [];
+  const result = await runCli({
+    argv: ["decisions", "--server", "http://suka.test"],
+    env: {},
+    fetch: async (url, init) => {
+      assert.equal(String(url), "http://suka.test/api/decisions");
+      assert.equal(init?.method, "GET");
+      return jsonResponse(200, [
+        {
+          type: "decision",
+          id: "ptr_decision_01",
+          title: "Webhook handlers must be idempotent"
+        }
+      ]);
+    },
+    io: {
+      stdout: { write: (value: string) => output.push(value) },
+      stderr: { write: () => undefined }
+    }
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.match(output.join(""), /ptr_decision_01/);
+});
+
 test("unknown command exits with an error", async () => {
   const errors: string[] = [];
   const result = await runCli({

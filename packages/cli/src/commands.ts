@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { FileSukaStore, createSukaHttpServer, createSukaService, listen } from "@suka/server";
-import type { EventType, PresenceStatus } from "@suka/protocol";
+import { hasAnyScope, type DecisionConfidence, type DecisionStatus, type EventType, type PresenceStatus } from "@suka/protocol";
 import { initProject, loadConfig, resolveProjectPath } from "./config.js";
 import { createPointerId } from "./ids.js";
 import { SukaApiClient } from "./client.js";
@@ -115,6 +115,15 @@ export async function runCli(context: CliContext): Promise<CliResult> {
         return { exitCode: 0 };
       }
 
+      case "decision":
+        return await decisionCommand(context, client, parsed.args, parsed.flags, now);
+
+      case "decisions": {
+        const result = await client.listDecisions();
+        context.io.stdout.write(formatJson(result));
+        return { exitCode: 0 };
+      }
+
       case "conflicts": {
         const result = await client.checkConflicts({
           agent_id: readStringFlag(parsed.flags, "agent") ?? defaultAgentId(),
@@ -145,6 +154,57 @@ export async function runCli(context: CliContext): Promise<CliResult> {
     context.io.stderr.write(`${error instanceof Error ? error.message : "Unexpected CLI error."}\n`);
     return { exitCode: 1 };
   }
+}
+
+async function decisionCommand(
+  context: CliContext,
+  client: SukaApiClient,
+  args: string[],
+  flags: Parameters<typeof readStringFlag>[0],
+  now: Date
+): Promise<CliResult> {
+  const title = args.join(" ").trim();
+  const body = readStringFlag(flags, "body");
+  if (title.length === 0) {
+    throw new Error("decision requires a title.");
+  }
+  if (body === undefined) {
+    throw new Error("decision requires --body.");
+  }
+
+  const status = (readStringFlag(flags, "status") ?? "accepted") as DecisionStatus;
+  const evidence = readCsvFlag(flags, "evidence");
+  const scope = {
+    paths: readCsvFlag(flags, "path"),
+    apis: readCsvFlag(flags, "api"),
+    domains: readCsvFlag(flags, "domain"),
+    tables: readCsvFlag(flags, "table"),
+    env: readCsvFlag(flags, "env")
+  };
+
+  if (!hasAnyScope(scope)) {
+    throw new Error("decision requires at least one scope flag: --path, --api, --table, --env, or --domain.");
+  }
+  if (status === "accepted" && evidence.length === 0) {
+    throw new Error("accepted decisions require at least one --evidence reference.");
+  }
+
+  const decision = {
+    type: "decision",
+    id: createPointerId("decision", now),
+    title,
+    body,
+    scope,
+    status,
+    confidence: (readStringFlag(flags, "confidence") ?? "high") as DecisionConfidence,
+    evidence,
+    created_by: readStringFlag(flags, "agent") ?? defaultAgentId(context.env),
+    approved_by: readStringFlag(flags, "approved-by"),
+    created_at: now.toISOString()
+  };
+  const result = await client.createDecision(decision);
+  context.io.stdout.write(formatJson(result));
+  return { exitCode: 0 };
 }
 
 async function serveCommand(

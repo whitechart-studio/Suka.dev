@@ -220,6 +220,90 @@ test("POST /api/pointers validates and stores pointers", async () => {
   }
 });
 
+test("POST /api/decisions stores accepted decision memory", async () => {
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  try {
+    const createResponse = await postJson(`${running.url}/api/decisions`, {
+      id: "ptr_decision_01",
+      title: "Webhook handlers must be idempotent",
+      body: "Payment webhook handlers must tolerate duplicate delivery.",
+      scope: {
+        paths: ["src/billing/**"]
+      },
+      status: "accepted",
+      confidence: "high",
+      evidence: ["docs/payments.md"],
+      created_by: "codex-trent-01",
+      approved_by: "trent",
+      created_at: "2026-06-12T10:00:00.000Z"
+    });
+    const body = await createResponse.json() as { data: { id: string; type: string } };
+
+    assert.equal(createResponse.status, 201);
+    assert.equal(body.data.type, "decision");
+    assert.equal(body.data.id, "ptr_decision_01");
+
+    const listResponse = await fetch(`${running.url}/api/decisions`);
+    const listBody = await listResponse.json() as { data: Array<{ id: string }> };
+
+    assert.equal(listResponse.status, 200);
+    assert.deepEqual(listBody.data.map((decision) => decision.id), ["ptr_decision_01"]);
+  } finally {
+    await running.close();
+  }
+});
+
+test("POST /api/decisions rejects accepted decisions without evidence", async () => {
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  try {
+    const response = await postJson(`${running.url}/api/decisions`, {
+      id: "ptr_decision_01",
+      title: "Webhook handlers must be idempotent",
+      body: "Payment webhook handlers must tolerate duplicate delivery.",
+      scope: {
+        paths: ["src/billing/**"]
+      },
+      status: "accepted",
+      confidence: "high",
+      evidence: [],
+      created_by: "codex-trent-01",
+      created_at: "2026-06-12T10:00:00.000Z"
+    });
+    const body = await response.json() as { error: { issues: Array<{ path: string }> } };
+
+    assert.equal(response.status, 400);
+    assert.equal(body.error.issues.at(-1)?.path, "evidence");
+  } finally {
+    await running.close();
+  }
+});
+
+test("POST /api/decisions rejects non-decision pointers without persisting them", async () => {
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  try {
+    const response = await postJson(`${running.url}/api/decisions`, {
+      type: "claim",
+      id: "ptr_claim_01",
+      agent_id: "codex-trent-01",
+      scope: {
+        paths: ["src/billing/**"]
+      },
+      reason: "Implement Stripe webhook handling",
+      kind: "soft_claim",
+      created_at: "2026-06-12T10:00:00.000Z",
+      expires_at: "2099-06-12T11:00:00.000Z"
+    });
+    const stateResponse = await fetch(`${running.url}/api/state`);
+    const state = await stateResponse.json() as { data: { claims: unknown[]; decisions: unknown[] } };
+
+    assert.equal(response.status, 400);
+    assert.equal(state.data.claims.length, 0);
+    assert.equal(state.data.decisions.length, 0);
+  } finally {
+    await running.close();
+  }
+});
+
 test("POST /api/pointers returns validation issues for invalid pointers", async () => {
   const running = await listen({ port: 0 }, createSukaHttpServer());
   try {
