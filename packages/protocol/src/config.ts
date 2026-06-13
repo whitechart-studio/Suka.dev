@@ -1,5 +1,12 @@
 import { SUKA_CONFIG_MODES } from "./constants.js";
-import type { SukaConfig, SukaConfigDomain, SukaPrivacyConfig, ValidationIssue, ValidationResult } from "./types.js";
+import type {
+  SukaConfig,
+  SukaConfigDomain,
+  SukaPlatformConfig,
+  SukaPrivacyConfig,
+  ValidationIssue,
+  ValidationResult
+} from "./types.js";
 
 export interface CreateDefaultSukaConfigOptions {
   repo: string;
@@ -8,6 +15,7 @@ export interface CreateDefaultSukaConfigOptions {
 }
 
 export function createDefaultSukaConfig(options: CreateDefaultSukaConfigOptions): SukaConfig {
+  const repoId = slug(options.repo);
   return {
     version: 1,
     repo: options.repo,
@@ -25,6 +33,15 @@ export function createDefaultSukaConfig(options: CreateDefaultSukaConfigOptions)
       publish_file_paths: true,
       publish_code_content: false,
       publish_terminal_logs: false
+    },
+    platform: {
+      audit_log_enabled: false,
+      auth_required: false,
+      auth_token_env: "SUKA_AUTH_TOKEN",
+      public_base_url: options.serverUrl ?? "http://127.0.0.1:4366",
+      repo_id: repoId,
+      retention_days: 30,
+      workspace_id: `local-${repoId}`
     }
   };
 }
@@ -50,7 +67,8 @@ export function normalizeSukaConfig(value: unknown, defaults: CreateDefaultSukaC
     data_file: typeof value.data_file === "string" && value.data_file.length > 0 ? value.data_file : base.data_file,
     ignored_paths: isStringArray(value.ignored_paths) ? normalizeStringArray(value.ignored_paths) : base.ignored_paths,
     domains: Array.isArray(value.domains) ? normalizeDomains(value.domains) : base.domains,
-    privacy: normalizePrivacy(value.privacy, base.privacy)
+    privacy: normalizePrivacy(value.privacy, base.privacy),
+    platform: normalizePlatform(value.platform, base.platform, isConfigMode(value.mode) ? value.mode : base.mode)
   };
 
   return validateSukaConfig(config);
@@ -75,9 +93,46 @@ export function validateSukaConfig(value: unknown): ValidationResult<SukaConfig>
   requireString(value, "data_file", issues);
   requireStringArray(value, "ignored_paths", issues);
   requirePrivacy(value.privacy, issues);
+  requirePlatform(value.platform, issues, isConfigMode(value.mode) ? value.mode : undefined);
   requireDomains(value.domains, issues);
 
   return issues.length === 0 ? ok(value as unknown as SukaConfig) : fail(issues);
+}
+
+function normalizePlatform(value: unknown, defaults: SukaPlatformConfig, mode: SukaConfig["mode"]): SukaPlatformConfig {
+  const base = {
+    ...defaults,
+    audit_log_enabled: mode !== "local" ? true : defaults.audit_log_enabled,
+    auth_required: mode !== "local" ? true : defaults.auth_required,
+    retention_days: mode !== "local" ? 90 : defaults.retention_days
+  };
+  if (!isRecord(value)) {
+    return base;
+  }
+
+  const platform: SukaPlatformConfig = {
+    audit_log_enabled: typeof value.audit_log_enabled === "boolean" ? value.audit_log_enabled : base.audit_log_enabled,
+    auth_required: typeof value.auth_required === "boolean" ? value.auth_required : base.auth_required,
+    auth_token_env: typeof value.auth_token_env === "string" && value.auth_token_env.length > 0
+      ? value.auth_token_env
+      : base.auth_token_env,
+    repo_id: typeof value.repo_id === "string" && value.repo_id.length > 0 ? value.repo_id : base.repo_id,
+    retention_days: typeof value.retention_days === "number" ? value.retention_days : base.retention_days,
+    workspace_id: typeof value.workspace_id === "string" && value.workspace_id.length > 0
+      ? value.workspace_id
+      : base.workspace_id
+  };
+  const publicBaseUrl = typeof value.public_base_url === "string" && value.public_base_url.length > 0
+    ? value.public_base_url
+    : base.public_base_url;
+  if (publicBaseUrl !== undefined) {
+    platform.public_base_url = publicBaseUrl;
+  }
+  const teamId = typeof value.team_id === "string" && value.team_id.length > 0 ? value.team_id : base.team_id;
+  if (teamId !== undefined) {
+    platform.team_id = teamId;
+  }
+  return platform;
 }
 
 function normalizeDomains(values: unknown[]): SukaConfigDomain[] {
@@ -133,6 +188,42 @@ function requirePrivacy(value: unknown, issues: ValidationIssue[]): void {
   requireBoolean(value, "publish_file_paths", "privacy.publish_file_paths", issues);
   requireFalse(value, "publish_code_content", "privacy.publish_code_content", issues);
   requireFalse(value, "publish_terminal_logs", "privacy.publish_terminal_logs", issues);
+}
+
+function requirePlatform(value: unknown, issues: ValidationIssue[], mode?: SukaConfig["mode"]): void {
+  if (!isRecord(value)) {
+    issues.push({
+      code: value === undefined ? "missing_field" : "invalid_type",
+      path: "platform",
+      message: "platform must be an object."
+    });
+    return;
+  }
+
+  requireString(value, "workspace_id", issues, "platform.workspace_id");
+  requireString(value, "repo_id", issues, "platform.repo_id");
+  optionalString(value, "team_id", issues, "platform.team_id");
+  optionalString(value, "public_base_url", issues, "platform.public_base_url");
+  requireBoolean(value, "auth_required", "platform.auth_required", issues);
+  requireString(value, "auth_token_env", issues, "platform.auth_token_env");
+  requireNumber(value, "retention_days", "platform.retention_days", issues);
+  requireBoolean(value, "audit_log_enabled", "platform.audit_log_enabled", issues);
+
+  if (typeof value.retention_days === "number" && (!Number.isInteger(value.retention_days) || value.retention_days < 1)) {
+    issues.push({
+      code: "invalid_value",
+      path: "platform.retention_days",
+      message: "platform.retention_days must be a positive integer."
+    });
+  }
+
+  if (mode !== undefined && mode !== "local" && value.auth_required !== true) {
+    issues.push({
+      code: "invalid_value",
+      path: "platform.auth_required",
+      message: "platform.auth_required must be true outside local mode."
+    });
+  }
 }
 
 function requireDomains(value: unknown, issues: ValidationIssue[]): void {
@@ -201,12 +292,32 @@ function requireString(record: Record<string, unknown>, key: string, issues: Val
   }
 }
 
+function optionalString(record: Record<string, unknown>, key: string, issues: ValidationIssue[], path = key): void {
+  if (record[key] !== undefined && typeof record[key] !== "string") {
+    issues.push({
+      code: "invalid_type",
+      path,
+      message: `${path} must be a string when provided.`
+    });
+  }
+}
+
 function requireBoolean(record: Record<string, unknown>, key: string, path: string, issues: ValidationIssue[]): void {
   if (typeof record[key] !== "boolean") {
     issues.push({
       code: record[key] === undefined ? "missing_field" : "invalid_type",
       path,
       message: `${path} must be a boolean.`
+    });
+  }
+}
+
+function requireNumber(record: Record<string, unknown>, key: string, path: string, issues: ValidationIssue[]): void {
+  if (typeof record[key] !== "number") {
+    issues.push({
+      code: record[key] === undefined ? "missing_field" : "invalid_type",
+      path,
+      message: `${path} must be a number.`
     });
   }
 }
@@ -266,6 +377,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function slug(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "workspace";
 }
 
 function ok<T>(value: T): ValidationResult<T> {
