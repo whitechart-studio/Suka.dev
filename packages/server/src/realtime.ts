@@ -40,7 +40,7 @@ export class RealtimeHub {
   attach(server: Server): void {
     server.on("upgrade", (request, socket, head) => {
       const url = new URL(request.url ?? "/", "http://localhost");
-      if (url.pathname !== this.#path) {
+      if (url.pathname !== this.#path || !isAllowedRealtimeOrigin(request.headers.origin, request.headers.host)) {
         socket.destroy();
         return;
       }
@@ -55,6 +55,7 @@ export class RealtimeHub {
     });
 
     this.#server.on("connection", (client) => {
+      this.#service.expire();
       send(client, {
         data: this.#service.getState(),
         type: "state.bootstrap"
@@ -66,7 +67,11 @@ export class RealtimeHub {
     const payload = JSON.stringify(message);
     for (const client of this.#server.clients) {
       if (client.readyState === client.OPEN) {
-        client.send(payload);
+        try {
+          client.send(payload);
+        } catch {
+          client.terminate();
+        }
       }
     }
   }
@@ -79,8 +84,59 @@ export class RealtimeHub {
   }
 }
 
+export function isAllowedRealtimeOrigin(origin: string | string[] | undefined, host: string | string[] | undefined): boolean {
+  if (origin === undefined) {
+    return true;
+  }
+
+  if (Array.isArray(origin)) {
+    return false;
+  }
+
+  let originUrl: URL;
+  try {
+    originUrl = new URL(origin);
+  } catch {
+    return false;
+  }
+
+  const originHostname = normalizeHostname(originUrl.hostname);
+  const requestHostname = hostnameFromHeader(host);
+
+  if (requestHostname !== undefined && originHostname === requestHostname) {
+    return true;
+  }
+
+  return requestHostname !== undefined && isLocalHostname(originHostname) && isLocalHostname(requestHostname);
+}
+
 function send(client: WebSocket, message: RealtimeMessage): void {
   if (client.readyState === client.OPEN) {
-    client.send(JSON.stringify(message));
+    try {
+      client.send(JSON.stringify(message));
+    } catch {
+      client.terminate();
+    }
   }
+}
+
+function hostnameFromHeader(host: string | string[] | undefined): string | undefined {
+  if (host === undefined || Array.isArray(host)) {
+    return undefined;
+  }
+
+  if (host.startsWith("[")) {
+    const end = host.indexOf("]");
+    return end === -1 ? undefined : normalizeHostname(host.slice(1, end));
+  }
+
+  return normalizeHostname(host.split(":")[0] ?? "");
+}
+
+function normalizeHostname(hostname: string): string {
+  return hostname.replace(/^\[|\]$/g, "").toLowerCase();
+}
+
+function isLocalHostname(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "0.0.0.0";
 }

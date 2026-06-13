@@ -48,7 +48,7 @@ Dashboard
 The local server exposes a WebSocket endpoint at:
 
 ```text
-ws://127.0.0.1:4366/api/realtime
+ws://<host>:<port>/api/realtime
 ```
 
 On connection, the server sends:

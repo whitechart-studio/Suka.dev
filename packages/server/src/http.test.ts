@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import WebSocket from "ws";
-import { createSukaHttpServer, listen } from "./index.js";
+import { createSukaHttpServer, isAllowedRealtimeOrigin, listen } from "./index.js";
 
 test("GET /api/state returns the current state", async () => {
   const running = await listen({ port: 0 }, createSukaHttpServer());
@@ -107,6 +107,90 @@ test("POST /api/pointers broadcasts pointer updates over WebSocket", async () =>
     socket.close();
     await running.close();
   }
+});
+
+test("POST /api/expire broadcasts expired state over WebSocket", async () => {
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  const socket = new WebSocket(`${running.url.replace("http://", "ws://")}/api/realtime`);
+  try {
+    const bootstrap = await nextJsonMessage(socket) as { type: string };
+    assert.equal(bootstrap.type, "state.bootstrap");
+
+    const createResponse = await postJson(`${running.url}/api/pointers`, {
+      type: "claim",
+      id: "ptr_claim_01",
+      agent_id: "codex-trent-01",
+      scope: {
+        paths: ["src/billing/**"]
+      },
+      reason: "Implement Stripe webhook handling",
+      kind: "soft_claim",
+      created_at: "2026-06-12T10:00:00.000Z",
+      expires_at: "2026-06-12T10:01:00.000Z"
+    });
+    const pointerMessage = await nextJsonMessage(socket) as { type: string };
+    assert.equal(createResponse.status, 201);
+    assert.equal(pointerMessage.type, "pointer.published");
+
+    const expireResponse = await postJson(`${running.url}/api/expire`, {
+      now: "2026-06-12T10:02:00.000Z"
+    });
+    const message = await nextJsonMessage(socket) as { data: { claims: unknown[] }; type: string };
+
+    assert.equal(expireResponse.status, 200);
+    assert.equal(message.type, "state.expired");
+    assert.deepEqual(message.data.claims, []);
+  } finally {
+    socket.close();
+    await running.close();
+  }
+});
+
+test("DELETE /api/claims/:id broadcasts claim release over WebSocket", async () => {
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  const socket = new WebSocket(`${running.url.replace("http://", "ws://")}/api/realtime`);
+  try {
+    const bootstrap = await nextJsonMessage(socket) as { type: string };
+    assert.equal(bootstrap.type, "state.bootstrap");
+
+    const createResponse = await postJson(`${running.url}/api/pointers`, {
+      type: "claim",
+      id: "ptr_claim_01",
+      agent_id: "codex-trent-01",
+      scope: {
+        paths: ["src/billing/**"]
+      },
+      reason: "Implement Stripe webhook handling",
+      kind: "soft_claim",
+      created_at: "2026-06-12T10:00:00.000Z",
+      expires_at: "2099-06-12T11:00:00.000Z"
+    });
+    const pointerMessage = await nextJsonMessage(socket) as { type: string };
+    assert.equal(createResponse.status, 201);
+    assert.equal(pointerMessage.type, "pointer.published");
+
+    const releaseResponse = await fetch(`${running.url}/api/claims/ptr_claim_01`, {
+      method: "DELETE"
+    });
+    const message = await nextJsonMessage(socket) as { data: { id: string }; type: string };
+
+    assert.equal(releaseResponse.status, 200);
+    assert.equal(message.type, "claim.released");
+    assert.deepEqual(message.data, { id: "ptr_claim_01" });
+  } finally {
+    socket.close();
+    await running.close();
+  }
+});
+
+test("realtime origin validation allows local clients and rejects remote browser origins", () => {
+  assert.equal(isAllowedRealtimeOrigin(undefined, "127.0.0.1:4366"), true);
+  assert.equal(isAllowedRealtimeOrigin("http://127.0.0.1:4366", "127.0.0.1:4366"), true);
+  assert.equal(isAllowedRealtimeOrigin("http://localhost:4366", "127.0.0.1:4366"), true);
+  assert.equal(isAllowedRealtimeOrigin("http://192.168.1.10:4366", "192.168.1.10:4366"), true);
+  assert.equal(isAllowedRealtimeOrigin("http://192.168.1.20:4366", "192.168.1.10:4366"), false);
+  assert.equal(isAllowedRealtimeOrigin("https://example.com", "127.0.0.1:4366"), false);
+  assert.equal(isAllowedRealtimeOrigin("not a url", "127.0.0.1:4366"), false);
 });
 
 test("POST /api/pointers validates and stores pointers", async () => {
@@ -228,14 +312,30 @@ async function postJson(url: string, body: unknown): Promise<Response> {
 
 async function nextJsonMessage(socket: WebSocket): Promise<unknown> {
   return await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("Timed out waiting for WebSocket message.")), 2000);
-    socket.once("message", (data) => {
+    const cleanup = () => {
       clearTimeout(timer);
-      resolve(JSON.parse(data.toString()) as unknown);
-    });
-    socket.once("error", (error) => {
-      clearTimeout(timer);
+      socket.off("message", onMessage);
+      socket.off("error", onError);
+    };
+    const onTimeout = () => {
+      cleanup();
+      reject(new Error("Timed out waiting for WebSocket message."));
+    };
+    const onError = (error: Error) => {
+      cleanup();
       reject(error);
-    });
+    };
+    const onMessage = (data: WebSocket.RawData) => {
+      cleanup();
+      try {
+        resolve(JSON.parse(data.toString()) as unknown);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    const timer = setTimeout(onTimeout, 2000);
+
+    socket.once("message", onMessage);
+    socket.once("error", onError);
   });
 }
