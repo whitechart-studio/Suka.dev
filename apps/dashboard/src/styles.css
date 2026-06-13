@@ -52,6 +52,22 @@ button:hover {
   background: #f7f9fb;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+input {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--ink);
+  font: inherit;
+  min-height: 28px;
+  min-width: 0;
+  padding: 4px 7px;
+}
+
 h1,
 h2,
 h3,
@@ -364,6 +380,84 @@ code {
   align-items: center;
   display: inline-flex;
   gap: 6px;
+}
+
+.conflict-card {
+  border-left: 3px solid var(--amber);
+}
+
+.conflict-card.high {
+  border-left-color: var(--rose);
+}
+
+.conflict-card.low {
+  border-left-color: var(--blue);
+}
+
+.claim-list {
+  display: grid;
+  gap: 5px;
+}
+
+.claim-form {
+  align-items: end;
+  background: #f8fafc;
+  border: 1px solid #e5ebf2;
+  border-radius: 6px;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 7px;
+}
+
+.claim-form label {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.claim-form span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 680;
+  text-transform: uppercase;
+}
+
+.claim-row {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e5ebf2;
+  border-radius: 5px;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 5px 6px;
+}
+
+.claim-row > span {
+  align-items: center;
+  color: #334155;
+  display: inline-flex;
+  gap: 5px;
+  min-width: 0;
+}
+
+.claim-row strong {
+  overflow-wrap: anywhere;
+}
+
+.icon-action {
+  background: #fff;
+  flex: 0 0 auto;
+  min-height: 25px;
+  padding: 3px 7px;
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
 }
 
 .canvas-shell {

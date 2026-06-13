@@ -33,6 +33,7 @@ import {
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
+  Plus,
   RadioTower,
   RefreshCw,
   Route,
@@ -40,6 +41,7 @@ import {
   Sparkles,
   Terminal,
   TriangleAlert,
+  UnlockKeyhole,
   Users,
   Waypoints,
   Wifi,
@@ -65,8 +67,11 @@ type PresencePointer = {
 };
 
 type ClaimPointer = {
+  id: string;
   agent_id: string;
-  scope?: Scope;
+  reason?: string;
+  scope: Scope;
+  expires_at?: string;
 };
 
 type EventPointer = {
@@ -128,6 +133,15 @@ type DomainModel = Domain & {
   presence: PresencePointer[];
 };
 
+type ConflictInsight = {
+  id: string;
+  severity: "high" | "medium" | "low";
+  message: string;
+  agent_id: string;
+  claim: ClaimPointer;
+  paths: string[];
+};
+
 const emptyState: SukaState = {
   claims: [],
   decisions: [],
@@ -174,6 +188,8 @@ function Dashboard(): React.ReactElement {
   const [rightOpen, setRightOpen] = useState(() => readStoredBoolean("rightOpen", true));
   const [focusMode, setFocusMode] = useState(() => readStoredBoolean("focusMode", false));
   const [selectedNodeId, setSelectedNodeId] = useState(() => readStoredString("selectedNodeId"));
+  const [releasingClaimId, setReleasingClaimId] = useState("");
+  const [dismissedInsightIds, setDismissedInsightIds] = useState<Set<string>>(() => new Set());
   const viewportRestored = useRef(false);
   const { fitView, setViewport, zoomIn, zoomOut } = useReactFlow();
 
@@ -220,8 +236,68 @@ function Dashboard(): React.ReactElement {
   const domainCatalog = repoMap.domains.length > 0 ? repoMap.domains : fallbackDomains;
   const model = useMemo(() => buildDomainModel(state, domainCatalog), [domainCatalog, state]);
   const { edges, nodes } = useMemo(() => buildFlow(model, state, selectedNodeId, repoMap.edges), [model, repoMap.edges, selectedNodeId, state]);
-  const riskCount = model.filter((item) => item.claims.length > 0 || item.failures.length > 0).length;
+  const conflictInsights = useMemo(() => buildConflictInsights(state), [state]);
+  const visibleConflictInsights = useMemo(
+    () => conflictInsights.filter((insight) => !dismissedInsightIds.has(insight.id)),
+    [conflictInsights, dismissedInsightIds]
+  );
+  const riskCount = visibleConflictInsights.length + model.filter((item) => item.failures.length > 0).length;
   const selectedDetails = useMemo(() => resolveSelection(selectedNodeId, model, state), [model, selectedNodeId, state]);
+
+  const releaseClaim = useCallback(async (claimId: string) => {
+    setReleasingClaimId(claimId);
+    try {
+      const response = await fetch(`/api/claims/${encodeURIComponent(claimId)}`, { method: "DELETE" });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      setState((current) => ({
+        ...current,
+        claims: current.claims.filter((claim) => claim.id !== claimId)
+      }));
+      void loadState();
+    } catch {
+      setStatus("error");
+    } finally {
+      setReleasingClaimId("");
+    }
+  }, [loadState]);
+
+  const createClaim = useCallback(async (input: { agent_id: string; reason: string; scope: Scope }) => {
+    const now = new Date();
+    const pointer = {
+      agent_id: input.agent_id,
+      created_at: now.toISOString(),
+      expires_at: new Date(now.getTime() + 45 * 60_000).toISOString(),
+      id: `claim-${now.getTime()}-${slug(input.agent_id)}`,
+      kind: "soft_claim",
+      reason: input.reason,
+      scope: input.scope,
+      type: "claim"
+    };
+    try {
+      const response = await fetch("/api/pointers", {
+        body: JSON.stringify(pointer),
+        headers: { "content-type": "application/json" },
+        method: "POST"
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const payload = await response.json() as { data: ClaimPointer };
+      setState((current) => ({
+        ...current,
+        claims: [...current.claims.filter((claim) => claim.id !== payload.data.id), payload.data]
+      }));
+      void loadState();
+    } catch {
+      setStatus("error");
+    }
+  }, [loadState]);
+
+  const acknowledgeInsight = useCallback((insightId: string) => {
+    setDismissedInsightIds((current) => new Set(current).add(insightId));
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => fitView({ duration: 180, padding: focusMode ? 0.18 : 0.12 }), 80);
@@ -380,8 +456,20 @@ function Dashboard(): React.ReactElement {
           />
           {rightOpen ? (
             <div className="right-stack">
-              <SelectionInspector selection={selectedDetails} />
-              <RiskQueue model={model} />
+              <SelectionInspector
+                defaultAgentId={state.presence[0]?.agent_id ?? "local-agent"}
+                onCreateClaim={createClaim}
+                onReleaseClaim={releaseClaim}
+                releasingClaimId={releasingClaimId}
+                selection={selectedDetails}
+              />
+              <RiskQueue
+                insights={visibleConflictInsights}
+                model={model}
+                onAcknowledgeInsight={acknowledgeInsight}
+                onReleaseClaim={releaseClaim}
+                releasingClaimId={releasingClaimId}
+              />
               <ActivityStream events={state.events} />
             </div>
           ) : <CompactRisk count={riskCount} />}
@@ -478,7 +566,19 @@ function CompactRisk({ count }: { count: number }): React.ReactElement {
   return <div className="compact-risk"><TriangleAlert size={18} /><span>{count}</span></div>;
 }
 
-function SelectionInspector({ selection }: { selection: SelectedDetails }): React.ReactElement {
+function SelectionInspector({
+  defaultAgentId,
+  onCreateClaim,
+  onReleaseClaim,
+  releasingClaimId,
+  selection
+}: {
+  defaultAgentId: string;
+  onCreateClaim(input: { agent_id: string; reason: string; scope: Scope }): Promise<void>;
+  onReleaseClaim(claimId: string): void;
+  releasingClaimId: string;
+  selection: SelectedDetails;
+}): React.ReactElement {
   if (!selection) {
     return (
       <section className="rail-section inspector-section">
@@ -519,17 +619,94 @@ function SelectionInspector({ selection }: { selection: SelectedDetails }): Reac
         <span>events</span><strong>{domain.events.length}</strong>
       </div>
       <PathList paths={domain.claims.flatMap((claim) => claim.scope?.paths ?? [])} />
+      <CreateClaimForm defaultAgentId={defaultAgentId} domain={domain} onCreateClaim={onCreateClaim} />
+      <ClaimList claims={domain.claims} onReleaseClaim={onReleaseClaim} releasingClaimId={releasingClaimId} />
     </section>
   );
 }
 
-function RiskQueue({ model }: { model: DomainModel[] }): React.ReactElement {
+function CreateClaimForm({
+  defaultAgentId,
+  domain,
+  onCreateClaim
+}: {
+  defaultAgentId: string;
+  domain: DomainModel;
+  onCreateClaim(input: { agent_id: string; reason: string; scope: Scope }): Promise<void>;
+}): React.ReactElement {
+  const [agentId, setAgentId] = useState(defaultAgentId);
+  const [busy, setBusy] = useState(false);
+  const path = domain.path ?? domain.id;
+  const reason = `Claim ${domain.name}`;
+
+  useEffect(() => {
+    setAgentId(defaultAgentId);
+  }, [defaultAgentId]);
+
+  return (
+    <form
+      className="claim-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        setBusy(true);
+        void onCreateClaim({
+          agent_id: agentId.trim() || defaultAgentId,
+          reason,
+          scope: {
+            domains: [domain.id],
+            paths: [path]
+          }
+        }).finally(() => setBusy(false));
+      }}
+    >
+      <label>
+        <span>claim as</span>
+        <input value={agentId} onChange={(event) => setAgentId(event.target.value)} />
+      </label>
+      <button disabled={busy} type="submit">
+        <Plus size={13} />
+        {busy ? "Claiming" : "Claim"}
+      </button>
+    </form>
+  );
+}
+
+function RiskQueue({
+  insights,
+  model,
+  onAcknowledgeInsight,
+  onReleaseClaim,
+  releasingClaimId
+}: {
+  insights: ConflictInsight[];
+  model: DomainModel[];
+  onAcknowledgeInsight(insightId: string): void;
+  onReleaseClaim(claimId: string): void;
+  releasingClaimId: string;
+}): React.ReactElement {
   const risky = model
     .filter((domain) => domain.claims.length > 0 || domain.failures.length > 0)
     .sort((a, b) => (b.failures.length * 3 + b.claims.length) - (a.failures.length * 3 + a.claims.length));
 
   return (
     <section className="rail-section">
+      {insights.map((insight) => (
+        <article className={`rail-card conflict-card ${insight.severity}`} key={insight.id}>
+          <div className="rail-card-head">
+            <strong><TriangleAlert size={13} />{insight.message}</strong>
+            <Badge tone={insight.severity === "high" ? "fail" : "risk"} icon={<TriangleAlert size={13} />}>{insight.severity}</Badge>
+          </div>
+          <p>{insight.agent_id} vs {insight.claim.agent_id}</p>
+          <PathList paths={insight.paths} />
+          <div className="card-actions">
+            <button className="icon-action" type="button" onClick={() => onAcknowledgeInsight(insight.id)}>
+              <CheckCheck size={13} />
+              Acknowledge
+            </button>
+            <ClaimActions claim={insight.claim} onReleaseClaim={onReleaseClaim} releasingClaimId={releasingClaimId} />
+          </div>
+        </article>
+      ))}
       {risky.map((domain) => (
         <article className="rail-card" key={domain.id}>
           <div className="rail-card-head">
@@ -538,9 +715,60 @@ function RiskQueue({ model }: { model: DomainModel[] }): React.ReactElement {
           </div>
           <p>{domain.claims.length} claims / {domain.failures.length} failures / {domain.events.length} events</p>
           <PathList paths={domain.claims.flatMap((claim) => claim.scope?.paths ?? [])} />
+          <ClaimList claims={domain.claims} onReleaseClaim={onReleaseClaim} releasingClaimId={releasingClaimId} />
         </article>
       ))}
     </section>
+  );
+}
+
+function ClaimList({
+  claims,
+  onReleaseClaim,
+  releasingClaimId
+}: {
+  claims: ClaimPointer[];
+  onReleaseClaim(claimId: string): void;
+  releasingClaimId: string;
+}): React.ReactElement | null {
+  if (claims.length === 0) return null;
+  return (
+    <div className="claim-list">
+      {claims.slice(0, 3).map((claim) => (
+        <div className="claim-row" key={claim.id}>
+          <span>
+            <LockKeyhole size={12} />
+            <strong>{claim.agent_id}</strong>
+          </span>
+          <ClaimActions claim={claim} onReleaseClaim={onReleaseClaim} releasingClaimId={releasingClaimId} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ClaimActions({
+  claim,
+  onReleaseClaim,
+  releasingClaimId
+}: {
+  claim: ClaimPointer;
+  onReleaseClaim(claimId: string): void;
+  releasingClaimId: string;
+}): React.ReactElement {
+  const busy = releasingClaimId === claim.id;
+  return (
+    <button
+      aria-label={`Release claim ${claim.id}`}
+      className="icon-action"
+      disabled={busy}
+      title="Release claim"
+      type="button"
+      onClick={() => onReleaseClaim(claim.id)}
+    >
+      <UnlockKeyhole size={13} />
+      {busy ? "Releasing" : "Release"}
+    </button>
   );
 }
 
@@ -579,6 +807,54 @@ function buildDomainModel(state: SukaState, domains: Domain[]): DomainModel[] {
     const failures = events.filter((event) => event.event_type.includes("failed"));
     return { ...domain, claims, decisions, events, failures, presence };
   });
+}
+
+function buildConflictInsights(state: SukaState): ConflictInsight[] {
+  const insights: ConflictInsight[] = [];
+  for (const agent of state.presence) {
+    const subjectPaths = (agent.current_files ?? []).map(normalizePath).filter(Boolean);
+    const subjectText = [agent.task, agent.branch, ...subjectPaths].filter(Boolean).join(" ").toLowerCase();
+    for (const claim of state.claims) {
+      if (claim.agent_id === agent.agent_id) continue;
+      const claimPaths = (claim.scope?.paths ?? []).map(normalizePath).filter(Boolean);
+      const samePaths = subjectPaths.filter((path) => claimPaths.includes(path));
+      const overlappingPaths = samePaths.length > 0
+        ? samePaths
+        : subjectPaths.filter((path) => claimPaths.some((claimPath) => pathsOverlap(path, claimPath)));
+      const claimedDomains = claim.scope?.domains ?? [];
+      const domainMatches = claimedDomains.filter((domain) => subjectText.includes(domain.toLowerCase()));
+
+      if (samePaths.length > 0) {
+        insights.push({
+          agent_id: agent.agent_id,
+          claim,
+          id: `${agent.agent_id}:${claim.id}:same-file`,
+          message: `Same file claimed by ${claim.agent_id}`,
+          paths: samePaths,
+          severity: "high"
+        });
+      } else if (overlappingPaths.length > 0) {
+        insights.push({
+          agent_id: agent.agent_id,
+          claim,
+          id: `${agent.agent_id}:${claim.id}:path-overlap`,
+          message: `Path overlap with ${claim.agent_id}`,
+          paths: overlappingPaths,
+          severity: "medium"
+        });
+      } else if (domainMatches.length > 0) {
+        insights.push({
+          agent_id: agent.agent_id,
+          claim,
+          id: `${agent.agent_id}:${claim.id}:domain-overlap`,
+          message: `Domain overlap with ${claim.agent_id}`,
+          paths: domainMatches,
+          severity: "low"
+        });
+      }
+    }
+  }
+  return insights.sort((left, right) => severityRank(right.severity) - severityRank(left.severity)).slice(0, 8);
 }
 
 function buildFlow(model: DomainModel[], state: SukaState, selectedNodeId: string, repoEdges: RepoMapEdge[]): { edges: Edge[]; nodes: Node[] } {
@@ -692,6 +968,21 @@ function touchesDomain(domain: Domain, values: string[]): boolean {
   return domain.keys.some((key) => key.length > 1 && haystack.includes(key));
 }
 
+function normalizePath(path: string): string {
+  return path.replaceAll("\\", "/").replace(/^\.\//, "").replace(/\/+/g, "/").replace(/\/$/, "");
+}
+
+function pathsOverlap(left: string, right: string): boolean {
+  if (left.length === 0 || right.length === 0) return false;
+  return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
+}
+
+function severityRank(severity: ConflictInsight["severity"]): number {
+  if (severity === "high") return 3;
+  if (severity === "medium") return 2;
+  return 1;
+}
+
 function domainState(domain: DomainModel): string {
   if (domain.failures.length > 0) return "failing";
   if (domain.claims.length > 0) return "claimed";
@@ -736,6 +1027,10 @@ function initials(value: string): string {
 
 function truncate(value: string, maxLength: number): string {
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
+}
+
+function slug(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "agent";
 }
 
 function readStoredBoolean(key: string, fallback: boolean): boolean {
