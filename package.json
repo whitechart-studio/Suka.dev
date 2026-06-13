@@ -19,6 +19,7 @@
   "devDependencies": {
     "@types/node": "^20.19.0",
     "@types/ws": "^8.18.1",
+    "danger": "^13.0.7",
     "typescript": "^5.8.3"
   },
   "engines": {
