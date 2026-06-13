@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import WebSocket from "ws";
 import { createSukaHttpServer, listen } from "./index.js";
 
 test("GET /api/state returns the current state", async () => {
@@ -59,6 +60,51 @@ test("GET /vendor/lucide.min.js returns the local icon bundle", async () => {
     assert.match(response.headers.get("content-type") ?? "", /text\/javascript/);
     assert.match(body, /createIcons/);
   } finally {
+    await running.close();
+  }
+});
+
+test("GET /api/realtime sends bootstrap state over WebSocket", async () => {
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  const socket = new WebSocket(`${running.url.replace("http://", "ws://")}/api/realtime`);
+  try {
+    const message = await nextJsonMessage(socket) as { data: { claims: unknown[] }; type: string };
+
+    assert.equal(message.type, "state.bootstrap");
+    assert.deepEqual(message.data.claims, []);
+  } finally {
+    socket.close();
+    await running.close();
+  }
+});
+
+test("POST /api/pointers broadcasts pointer updates over WebSocket", async () => {
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  const socket = new WebSocket(`${running.url.replace("http://", "ws://")}/api/realtime`);
+  try {
+    const bootstrap = await nextJsonMessage(socket) as { type: string };
+    assert.equal(bootstrap.type, "state.bootstrap");
+
+    const createResponse = await postJson(`${running.url}/api/pointers`, {
+      type: "claim",
+      id: "ptr_claim_01",
+      agent_id: "codex-trent-01",
+      scope: {
+        paths: ["src/billing/**"]
+      },
+      reason: "Implement Stripe webhook handling",
+      kind: "soft_claim",
+      created_at: "2026-06-12T10:00:00.000Z",
+      expires_at: "2099-06-12T11:00:00.000Z"
+    });
+    const message = await nextJsonMessage(socket) as { data: { id: string; type: string }; type: string };
+
+    assert.equal(createResponse.status, 201);
+    assert.equal(message.type, "pointer.published");
+    assert.equal(message.data.type, "claim");
+    assert.equal(message.data.id, "ptr_claim_01");
+  } finally {
+    socket.close();
     await running.close();
   }
 });
@@ -177,5 +223,19 @@ async function postJson(url: string, body: unknown): Promise<Response> {
       "content-type": "application/json"
     },
     method: "POST"
+  });
+}
+
+async function nextJsonMessage(socket: WebSocket): Promise<unknown> {
+  return await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out waiting for WebSocket message.")), 2000);
+    socket.once("message", (data) => {
+      clearTimeout(timer);
+      resolve(JSON.parse(data.toString()) as unknown);
+    });
+    socket.once("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
   });
 }

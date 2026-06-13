@@ -38,9 +38,35 @@ Dashboard
 
 ## Near-Term Architecture Work
 
-- WebSocket events.
 - Agent presence publishing.
 - Project config through `.suka/config.json`.
 - More intelligent repo relationship parsing.
 - Hosted/team workspace model.
 
+## Realtime Endpoint
+
+The local server exposes a WebSocket endpoint at:
+
+```text
+ws://127.0.0.1:4366/api/realtime
+```
+
+On connection, the server sends:
+
+```json
+{
+  "type": "state.bootstrap",
+  "data": {
+    "presence": [],
+    "claims": [],
+    "events": [],
+    "decisions": []
+  }
+}
+```
+
+State-changing HTTP routes then broadcast messages such as:
+
+- `pointer.published`
+- `claim.released`
+- `state.expired`

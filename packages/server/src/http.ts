@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { URL } from "node:url";
 import { dashboardHtml } from "./dashboard.js";
+import { RealtimeHub } from "./realtime.js";
 import { buildRepoMap } from "./repo-map.js";
 import { createSukaService, type SukaService } from "./service.js";
 
@@ -29,10 +30,11 @@ export interface RunningHttpServer {
 
 export function createSukaHttpServer(options: HttpServerOptions = {}): Server {
   const service = options.service ?? createSukaService();
+  const realtime = new RealtimeHub({ service });
 
-  return createServer(async (request, response) => {
+  const server = createServer(async (request, response) => {
     try {
-      await routeRequest(service, request, response);
+      await routeRequest(service, realtime, request, response);
     } catch (error) {
       writeJson(response, 500, {
         error: {
@@ -42,6 +44,8 @@ export function createSukaHttpServer(options: HttpServerOptions = {}): Server {
       });
     }
   });
+  realtime.attach(server);
+  return server;
 }
 
 export async function listen(options: ListenOptions, server = createSukaHttpServer()): Promise<RunningHttpServer> {
@@ -76,7 +80,12 @@ export async function listen(options: ListenOptions, server = createSukaHttpServ
   };
 }
 
-async function routeRequest(service: SukaService, request: IncomingMessage, response: ServerResponse): Promise<void> {
+async function routeRequest(
+  service: SukaService,
+  realtime: RealtimeHub,
+  request: IncomingMessage,
+  response: ServerResponse
+): Promise<void> {
   const method = request.method ?? "GET";
   const url = new URL(request.url ?? "/", "http://localhost");
 
@@ -139,6 +148,10 @@ async function routeRequest(service: SukaService, request: IncomingMessage, resp
     writeJson(response, 201, {
       data: result.value
     });
+    realtime.broadcast({
+      data: result.value,
+      type: "pointer.published"
+    });
     return;
   }
 
@@ -154,8 +167,13 @@ async function routeRequest(service: SukaService, request: IncomingMessage, resp
   if (method === "POST" && url.pathname === "/api/expire") {
     const body = await readJson(request);
     service.expire(parseNow(body));
+    const state = service.getState();
     writeJson(response, 200, {
-      data: service.getState()
+      data: state
+    });
+    realtime.broadcast({
+      data: state,
+      type: "state.expired"
     });
     return;
   }
@@ -177,6 +195,12 @@ async function routeRequest(service: SukaService, request: IncomingMessage, resp
       data: {
         released: true
       }
+    });
+    realtime.broadcast({
+      data: {
+        id: decodeURIComponent(claimMatch[1])
+      },
+      type: "claim.released"
     });
     return;
   }
