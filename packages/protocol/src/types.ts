@@ -125,6 +125,17 @@ export interface SukaPrivacyConfig {
   publish_terminal_logs: false;
 }
 
+export interface SukaPlatformConfig {
+  workspace_id: string;
+  repo_id: string;
+  team_id?: string;
+  public_base_url?: string;
+  auth_required: boolean;
+  auth_token_env: string;
+  retention_days: number;
+  audit_log_enabled: boolean;
+}
+
 export interface SukaConfig {
   version: 1;
   repo: string;
@@ -134,4 +145,5 @@ export interface SukaConfig {
   ignored_paths: string[];
   domains: SukaConfigDomain[];
   privacy: SukaPrivacyConfig;
+  platform: SukaPlatformConfig;
 }
