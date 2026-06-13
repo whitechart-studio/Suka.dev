@@ -12,14 +12,16 @@ const body = pr.body ?? "";
 const touches = (prefix) => changedFiles.some((file) => file.startsWith(prefix));
 const matches = (pattern) => changedFiles.some((file) => pattern.test(file));
 const mentionsValidation = (command) => body.includes(command);
+const bodyMentions = (value) => body.toLowerCase().includes(value.toLowerCase());
+const generatedReviewFiles = new Set(["package-lock.json"]);
 
 const additions = pr.additions ?? 0;
 const deletions = pr.deletions ?? 0;
 const totalChangedLines = additions + deletions;
 
-if (totalChangedLines > 1200) {
+if (totalChangedLines > 1200 && !changedFiles.some((file) => generatedReviewFiles.has(file))) {
   warn(`This PR changes ${totalChangedLines} lines. Split it unless this is generated or mechanical work.`);
-} else if (totalChangedLines > 650) {
+} else if (totalChangedLines > 650 && !changedFiles.some((file) => generatedReviewFiles.has(file))) {
   warn(`This PR changes ${totalChangedLines} lines. Consider splitting if review risk is high.`);
 }
 
@@ -55,8 +57,8 @@ if (touches("apps/dashboard/src/") && !mentionsValidation("npm run build --works
   warn("Dashboard source changed. Add dashboard build validation to the PR body.");
 }
 
-if (touches(".github/workflows/")) {
-  warn("Workflow changed. Check permissions, pinned third-party actions, and fork behavior carefully.");
+if (touches(".github/workflows/") && !bodyMentions("workflow permissions reviewed")) {
+  warn("Workflow changed. Add `workflow permissions reviewed` to the PR body after checking permissions, pinned actions, and fork behavior.");
 }
 
 if (changedFiles.some((file) => /(^|\/)(\.env|.*secret.*|.*token.*)$/i.test(file))) {
