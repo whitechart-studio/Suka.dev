@@ -43,7 +43,44 @@ node packages/cli/dist/bin.js presence \
   --interval 15
 ```
 
+Stop a heartbeat publisher with `Ctrl+C` or `SIGTERM`; the CLI exits cleanly after the current publish/sleep cycle. `--interval` and `--ttl` must be positive integers so wrappers cannot accidentally create a tight publish loop.
+
 If `--repo`, `--branch`, or `--file` are omitted, the CLI attempts to detect them from the local Git repository. Repeated `--file` flags and comma-separated file lists are both supported.
+
+## Agent Wrapper Examples
+
+Codex:
+
+```bash
+SUKA_AGENT_ID="codex-${USER:-local}" \
+SUKA_AGENT_TOOL=codex \
+node packages/cli/dist/bin.js presence \
+  --status editing \
+  --task "Work on Suka" \
+  --watch \
+  --interval 15
+```
+
+Cursor:
+
+```bash
+SUKA_AGENT_ID="cursor-${USER:-local}" \
+SUKA_AGENT_TOOL=cursor \
+node packages/cli/dist/bin.js presence \
+  --status editing \
+  --task "Implement current task" \
+  --watch
+```
+
+Terminal agent:
+
+```bash
+SUKA_AGENT_ID="terminal-${USER:-local}" \
+SUKA_AGENT_TOOL=terminal \
+node packages/cli/dist/bin.js presence \
+  --task "Manual maintenance" \
+  --file packages/server/src/http.ts
+```
 
 ## Claims
 
