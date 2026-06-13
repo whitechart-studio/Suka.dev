@@ -1,5 +1,5 @@
-import { readdir, stat } from "node:fs/promises";
-import { basename, dirname, join, relative } from "node:path";
+import { readFile, readdir, stat } from "node:fs/promises";
+import { basename, dirname, extname, join, relative, resolve } from "node:path";
 
 export interface RepoMapDomain {
   color: string;
@@ -39,6 +39,14 @@ const ignoredNames = new Set([
 
 const workspaceContainers = new Set(["apps", "packages", "project-skills"]);
 const colors = ["#14b8a6", "#3b82f6", "#e11d48", "#f97316", "#f59e0b", "#22c55e", "#94a3b8", "#4f46e5"];
+const sourceExtensions = new Set([".cjs", ".js", ".jsx", ".mjs", ".ts", ".tsx"]);
+
+type DomainCandidate = {
+  kind: RepoMapDomain["kind"];
+  metrics: { directories: number; files: number };
+  name: string;
+  path: string;
+};
 
 export async function buildRepoMap(root = process.cwd()): Promise<RepoMap> {
   const workspaceRoot = await findWorkspaceRoot(root);
@@ -62,7 +70,7 @@ export async function buildRepoMap(root = process.cwd()): Promise<RepoMap> {
 
   return {
     domains,
-    edges: edgesFor(domains),
+    edges: await edgesFor(workspaceRoot, domains),
     generated_at: new Date().toISOString(),
     root: basename(workspaceRoot)
   };
@@ -92,12 +100,7 @@ async function hasDirectory(root: string, name: string): Promise<boolean> {
   }
 }
 
-async function discoverDomains(root: string): Promise<Array<{
-  kind: RepoMapDomain["kind"];
-  metrics: { directories: number; files: number };
-  name: string;
-  path: string;
-}>> {
+async function discoverDomains(root: string): Promise<DomainCandidate[]> {
   const entries = await readdir(root, { withFileTypes: true });
   const domains = [];
 
@@ -161,9 +164,11 @@ async function measureDirectory(directory: string, root: string, depth = 0): Pro
   return { directories, files };
 }
 
-function edgesFor(domains: RepoMapDomain[]): RepoMapEdge[] {
+async function edgesFor(root: string, domains: RepoMapDomain[]): Promise<RepoMapEdge[]> {
   const byPath = new Map(domains.map((domain) => [domain.path, domain]));
   const edges: RepoMapEdge[] = [];
+
+  edges.push(...await inferredEdgesFor(root, domains));
 
   addEdge(edges, byPath, "apps/dashboard", "packages/server");
   addEdge(edges, byPath, "apps/dashboard", "packages/protocol");
@@ -179,6 +184,142 @@ function edgesFor(domains: RepoMapDomain[]): RepoMapEdge[] {
   addEdge(edges, byPath, "scripts", "packages/cli");
 
   return Array.from(new Map(edges.map((item) => [item.id, item])).values());
+}
+
+async function inferredEdgesFor(root: string, domains: RepoMapDomain[]): Promise<RepoMapEdge[]> {
+  const byPackageName = await packageNameIndex(root, domains);
+  const edges: RepoMapEdge[] = [];
+
+  for (const domain of domains) {
+    edges.push(...await packageDependencyEdges(root, domain, byPackageName));
+    edges.push(...await sourceImportEdges(root, domain, domains, byPackageName));
+  }
+
+  return edges;
+}
+
+async function packageNameIndex(root: string, domains: RepoMapDomain[]): Promise<Map<string, RepoMapDomain>> {
+  const byPackageName = new Map<string, RepoMapDomain>();
+  for (const domain of domains) {
+    const manifest = await readJsonFile(join(root, domain.path, "package.json"));
+    if (isRecord(manifest) && typeof manifest.name === "string") {
+      byPackageName.set(manifest.name, domain);
+    }
+  }
+  return byPackageName;
+}
+
+async function packageDependencyEdges(
+  root: string,
+  source: RepoMapDomain,
+  byPackageName: Map<string, RepoMapDomain>
+): Promise<RepoMapEdge[]> {
+  const manifest = await readJsonFile(join(root, source.path, "package.json"));
+  if (!isRecord(manifest)) return [];
+
+  const edges: RepoMapEdge[] = [];
+  for (const field of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"] as const) {
+    const dependencies = manifest[field];
+    if (!isRecord(dependencies)) continue;
+
+    for (const dependencyName of Object.keys(dependencies)) {
+      const target = byPackageName.get(dependencyName);
+      if (target && target.id !== source.id) {
+        edges.push(edge(source.id, target.id));
+      }
+    }
+  }
+  return edges;
+}
+
+async function sourceImportEdges(
+  root: string,
+  source: RepoMapDomain,
+  domains: RepoMapDomain[],
+  byPackageName: Map<string, RepoMapDomain>
+): Promise<RepoMapEdge[]> {
+  const files = await sourceFiles(join(root, source.path));
+  const edges: RepoMapEdge[] = [];
+
+  for (const file of files) {
+    const text = await readTextFile(file);
+    if (text === undefined) continue;
+
+    for (const specifier of importSpecifiers(text)) {
+      const target = resolveImportDomain(root, file, specifier, domains, byPackageName);
+      if (target && target.id !== source.id) {
+        edges.push(edge(source.id, target.id));
+      }
+    }
+  }
+  return edges;
+}
+
+async function sourceFiles(directory: string, depth = 0): Promise<string[]> {
+  if (depth > 5) return [];
+
+  let entries;
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const files: string[] = [];
+  for (const entry of entries) {
+    if (ignoredNames.has(entry.name)) continue;
+    const absolutePath = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...await sourceFiles(absolutePath, depth + 1));
+      continue;
+    }
+
+    if (entry.isFile() && sourceExtensions.has(extname(entry.name))) {
+      files.push(absolutePath);
+    }
+  }
+  return files;
+}
+
+function importSpecifiers(source: string): string[] {
+  const specifiers = new Set<string>();
+  const importPattern = /\bimport\s+(?:type\s+)?(?:[^'"]*?\s+from\s+)?["']([^"']+)["']|\bexport\s+(?:type\s+)?[^'"]*?\s+from\s+["']([^"']+)["']|\bimport\(\s*["']([^"']+)["']\s*\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = importPattern.exec(source)) !== null) {
+    const specifier = match[1] ?? match[2] ?? match[3];
+    if (specifier !== undefined) specifiers.add(specifier);
+  }
+  return [...specifiers];
+}
+
+function resolveImportDomain(
+  root: string,
+  sourceFile: string,
+  specifier: string,
+  domains: RepoMapDomain[],
+  byPackageName: Map<string, RepoMapDomain>
+): RepoMapDomain | undefined {
+  const packageTarget = byPackageName.get(packageNameForSpecifier(specifier));
+  if (packageTarget) return packageTarget;
+
+  if (!specifier.startsWith(".")) return undefined;
+
+  const targetPath = normalizeRepoPath(relative(root, resolve(dirname(sourceFile), specifier)));
+  return domainForPath(domains, targetPath);
+}
+
+function packageNameForSpecifier(specifier: string): string {
+  if (!specifier.startsWith("@")) {
+    return specifier.split("/")[0] ?? specifier;
+  }
+  const parts = specifier.split("/");
+  return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : specifier;
+}
+
+function domainForPath(domains: RepoMapDomain[], path: string): RepoMapDomain | undefined {
+  return [...domains]
+    .sort((a, b) => b.path.length - a.path.length)
+    .find((domain) => path === domain.path || path.startsWith(`${domain.path}/`));
 }
 
 function addEdge(edges: RepoMapEdge[], byPath: Map<string, RepoMapDomain>, sourcePath: string, targetPath: string): void {
@@ -257,4 +398,28 @@ function isGeneratedPath(path: string): boolean {
 
 function normalizeRepoPath(path: string): string {
   return path.replace(/\\/g, "/");
+}
+
+async function readJsonFile(path: string): Promise<unknown> {
+  const text = await readTextFile(path);
+  if (text === undefined) return undefined;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+async function readTextFile(path: string): Promise<string | undefined> {
+  try {
+    const info = await stat(path);
+    if (!info.isFile() || info.size > 1_000_000) return undefined;
+    return await readFile(path, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
