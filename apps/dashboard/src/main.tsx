@@ -20,9 +20,11 @@ import {
   CheckCheck,
   Code2,
   Crosshair,
+  Copy,
   Gauge,
   GitBranch,
   HardDrive,
+  Link2,
   LockKeyhole,
   Maximize2,
   Minimize2,
@@ -142,6 +144,12 @@ type ConflictInsight = {
   paths: string[];
 };
 
+type TeamConnection = {
+  mode: "local" | "team";
+  workspaceName: string;
+  inviteToken: string;
+};
+
 const emptyState: SukaState = {
   claims: [],
   decisions: [],
@@ -174,6 +182,11 @@ const graphEdges = [
 
 const agentPalette = ["#0f766e", "#2563eb", "#7c3aed", "#16803c", "#b45309", "#be123c", "#0e7490"];
 const storagePrefix = "suka.dashboard.";
+const defaultTeamConnection: TeamConnection = {
+  inviteToken: "",
+  mode: "local",
+  workspaceName: "Local workspace"
+};
 
 type SelectedDetails =
   | { kind: "agent"; agent: PresencePointer }
@@ -190,6 +203,8 @@ function Dashboard(): React.ReactElement {
   const [selectedNodeId, setSelectedNodeId] = useState(() => readStoredString("selectedNodeId"));
   const [releasingClaimId, setReleasingClaimId] = useState("");
   const [dismissedInsightIds, setDismissedInsightIds] = useState<Set<string>>(() => new Set());
+  const [teamPanelOpen, setTeamPanelOpen] = useState(false);
+  const [teamConnection, setTeamConnection] = useState<TeamConnection>(() => readStoredTeamConnection());
   const viewportRestored = useRef(false);
   const { fitView, setViewport, zoomIn, zoomOut } = useReactFlow();
 
@@ -299,6 +314,17 @@ function Dashboard(): React.ReactElement {
     setDismissedInsightIds((current) => new Set(current).add(insightId));
   }, []);
 
+  const toggleTeamPanel = useCallback(() => {
+    setTeamPanelOpen((open) => {
+      if (!open && teamConnection.inviteToken.length === 0) {
+        setTeamConnection((current) => current.inviteToken.length > 0
+          ? current
+          : { ...current, inviteToken: createInviteToken(repoMap.root ?? "workspace") });
+      }
+      return !open;
+    });
+  }, [repoMap.root, teamConnection.inviteToken.length]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => fitView({ duration: 180, padding: focusMode ? 0.18 : 0.12 }), 80);
     return () => window.clearTimeout(timer);
@@ -313,6 +339,10 @@ function Dashboard(): React.ReactElement {
   useEffect(() => {
     writeStoredString("selectedNodeId", selectedNodeId);
   }, [selectedNodeId]);
+
+  useEffect(() => {
+    writeStoredTeamConnection(teamConnection);
+  }, [teamConnection]);
 
   useEffect(() => {
     if (viewportRestored.current || nodes.length === 0) return;
@@ -342,7 +372,14 @@ function Dashboard(): React.ReactElement {
         </div>
         <div className="top-actions">
           <Badge tone="info" icon={<HardDrive size={13} />}>local workspace</Badge>
+          <Badge tone={teamConnection.mode === "team" ? "live" : "neutral"} icon={<Users size={13} />}>
+            {teamConnection.mode === "team" ? "team connected" : "local only"}
+          </Badge>
           <Badge tone={status === "connected" ? "live" : status === "error" ? "fail" : "neutral"} icon={<Wifi size={13} />}>{status}</Badge>
+          <button type="button" onClick={toggleTeamPanel}>
+            <Link2 size={14} />
+            Team
+          </button>
           <button type="button" onClick={() => setFocusMode((value) => !value)}>
             {focusMode ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
             {focusMode ? "Exit focus" : "Focus"}
@@ -352,6 +389,16 @@ function Dashboard(): React.ReactElement {
             Refresh
           </button>
         </div>
+        {teamPanelOpen ? (
+          <TeamConnectionPanel
+            agents={state.presence}
+            connection={teamConnection}
+            repoName={repoMap.root ?? "workspace"}
+            serverStatus={status}
+            onClose={() => setTeamPanelOpen(false)}
+            onUpdate={setTeamConnection}
+          />
+        ) : null}
       </header>
 
       <main className={shellClass}>
@@ -476,6 +523,115 @@ function Dashboard(): React.ReactElement {
         </aside>
       </main>
     </div>
+  );
+}
+
+function TeamConnectionPanel({
+  agents,
+  connection,
+  onClose,
+  onUpdate,
+  repoName,
+  serverStatus
+}: {
+  agents: PresencePointer[];
+  connection: TeamConnection;
+  onClose(): void;
+  onUpdate(value: TeamConnection): void;
+  repoName: string;
+  serverStatus: string;
+}): React.ReactElement {
+  const connected = connection.mode === "team";
+  const inviteToken = connection.inviteToken;
+  const inviteLink = `suka://join/${inviteToken}`;
+  const teammates = agents.length > 0 ? agents : [{
+    agent_id: "local-agent",
+    current_files: [],
+    status: "offline",
+    tool: "terminal"
+  }];
+
+  return (
+    <section className="team-panel" aria-label="Team connection">
+      <div className="team-panel-head">
+        <div>
+          <h2><Users size={14} /> Team Connection</h2>
+          <p>{connected ? connection.workspaceName : "Local-only coordination"}</p>
+        </div>
+        <Badge tone={connected ? "live" : "neutral"} icon={<Wifi size={13} />}>{connected ? "team" : "local"}</Badge>
+      </div>
+      <div className="team-mode-grid">
+        <button
+          className={!connected ? "mode-option active" : "mode-option"}
+          type="button"
+          onClick={() => onUpdate({ ...connection, mode: "local" })}
+        >
+          <HardDrive size={14} />
+          <span>Local</span>
+        </button>
+        <button
+          className={connected ? "mode-option active" : "mode-option"}
+          type="button"
+          onClick={() => onUpdate({
+            inviteToken,
+            mode: "team",
+            workspaceName: connection.workspaceName === "Local workspace" ? `${displayName(repoName)} team` : connection.workspaceName
+          })}
+        >
+          <Users size={14} />
+          <span>Team</span>
+        </button>
+      </div>
+      <label className="team-field">
+        <span>workspace</span>
+        <input
+          value={connection.workspaceName}
+          onChange={(event) => onUpdate({ ...connection, workspaceName: event.target.value })}
+        />
+      </label>
+      <div className="invite-box">
+        <div>
+          <span>invite token</span>
+          <code>{inviteLink}</code>
+        </div>
+        <button
+          type="button"
+          onClick={() => void copyText(inviteLink)}
+        >
+          <Copy size={13} />
+          Copy
+        </button>
+      </div>
+      <div className="team-health">
+        <span><i className={`dot ${serverStatus === "connected" ? "blue" : "amber"}`} /> {serverStatus}</span>
+        <span>{agents.length} live agents</span>
+      </div>
+      <div className="teammate-list">
+        {teammates.slice(0, 4).map((agent) => {
+          const identity = agentIdentity(agent);
+          const Icon = identity.icon;
+          return (
+            <div className="teammate-row" key={agent.agent_id}>
+              <span className="agent-avatar" style={{ background: agentColor(agent.agent_id) }}><Icon size={13} /></span>
+              <div>
+                <strong>{agent.agent_id}</strong>
+                <p>{identity.label} / {agent.status}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="card-actions">
+        <button type="button" onClick={() => onUpdate({ ...connection, inviteToken: createInviteToken(repoName) })}>
+          <RefreshCw size={13} />
+          Rotate
+        </button>
+        <button type="button" onClick={onClose}>
+          <CheckCheck size={13} />
+          Done
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -1031,6 +1187,53 @@ function truncate(value: string, maxLength: number): string {
 
 function slug(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "agent";
+}
+
+function displayName(value: string): string {
+  return value
+    .split(/[-_\s/]+/)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ") || "Workspace";
+}
+
+function createInviteToken(repoName: string): string {
+  const entropy = `${repoName}:${Date.now()}:${Math.random()}`;
+  let hash = 0;
+  for (let index = 0; index < entropy.length; index += 1) {
+    hash = (hash * 31 + entropy.charCodeAt(index)) >>> 0;
+  }
+  return `${slug(repoName)}-${hash.toString(36).padStart(6, "0")}`;
+}
+
+async function copyText(value: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(value);
+  } catch {
+    // Clipboard access depends on browser permissions; the invite remains visible for manual copy.
+  }
+}
+
+function readStoredTeamConnection(): TeamConnection {
+  if (typeof window === "undefined") return defaultTeamConnection;
+  const raw = readStorageValue("teamConnection");
+  if (!raw) return defaultTeamConnection;
+  try {
+    const parsed = JSON.parse(raw) as Partial<TeamConnection>;
+    return {
+      inviteToken: typeof parsed.inviteToken === "string" ? parsed.inviteToken : "",
+      mode: parsed.mode === "team" ? "team" : "local",
+      workspaceName: typeof parsed.workspaceName === "string" && parsed.workspaceName.length > 0
+        ? parsed.workspaceName
+        : defaultTeamConnection.workspaceName
+    };
+  } catch {
+    return defaultTeamConnection;
+  }
+}
+
+function writeStoredTeamConnection(value: TeamConnection): void {
+  writeStorageValue("teamConnection", JSON.stringify(value));
 }
 
 function readStoredBoolean(key: string, fallback: boolean): boolean {
