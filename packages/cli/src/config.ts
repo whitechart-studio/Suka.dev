@@ -1,12 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-
-export interface SukaConfig {
-  version: 1;
-  repo: string;
-  server_url: string;
-  data_file: string;
-}
+import {
+  createDefaultSukaConfig,
+  normalizeSukaConfig,
+  type CreateDefaultSukaConfigOptions,
+  type SukaConfig
+} from "@suka/protocol";
 
 export interface InitProjectOptions {
   cwd: string;
@@ -24,12 +23,16 @@ export function initProject(options: InitProjectOptions): InitProjectResult {
   const projectDir = resolve(options.cwd);
   const sukaDir = join(projectDir, ".suka");
   const configPath = join(sukaDir, "config.json");
-  const config: SukaConfig = {
-    version: 1,
-    repo: options.repo ?? basename(projectDir),
-    server_url: options.serverUrl ?? "http://127.0.0.1:4366",
-    data_file: options.dataFile ?? ".suka/state.json"
+  const defaultConfigOptions: CreateDefaultSukaConfigOptions = {
+    repo: options.repo ?? basename(projectDir)
   };
+  if (options.serverUrl !== undefined) {
+    defaultConfigOptions.serverUrl = options.serverUrl;
+  }
+  if (options.dataFile !== undefined) {
+    defaultConfigOptions.dataFile = options.dataFile;
+  }
+  const config = createDefaultSukaConfig(defaultConfigOptions);
 
   mkdirSync(join(sukaDir, "decisions"), { recursive: true });
   mkdirSync(join(sukaDir, "schemas"), { recursive: true });
@@ -65,20 +68,18 @@ export function loadConfig(cwd: string): SukaConfig | undefined {
     return undefined;
   }
 
-  const parsed = JSON.parse(readFileSync(configPath, "utf8")) as Partial<SukaConfig>;
-  if (parsed.version !== 1 || typeof parsed.repo !== "string") {
-    throw new Error(`Invalid Suka config: ${configPath}`);
+  const parsed = JSON.parse(readFileSync(configPath, "utf8")) as unknown;
+  const result = normalizeSukaConfig(parsed, {
+    repo: basename(dirname(dirname(configPath)))
+  });
+  if (!result.ok) {
+    const issueList = result.issues.map((issue) => `${issue.path}: ${issue.message}`).join("; ");
+    throw new Error(`Invalid Suka config: ${configPath} (${issueList})`);
   }
 
-  return {
-    version: 1,
-    repo: parsed.repo,
-    server_url: typeof parsed.server_url === "string" ? parsed.server_url : "http://127.0.0.1:4366",
-    data_file: typeof parsed.data_file === "string" ? parsed.data_file : ".suka/state.json"
-  };
+  return result.value;
 }
 
 export function resolveProjectPath(cwd: string, path: string): string {
   return resolve(cwd, path);
 }
-
