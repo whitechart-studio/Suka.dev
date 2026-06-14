@@ -110,6 +110,13 @@ node packages/cli/dist/bin.js conflicts \
   --api "POST /api/cleanup"
 ```
 
+View the connected team:
+
+```bash
+node packages/cli/dist/bin.js team \
+  --server http://127.0.0.1:4366
+```
+
 Clean a scoped session safely:
 
 ```bash

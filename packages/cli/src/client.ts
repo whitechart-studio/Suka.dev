@@ -25,6 +25,10 @@ export class SukaApiClient {
     return this.#request("GET", "/api/state");
   }
 
+  async getTeam(): Promise<unknown> {
+    return this.#request("GET", "/api/team");
+  }
+
   async publishPointer(pointer: unknown): Promise<unknown> {
     return this.#request("POST", "/api/pointers", pointer);
   }
