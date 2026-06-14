@@ -99,6 +99,66 @@ test("team supports json output", async () => {
   assert.match(output.join(""), /"active_agents": 0/);
 });
 
+test("doctor reports config warnings and reachable APIs", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-cli-doctor-"));
+  const originalCwd = process.cwd();
+  const output: string[] = [];
+  const requests: string[] = [];
+  try {
+    process.chdir(tempDir);
+    const result = await runCli({
+      argv: ["doctor", "--server", "http://suka.test"],
+      env: {},
+      fetch: async (url, init) => {
+        requests.push(String(url));
+        assert.equal(init?.method, "GET");
+        return jsonResponse(200, {});
+      },
+      io: {
+        stdout: { write: (value: string) => output.push(value) },
+        stderr: { write: () => undefined }
+      }
+    });
+
+    assert.equal(result.exitCode, 0);
+    assert.deepEqual(requests, ["http://suka.test/api/state", "http://suka.test/api/team"]);
+    assert.match(output.join(""), /Suka doctor/);
+    assert.match(output.join(""), /warn project config/);
+    assert.match(output.join(""), /ok state endpoint/);
+    assert.match(output.join(""), /ok team endpoint/);
+  } finally {
+    process.chdir(originalCwd);
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
+test("doctor exits nonzero when APIs are unreachable", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-cli-doctor-fail-"));
+  const originalCwd = process.cwd();
+  const output: string[] = [];
+  try {
+    process.chdir(tempDir);
+    const result = await runCli({
+      argv: ["doctor", "--server", "http://suka.test"],
+      env: {},
+      fetch: async () => {
+        throw new Error("connection refused");
+      },
+      io: {
+        stdout: { write: (value: string) => output.push(value) },
+        stderr: { write: () => undefined }
+      }
+    });
+
+    assert.equal(result.exitCode, 1);
+    assert.match(output.join(""), /fail state endpoint: connection refused/);
+    assert.match(output.join(""), /fail team endpoint: connection refused/);
+  } finally {
+    process.chdir(originalCwd);
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
 test("claim publishes a claim pointer", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const result = await runCli({

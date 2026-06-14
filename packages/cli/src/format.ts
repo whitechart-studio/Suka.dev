@@ -1,6 +1,23 @@
 import type { TeamConnectionSummary } from "@suka/protocol";
 import type { SukaState } from "@suka/server";
 
+export interface DoctorCheck {
+  name: string;
+  status: "fail" | "ok" | "warn";
+  message: string;
+}
+
+export interface DoctorReport {
+  checks: DoctorCheck[];
+  config_path?: string;
+  context: {
+    repo_id?: string;
+    session_id?: string;
+    workspace_id?: string;
+  };
+  server_url: string;
+}
+
 export function formatState(value: unknown): string {
   const state = value as SukaState;
   const lines: string[] = [];
@@ -24,6 +41,23 @@ export function formatState(value: unknown): string {
 
 export function formatJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+export function formatDoctor(report: DoctorReport): string {
+  const lines: string[] = [];
+
+  lines.push("Suka doctor");
+  lines.push(`server: ${report.server_url}`);
+  lines.push(`config: ${report.config_path ?? "not found"}`);
+  lines.push(`workspace: ${report.context.workspace_id ?? "not set"}`);
+  lines.push(`repo: ${report.context.repo_id ?? "not set"}`);
+  lines.push(`session: ${report.context.session_id ?? "not set"}`);
+
+  for (const check of report.checks) {
+    lines.push(`- ${check.status} ${check.name}: ${check.message}`);
+  }
+
+  return `${lines.join("\n")}\n`;
 }
 
 export function formatTeam(value: unknown): string {
@@ -67,6 +101,7 @@ export function helpText(): string {
 Usage:
   suka init [--repo NAME] [--server URL] [--data-file .suka/state.json]
   suka serve [--host 127.0.0.1] [--port 4366]
+  suka doctor [--server http://127.0.0.1:4366] [--workspace ID] [--repo-id ID] [--session ID] [--json]
   suka status [--server http://127.0.0.1:4366] [--json]
   suka team [--server http://127.0.0.1:4366] [--json]
   suka claim <path> [--agent AGENT] [--reason TEXT] [--ttl 45] [--workspace ID] [--repo-id ID] [--session ID] [--server URL]

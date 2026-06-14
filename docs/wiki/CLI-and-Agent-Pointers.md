@@ -52,6 +52,13 @@ If `--repo`, `--branch`, or `--file` are omitted, the CLI attempts to detect the
 Pointers can be scoped to a workspace, repo, and session so multiple agents land
 in the same Team panel.
 
+Check local readiness before starting a multi-agent session:
+
+```bash
+node packages/cli/dist/bin.js doctor \
+  --server http://127.0.0.1:4366
+```
+
 By default, the CLI reads `workspace_id` and `repo_id` from `.suka/config.json`.
 Use environment variables or flags when an agent wrapper needs explicit context:
 
