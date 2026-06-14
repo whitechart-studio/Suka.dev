@@ -18,6 +18,12 @@ export type IsoTimestamp = string;
 export type PointerId = string;
 export type AgentId = string;
 
+export interface CoordinationContext {
+  workspace_id?: string;
+  repo_id?: string;
+  session_id?: string;
+}
+
 export interface PointerScope {
   paths?: string[];
   apis?: string[];
@@ -26,7 +32,7 @@ export interface PointerScope {
   env?: string[];
 }
 
-export interface BasePointer {
+export interface BasePointer extends CoordinationContext {
   id: PointerId;
   type: PointerType;
 }

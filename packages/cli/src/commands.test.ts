@@ -326,6 +326,70 @@ test("decisions lists shared decision memory", async () => {
   assert.match(output.join(""), /ptr_decision_01/);
 });
 
+test("cleanup posts scoped cleanup context", async () => {
+  const requests: Array<{ init?: RequestInit; url: string }> = [];
+  const result = await runCli({
+    argv: [
+      "cleanup",
+      "--server",
+      "http://suka.test",
+      "--workspace",
+      "workspace-a",
+      "--repo",
+      "repo-a",
+      "--session",
+      "session-a"
+    ],
+    env: {},
+    fetch: async (url, init) => {
+      const request: { init?: RequestInit; url: string } = { url: String(url) };
+      if (init !== undefined) {
+        request.init = init;
+      }
+      requests.push(request);
+      return jsonResponse(200, {
+        removed: {
+          presence: 1,
+          claims: 1,
+          events: 0,
+          decisions: 0
+        }
+      });
+    },
+    io: silentIo()
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(requests[0]?.url, "http://suka.test/api/cleanup");
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    workspace_id: "workspace-a",
+    repo_id: "repo-a",
+    session_id: "session-a"
+  });
+});
+
+test("cleanup requires at least one scope flag", async () => {
+  const requests: unknown[] = [];
+  const errors: string[] = [];
+  const result = await runCli({
+    argv: ["cleanup", "--server", "http://suka.test"],
+    env: {},
+    fetch: async (url, init) => {
+      requests.push({ init, url });
+      return jsonResponse(200, {});
+    },
+    io: {
+      stdout: { write: () => undefined },
+      stderr: { write: (value: string) => errors.push(value) }
+    }
+  });
+
+  assert.equal(result.exitCode, 1);
+  assert.equal(requests.length, 0);
+  assert.match(errors.join(""), /cleanup requires at least one scope flag/);
+});
+
 test("unknown command exits with an error", async () => {
   const errors: string[] = [];
   const result = await runCli({

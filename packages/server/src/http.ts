@@ -238,6 +238,19 @@ async function routeRequest(
     return;
   }
 
+  if (method === "POST" && url.pathname === "/api/cleanup") {
+    const body = await readJson(request);
+    const result = service.cleanup(parseCleanupContext(body));
+    writeJson(response, 200, {
+      data: result
+    });
+    realtime.broadcast({
+      data: result.state,
+      type: "state.cleaned"
+    });
+    return;
+  }
+
   const claimMatch = /^\/api\/claims\/([^/]+)$/.exec(url.pathname);
   if (method === "DELETE" && claimMatch?.[1] !== undefined) {
     const released = service.releaseClaim(decodeURIComponent(claimMatch[1]));
@@ -316,12 +329,47 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
   }
 }
 
+function parseCleanupContext(body: unknown): Parameters<SukaService["cleanup"]>[0] {
+  if (!isRecord(body)) {
+    throw new HttpInputError("invalid_body", "Cleanup body must be an object.");
+  }
+
+  const context: Parameters<SukaService["cleanup"]>[0] = {};
+  if (typeof body.workspace_id === "string") {
+    context.workspace_id = body.workspace_id;
+  }
+  if (typeof body.repo_id === "string") {
+    context.repo_id = body.repo_id;
+  }
+  if (typeof body.session_id === "string") {
+    context.session_id = body.session_id;
+  }
+
+  if (context.workspace_id === undefined && context.repo_id === undefined && context.session_id === undefined) {
+    throw new HttpInputError(
+      "invalid_body",
+      "Cleanup requires at least one context field: workspace_id, repo_id, or session_id."
+    );
+  }
+
+  return context;
+}
+
 function parseConflictSubject(body: unknown): Parameters<SukaService["checkConflicts"]>[0] {
   if (!isRecord(body)) {
     throw new HttpInputError("invalid_body", "Conflict check body must be an object.");
   }
 
   const subject: Parameters<SukaService["checkConflicts"]>[0] = {};
+  if (typeof body.workspace_id === "string") {
+    subject.workspace_id = body.workspace_id;
+  }
+  if (typeof body.repo_id === "string") {
+    subject.repo_id = body.repo_id;
+  }
+  if (typeof body.session_id === "string") {
+    subject.session_id = body.session_id;
+  }
   if (typeof body.agent_id === "string") {
     subject.agent_id = body.agent_id;
   }

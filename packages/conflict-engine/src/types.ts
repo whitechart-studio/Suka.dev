@@ -1,4 +1,4 @@
-import type { ClaimPointer, EventPointer, PointerScope, PresencePointer } from "@suka/protocol";
+import type { ClaimPointer, CoordinationContext, EventPointer, PointerScope, PresencePointer } from "@suka/protocol";
 
 export type ConflictSeverity = "low" | "medium" | "high";
 
@@ -10,7 +10,7 @@ export type ConflictReason =
   | "env_overlap"
   | "domain_overlap";
 
-export interface ConflictSubject {
+export interface ConflictSubject extends CoordinationContext {
   agent_id?: string;
   task?: string;
   paths?: string[];
@@ -35,4 +35,3 @@ export interface ConflictCheckInput {
   active_presence?: PresencePointer[];
   recent_events?: EventPointer[];
 }
-
