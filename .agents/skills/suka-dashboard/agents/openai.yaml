@@ -1,4 +1,0 @@
-interface:
-  display_name: "Suka Dashboard"
-  short_description: "Professional dashboard UX guidance"
-  default_prompt: "Use $suka-dashboard to build or review the Suka web dashboard experience."
