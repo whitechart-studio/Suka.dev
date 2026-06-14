@@ -1,3 +1,4 @@
+import type { TeamConnectionSummary } from "@suka/protocol";
 import type { SukaState } from "@suka/server";
 
 export function formatState(value: unknown): string {
@@ -25,6 +26,41 @@ export function formatJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+export function formatTeam(value: unknown): string {
+  const summary = value as TeamConnectionSummary;
+  const lines: string[] = [];
+
+  lines.push("Suka team");
+  lines.push(`mode: ${summary.mode ?? "local"}`);
+  lines.push(`active agents: ${summary.active_agents ?? 0}`);
+
+  for (const workspace of summary.workspaces ?? []) {
+    lines.push(
+      `- workspace ${workspace.workspace_id}: ${workspace.active_agents} agents, ${workspace.claims} claims, ${workspace.events} events, ${workspace.decisions} decisions`
+    );
+    if (workspace.repo_ids.length > 0) {
+      lines.push(`  repos: ${workspace.repo_ids.join(", ")}`);
+    }
+    if (workspace.session_ids.length > 0) {
+      lines.push(`  sessions: ${workspace.session_ids.join(", ")}`);
+    }
+  }
+
+  if ((summary.members ?? []).length > 0) {
+    lines.push("members:");
+  }
+
+  for (const member of summary.members ?? []) {
+    const details = [member.tool, member.status, member.task].filter((item) => item !== undefined && item.length > 0);
+    lines.push(`- ${member.agent_id} ${details.join(" ")}`.trim());
+    if (member.current_files.length > 0) {
+      lines.push(`  files: ${member.current_files.join(", ")}`);
+    }
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
 export function helpText(): string {
   return `Suka CLI
 
@@ -32,6 +68,7 @@ Usage:
   suka init [--repo NAME] [--server URL] [--data-file .suka/state.json]
   suka serve [--host 127.0.0.1] [--port 4366]
   suka status [--server http://127.0.0.1:4366] [--json]
+  suka team [--server http://127.0.0.1:4366] [--json]
   suka claim <path> [--agent AGENT] [--reason TEXT] [--ttl 45] [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
   suka presence [--agent AGENT] [--tool TOOL] [--repo REPO] [--workspace ID] [--repo-id ID] [--session ID] [--status editing] [--task TEXT] [--file PATH] [--ttl 120] [--watch] [--interval 15] [--server URL]
   suka event <type> <summary> [--agent AGENT] [--workspace ID] [--repo-id ID] [--session ID] [--path PATH] [--api API] [--server URL]

@@ -11,7 +11,7 @@ import {
 import { initProject, loadConfig, resolveProjectPath } from "./config.js";
 import { createPointerId } from "./ids.js";
 import { SukaApiClient } from "./client.js";
-import { formatJson, formatState, helpText } from "./format.js";
+import { formatJson, formatState, formatTeam, helpText } from "./format.js";
 import { parseArgv, readCsvFlag, readNumberFlag, readStringFlag } from "./parse.js";
 import type { CliContext, CliResult } from "./types.js";
 
@@ -68,6 +68,12 @@ export async function runCli(context: CliContext): Promise<CliResult> {
       case "status": {
         const state = await client.getState();
         context.io.stdout.write(parsed.flags.json === true ? formatJson(state) : formatState(state));
+        return { exitCode: 0 };
+      }
+
+      case "team": {
+        const team = await client.getTeam();
+        context.io.stdout.write(parsed.flags.json === true ? formatJson(team) : formatTeam(team));
         return { exitCode: 0 };
       }
 

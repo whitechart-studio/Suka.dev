@@ -28,6 +28,77 @@ test("status prints state summary", async () => {
   assert.deepEqual(errors, []);
 });
 
+test("team prints connected workspace summary", async () => {
+  const output: string[] = [];
+  const result = await runCli({
+    argv: ["team", "--server", "http://suka.test"],
+    env: {},
+    fetch: async (url, init) => {
+      assert.equal(String(url), "http://suka.test/api/team");
+      assert.equal(init?.method, "GET");
+      return jsonResponse(200, {
+        active_agents: 1,
+        generated_at: "2026-06-12T10:00:00.000Z",
+        members: [
+          {
+            agent_id: "codex-01",
+            current_files: ["packages/cli/src/commands.ts"],
+            last_seen: "2026-06-12T10:00:00.000Z",
+            status: "editing",
+            task: "Build team CLI",
+            tool: "codex",
+            workspace_id: "workspace-demo"
+          }
+        ],
+        mode: "scoped",
+        workspaces: [
+          {
+            active_agents: 1,
+            claims: 2,
+            decisions: 1,
+            events: 3,
+            repo_ids: ["suka-dev"],
+            session_ids: ["session-live"],
+            workspace_id: "workspace-demo"
+          }
+        ]
+      });
+    },
+    io: {
+      stdout: { write: (value: string) => output.push(value) },
+      stderr: { write: () => undefined }
+    }
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.match(output.join(""), /Suka team/);
+  assert.match(output.join(""), /workspace-demo/);
+  assert.match(output.join(""), /codex-01 codex editing Build team CLI/);
+  assert.match(output.join(""), /packages\/cli\/src\/commands.ts/);
+});
+
+test("team supports json output", async () => {
+  const output: string[] = [];
+  const result = await runCli({
+    argv: ["team", "--server", "http://suka.test", "--json"],
+    env: {},
+    fetch: async () => jsonResponse(200, {
+      active_agents: 0,
+      generated_at: "2026-06-12T10:00:00.000Z",
+      members: [],
+      mode: "local",
+      workspaces: []
+    }),
+    io: {
+      stdout: { write: (value: string) => output.push(value) },
+      stderr: { write: () => undefined }
+    }
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.match(output.join(""), /"active_agents": 0/);
+});
+
 test("claim publishes a claim pointer", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const result = await runCli({

@@ -76,6 +76,13 @@ node packages/cli/dist/bin.js presence \
   --task "Review dashboard state"
 ```
 
+View the server-derived team summary from the terminal:
+
+```bash
+node packages/cli/dist/bin.js team \
+  --server http://127.0.0.1:4366
+```
+
 The same context flags work on `presence`, `claim`, `event`, `decision`, and `conflicts`.
 
 ## Agent Wrapper Examples
