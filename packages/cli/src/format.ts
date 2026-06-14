@@ -155,6 +155,7 @@ Usage:
   suka session start [--repo NAME] [--agent AGENT] [--tool TOOL] [--workspace ID] [--repo-id ID] [--session ID] [--server URL] [--json]
   suka session join [--agent AGENT] [--tool TOOL] [--workspace ID] [--repo-id ID] [--session ID] [--status editing] [--task TEXT] [--file PATH] [--watch] [--server URL]
   suka session status [--workspace ID] [--repo-id ID] [--session ID] [--server URL] [--json]
+  suka session end [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
   suka status [--server http://127.0.0.1:4366] [--json]
   suka team [--server http://127.0.0.1:4366] [--json]
   suka claim <path> [--agent AGENT] [--reason TEXT] [--ttl 45] [--workspace ID] [--repo-id ID] [--session ID] [--server URL]

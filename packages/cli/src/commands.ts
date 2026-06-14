@@ -287,7 +287,11 @@ async function sessionCommand(
     return await sessionStatusCommand(context, client, flags, config);
   }
 
-  throw new Error("session requires a supported action: start, join, or status.");
+  if (action === "end") {
+    return await sessionEndCommand(context, client, flags, config);
+  }
+
+  throw new Error("session requires a supported action: start, join, status, or end.");
 }
 
 async function sessionStartCommand(
@@ -358,6 +362,22 @@ async function sessionStatusCommand(
   };
 
   context.io.stdout.write(flags.json === true ? formatJson(report) : formatSessionStatus(report));
+  return { exitCode: 0 };
+}
+
+async function sessionEndCommand(
+  context: CliContext,
+  client: SukaApiClient,
+  flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>
+): Promise<CliResult> {
+  const sessionContext = coordinationContext(flags, config, context.env);
+  if (sessionContext.workspace_id === undefined || sessionContext.repo_id === undefined || sessionContext.session_id === undefined) {
+    throw new Error("session end requires workspace, repo, and session context.");
+  }
+
+  const result = await client.cleanup(sessionContext);
+  context.io.stdout.write(formatJson(result));
   return { exitCode: 0 };
 }
 
