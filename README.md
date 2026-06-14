@@ -76,6 +76,13 @@ Run the verification gate:
 npm run ci:verify
 ```
 
+Check local Suka readiness:
+
+```bash
+node packages/cli/dist/bin.js doctor \
+  --server http://127.0.0.1:4366
+```
+
 ## CLI Examples
 
 Publish live presence:

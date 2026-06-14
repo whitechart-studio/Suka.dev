@@ -8,10 +8,10 @@ import {
   type EventType,
   type PresenceStatus
 } from "@suka/protocol";
-import { initProject, loadConfig, resolveProjectPath } from "./config.js";
+import { findConfigPath, initProject, loadConfig, resolveProjectPath } from "./config.js";
 import { createPointerId } from "./ids.js";
 import { SukaApiClient } from "./client.js";
-import { formatJson, formatState, formatTeam, helpText } from "./format.js";
+import { formatDoctor, formatJson, formatState, formatTeam, helpText, type DoctorCheck, type DoctorReport } from "./format.js";
 import { parseArgv, readCsvFlag, readNumberFlag, readStringFlag } from "./parse.js";
 import type { CliContext, CliResult } from "./types.js";
 
@@ -42,6 +42,9 @@ export async function runCli(context: CliContext): Promise<CliResult> {
 
       case "serve":
         return await serveCommand(context, parsed.flags, config);
+
+      case "doctor":
+        return await doctorCommand(context, client, parsed.flags, config, serverUrl);
 
       case "init": {
         const initOptions: Parameters<typeof initProject>[0] = {
@@ -241,6 +244,80 @@ async function decisionCommand(
   const result = await client.createDecision(decision);
   context.io.stdout.write(formatJson(result));
   return { exitCode: 0 };
+}
+
+async function doctorCommand(
+  context: CliContext,
+  client: SukaApiClient,
+  flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>,
+  serverUrl: string
+): Promise<CliResult> {
+  const checks: DoctorCheck[] = [];
+  const configPath = findConfigPath(process.cwd());
+  const scopedContext = coordinationContext(flags, config, context.env);
+
+  checks.push(configPath === undefined
+    ? {
+        message: "run `suka init` for stable workspace and repo defaults",
+        name: "project config",
+        status: "warn"
+      }
+    : {
+        message: "found .suka/config.json",
+        name: "project config",
+        status: "ok"
+      });
+
+  checks.push(scopedContext.workspace_id === undefined || scopedContext.repo_id === undefined
+    ? {
+        message: "set workspace and repo context for multi-agent team views",
+        name: "team context",
+        status: "warn"
+      }
+    : {
+        message: "workspace and repo context are set",
+        name: "team context",
+        status: "ok"
+      });
+
+  await addApiCheck(checks, "state endpoint", async () => {
+    await client.getState();
+  });
+  await addApiCheck(checks, "team endpoint", async () => {
+    await client.getTeam();
+  });
+
+  const report: DoctorReport = {
+    checks,
+    context: scopedContext,
+    server_url: serverUrl
+  };
+  if (configPath !== undefined) {
+    report.config_path = configPath;
+  }
+
+  context.io.stdout.write(flags.json === true ? formatJson(report) : formatDoctor(report));
+  return {
+    exitCode: checks.some((check) => check.status === "fail") ? 1 : 0
+  };
+}
+
+async function addApiCheck(checks: DoctorCheck[], name: string, run: () => Promise<void>): Promise<void> {
+  try {
+    await run();
+    checks.push({
+      message: "reachable",
+      name,
+      status: "ok"
+    });
+  } catch (error) {
+    checks.push({
+      message: error instanceof Error ? error.message : "request failed",
+      name,
+      status: "fail"
+    });
+  }
 }
 
 async function serveCommand(
