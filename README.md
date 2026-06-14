@@ -1,209 +1,233 @@
-# Suka
+# Suka.dev
 
-**See what every AI coding agent is working on before the work collides.**
+**Realtime coordination infrastructure for teams running multiple AI coding agents in the same codebase.**
 
-Suka is an open-source coordination layer for teams running multiple AI coding agents on the same repository. It gives agents and developers a shared, realtime view of active work, affected files, API changes, test failures, blockers, and accepted engineering decisions.
+[![PR Gate](https://github.com/whitechart-studio/Suka.dev/actions/workflows/pr-gate.yml/badge.svg)](https://github.com/whitechart-studio/Suka.dev/actions/workflows/pr-gate.yml)
+[![CI/CD](https://github.com/whitechart-studio/Suka.dev/actions/workflows/main-ci-cd.yml/badge.svg)](https://github.com/whitechart-studio/Suka.dev/actions/workflows/main-ci-cd.yml)
+[![CodeQL](https://github.com/whitechart-studio/Suka.dev/actions/workflows/codeql.yml/badge.svg)](https://github.com/whitechart-studio/Suka.dev/actions/workflows/codeql.yml)
+![Status](https://img.shields.io/badge/status-pre--release-f59e0b)
+![Runtime](https://img.shields.io/badge/node-%3E%3D20.11-0f766e)
 
-Suka is being built for teams that want agentic development to become more observable, coordinated, and safe without standardizing on one AI coding tool.
+![Suka.dev social preview](docs/assets/social-preview.png)
 
-## Why Suka
+Suka.dev is a local-first coordination layer for agentic software teams. It gives humans and AI coding agents a shared live room for presence, claims, conflict signals, repository domains, and accepted engineering decisions before parallel work collides.
 
-AI-assisted development is becoming parallel. A backend agent may be changing a payment API while a frontend agent is building checkout. A third agent may be adding a migration while another writes code against the old schema. A test failure may be discovered in one session while another agent continues related work without knowing.
+It is not an AI code generator. It is the coordination plane around your coding agents.
 
-Git records the final code changes, but it does not coordinate work while it is happening. Chat tools help humans talk, but agents need structured context they can read, publish, and act on.
+## Product Preview
 
-Suka exists to make that live coordination layer explicit.
+![Suka Operations Canvas](docs/assets/dashboard-canvas.png)
 
-## What Suka Does
+The dashboard is designed around a canvas mental model: agents and domains are visible at the same time, claimed work is color-coded, and conflict signals stay close to the repository areas they affect.
 
-Suka lets agents and developer tools publish small structured coordination signals. These signals describe what is happening in the repository right now and what future agents should know before editing.
+## Why This Exists
 
-Core capabilities:
+AI-assisted engineering is becoming parallel. Codex may be editing a server route while Claude Code reviews the UI path that depends on it. Another agent may add tests, another may touch schema, and a human maintainer still needs to understand the operational state of the repository.
 
-- realtime presence for active agents and developers
-- soft claims on files, modules, APIs, schemas, and domains
-- project events for API changes, test results, blockers, and task progress
-- conflict warnings for overlapping work
-- durable engineering decisions with evidence and scope
-- a dashboard for human visibility
-- MCP tools for agent-facing coordination
-- local-first operation with a path to self-hosted team usage
+Git shows what changed after the fact. Chat explains intent to humans. Suka gives agents and developers structured coordination data while the work is happening.
 
-## Pointers
+## What Suka Coordinates
 
-A **pointer** is a structured coordination signal.
+| Signal | What it answers | Example |
+| --- | --- | --- |
+| Presence | Who is active right now? | `codex` is editing `packages/server/src/http.ts` |
+| Claims | What work area is temporarily owned? | `packages/server/**` is claimed for cleanup API changes |
+| Events | What just happened? | `POST /api/cleanup` contract changed |
+| Conflicts | What work may collide? | API, path, domain, table, or env overlap |
+| Decisions | What should future agents remember? | Cleanup must be scoped by workspace, repo, or session |
 
-Examples:
+Claims are advisory, not locks. Suka warns about risk without taking control away from developers.
 
-- “I am editing `src/billing/webhook.ts`.”
-- “I am claiming `src/billing/**` for the next 45 minutes.”
-- “`POST /api/payments` changed.”
-- “`billing/webhook.test.ts` is failing.”
-- “Webhook handlers must be idempotent.”
+## Core Capabilities
 
-Suka stores and broadcasts pointers so other agents and developers can react before work diverges.
+- Realtime dashboard for active agents, claims, events, and decisions.
+- Typed protocol for presence, claims, events, decisions, and project configuration.
+- Deterministic conflict engine for paths, APIs, domains, tables, and environment keys.
+- Local HTTP/WebSocket server with in-memory or file-backed persistence.
+- CLI for serving, publishing, checking conflicts, releasing claims, and scoped cleanup.
+- Scoped coordination context with `workspace_id`, `repo_id`, and `session_id`.
+- Self-hostable foundation with Docker and CI gates.
+- Privacy-first posture: metadata over prompts, transcripts, code content, or raw terminal logs.
 
-Pointer types:
+## Quickstart
 
-| Pointer | Purpose |
-| --- | --- |
-| Presence | Live status, task, branch, and current files |
-| Claim | Advisory claim on files, APIs, domains, or modules |
-| Event | Important activity such as API changes, test failures, blockers, or task completion |
-| Decision | Durable project memory backed by evidence and approval state |
+Requirements:
 
-Claims are not locks. Suka warns about risk without taking control away from developers.
+- Node.js `>=20.11`
+- npm `>=10`
 
-## Example Workflows
-
-### Preventing Overlapping Work
-
-An agent starts a billing task and claims:
-
-```text
-task: Implement Stripe webhook handling
-paths: src/billing/**
-status: editing
+```bash
+git clone git@github.com:whitechart-studio/Suka.dev.git
+cd Suka.dev
+npm install
+npm run build
+node packages/server/dist/bin.js
 ```
 
-Another agent begins modifying:
+Open:
 
 ```text
-src/billing/invoice.ts
+http://127.0.0.1:4366
 ```
 
-Suka can surface:
+Run the verification gate:
 
-```text
-severity: medium
-reason: path_overlap
-message: Active billing work overlaps src/billing/invoice.ts
+```bash
+npm run ci:verify
 ```
 
-The second agent can warn the developer, request confirmation, or check recent billing context before continuing.
+## CLI Examples
 
-### Catching API Contract Drift
+Publish live presence:
 
-A backend agent changes a payment route:
-
-```text
-event_type: api_contract_changed
-affected_apis: POST /api/payments
-summary: Payment creation response now includes risk_review status
+```bash
+node packages/cli/dist/bin.js presence \
+  --server http://127.0.0.1:4366 \
+  --agent codex-local \
+  --tool codex \
+  --repo whitechart-studio/Suka.dev \
+  --status editing \
+  --task "Implement cleanup API" \
+  --file packages/server/src/http.ts
 ```
 
-A frontend agent working on checkout can query Suka and discover that its payment client may need to update before more code is generated against the old response shape.
+Claim a work area:
 
-### Sharing Test Failures
-
-An agent runs tests and publishes:
-
-```text
-event_type: test_failed
-affected_paths: tests/billing/webhook.test.ts
-summary: Duplicate webhook delivery is not idempotent
+```bash
+node packages/cli/dist/bin.js claim "packages/server/**" \
+  --server http://127.0.0.1:4366 \
+  --agent codex-local \
+  --reason "Own cleanup and realtime state updates"
 ```
 
-That failure becomes shared project context instead of staying inside one terminal, editor, or chat session.
+Check for conflicts:
 
-### Preserving Engineering Decisions
-
-The team accepts:
-
-```text
-title: Webhook handlers must be idempotent
-scope: src/billing/**, src/webhooks/**
-evidence: docs/payments.md, src/billing/webhook.ts
+```bash
+node packages/cli/dist/bin.js conflicts \
+  --server http://127.0.0.1:4366 \
+  --agent claude-code-local \
+  --path packages/server/src/http.ts \
+  --api "POST /api/cleanup"
 ```
 
-Future agents can retrieve the decision before modifying billing or webhook code.
+Clean a scoped session safely:
 
-## Who Suka Is For
+```bash
+node packages/cli/dist/bin.js cleanup \
+  --server http://127.0.0.1:4366 \
+  --workspace local-regression \
+  --repo multi-agent-regression \
+  --session reg-20260613151655
+```
 
-Suka is intended for:
+Cleanup requires at least one scope flag. There is no empty “wipe everything” cleanup path.
 
-- engineering teams using multiple AI coding agents in the same repository
-- maintainers reviewing agent-generated contributions
-- hackathon teams coordinating fast parallel work
-- AI tool builders looking for a neutral coordination protocol
-- companies that want self-hosted visibility into agent activity without storing private prompts
-
-## What Suka Is Not
-
-Suka is not:
-
-- an AI code generator
-- a replacement for Git or GitHub
-- a project management suite
-- a prompt logger or chat transcript store
-- a hard-locking system that prevents developers from editing files
-- a tool tied to one editor, model provider, or coding agent
-
-Suka coordinates work. It does not write the code for you.
-
-## Architecture Direction
-
-Suka is designed around a small set of components:
+## Architecture
 
 ```text
-Developer / Agent
-      |
-      v
-CLI or MCP server
-      |
-      v
+AI agents / developers
+        |
+        v
+CLI, MCP, or HTTP clients
+        |
+        v
 Suka server
-      |
-      +-- persistence
-      +-- WebSocket broadcaster
-      +-- conflict engine
-      +-- web dashboard
+        |
+        +-- protocol validation
+        +-- scoped persistence
+        +-- conflict engine
+        +-- WebSocket broadcasts
+        +-- dashboard canvas
 ```
 
-Planned components:
+Packages:
 
-- **Protocol**: shared pointer schemas and validation
-- **Server**: HTTP API, WebSocket updates, persistence, expiration, and coordination logic
-- **Conflict engine**: deterministic checks for path, API, schema, branch, and environment overlap
-- **MCP server**: agent-facing tools for context lookup, conflict checks, and pointer publishing
-- **CLI**: local setup, task publishing, claims, status, and dashboard launch
-- **Dashboard**: live room, repo map, timeline, conflict radar, and decisions
+| Package | Purpose |
+| --- | --- |
+| `@suka/protocol` | Pointer types, config types, validators |
+| `@suka/conflict-engine` | Deterministic conflict checks |
+| `@suka/server` | HTTP API, WebSocket realtime, persistence, cleanup |
+| `@suka/cli` | Developer and agent command-line interface |
+| `@suka/dashboard` | Operations canvas and realtime UI |
 
-## Design Targets
+## Privacy Model
 
-Suka is being designed for:
+Suka is designed to coordinate repository work without becoming a prompt archive.
+
+By default, Suka stores structured metadata:
+
+- agent identity and tool name
+- task summaries
+- paths, APIs, tables, env key names, and domains
+- conflict warnings
+- accepted decisions and evidence references
+
+Suka should not store:
+
+- private prompts
+- chain-of-thought
+- raw terminal logs
+- source code content
+- secrets or secret values
+
+## Platform Direction
+
+Suka is being built for:
 
 - local-first development
 - self-hosted team deployments
-- future hosted service compatibility
-- Windows, Linux, and macOS support for developer workflows
+- future hosted workspaces
+- Windows, Linux, and macOS developer workflows
 - Linux containers for production self-hosting
-- iOS and iPadOS dashboard access through responsive web/PWA support
+- responsive dashboard access from tablets and mobile browsers
 
-## Design Principles
+## Project Status
 
-- **Neutral protocol**: support multiple agents, editors, and model providers.
-- **Metadata over transcripts**: store structured coordination data, not private prompts, chain-of-thought, or raw terminal logs.
-- **Advisory coordination**: warn about risk without blocking human judgment.
-- **Local-first foundation**: provide value before requiring cloud infrastructure.
-- **Self-hostable by default**: allow teams to control repository metadata.
-- **Typed boundaries**: keep protocol objects explicit and validated across CLI, server, MCP, and dashboard.
-- **Cross-platform discipline**: avoid assumptions that only work on one operating system.
-
-## Current Status
-
-Suka is in early architecture and product development. The initial repository is being prepared as an open-source infrastructure project with a local-first core and a clear path to self-hosted team usage.
+Suka.dev is pre-release infrastructure. The core protocol, conflict engine, server, CLI, dashboard, PR gates, and scoped cleanup foundation are in active development.
 
 No stable release is available yet.
 
-## Open Source Resources
+## Documentation
 
-- Wiki source: [`docs/wiki`](docs/wiki)
-- Architecture notes: [`docs/architecture`](docs/architecture)
-- PR gate and CI/CD standards: [`docs/engineering/pr-gate.md`](docs/engineering/pr-gate.md)
-- Social preview template: [`docs/assets/social-preview.svg`](docs/assets/social-preview.svg)
-- Social preview image: [`docs/assets/social-preview.png`](docs/assets/social-preview.png)
+- [Getting Started](docs/wiki/Getting-Started.md)
+- [Architecture](docs/wiki/Architecture.md)
+- [Dashboard](docs/wiki/Dashboard.md)
+- [CLI and Agent Pointers](docs/wiki/CLI-and-Agent-Pointers.md)
+- [Security and Privacy](docs/wiki/Security-and-Privacy.md)
+- [Self-Hosting](docs/wiki/Self-Hosting.md)
+- [PR Gate](docs/engineering/pr-gate.md)
+- [Social Preview](docs/open-source/social-preview.md)
+
+## Contributing
+
+Suka is intended to become a serious open-source infrastructure project. Contributions should keep the protocol tight, preserve privacy defaults, and include tests for changed behavior.
+
+Before opening a PR:
+
+```bash
+npm run ci:verify
+```
+
+Useful contribution areas:
+
+- agent integrations
+- MCP tooling
+- conflict detection rules
+- dashboard interaction design
+- self-hosted deployment hardening
+- documentation and examples
+
+## Brand Assets
+
+Repository social preview:
+
+- Source: [docs/assets/social-preview.svg](docs/assets/social-preview.svg)
+- PNG: [docs/assets/social-preview.png](docs/assets/social-preview.png)
+
+Dashboard screenshot:
+
+- [docs/assets/dashboard-canvas.png](docs/assets/dashboard-canvas.png)
 
 ## License
 
-This project is pre-release. License selection is pending.
+License selection is pending while the project is pre-release.
