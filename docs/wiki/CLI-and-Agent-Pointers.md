@@ -76,7 +76,7 @@ node packages/cli/dist/bin.js presence \
   --task "Review dashboard state"
 ```
 
-The same context flags work on `claim`, `event`, `decision`, and `conflicts`.
+The same context flags work on `presence`, `claim`, `event`, `decision`, and `conflicts`.
 
 ## Agent Wrapper Examples
 
