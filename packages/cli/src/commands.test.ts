@@ -465,6 +465,76 @@ test("session status requires complete session context", async () => {
   assert.match(errors.join(""), /session status requires workspace, repo, and session context/);
 });
 
+test("session end cleans only the scoped session", async () => {
+  const requests: Array<{ init?: RequestInit; url: string }> = [];
+  const output: string[] = [];
+  const result = await runCli({
+    argv: [
+      "session",
+      "end",
+      "--server",
+      "http://suka.test",
+      "--workspace",
+      "workspace-demo",
+      "--repo-id",
+      "repo-demo",
+      "--session",
+      "session-live"
+    ],
+    env: {},
+    fetch: async (url, init) => {
+      const request: { init?: RequestInit; url: string } = { url: String(url) };
+      if (init !== undefined) {
+        request.init = init;
+      }
+      requests.push(request);
+      return jsonResponse(200, {
+        removed: {
+          claims: 1,
+          decisions: 0,
+          events: 2,
+          presence: 1
+        }
+      });
+    },
+    io: {
+      stdout: { write: (value: string) => output.push(value) },
+      stderr: { write: () => undefined }
+    }
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(requests[0]?.url, "http://suka.test/api/cleanup");
+  assert.equal(requests[0]?.init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    repo_id: "repo-demo",
+    session_id: "session-live",
+    workspace_id: "workspace-demo"
+  });
+  assert.match(output.join(""), /"presence": 1/);
+});
+
+test("session end requires complete session context", async () => {
+  const requests: unknown[] = [];
+  const errors: string[] = [];
+  const result = await runCli({
+    argv: ["session", "end", "--server", "http://suka.test", "--workspace", "workspace-demo"],
+    env: {},
+    fetch: async (url, init) => {
+      requests.push({ init, url });
+      return jsonResponse(200, {});
+    },
+    io: {
+      stdout: { write: () => undefined },
+      stderr: { write: (value: string) => errors.push(value) }
+    }
+  });
+
+  assert.equal(result.exitCode, 1);
+  assert.equal(requests.length, 0);
+  assert.match(errors.join(""), /session end requires workspace, repo, and session context/);
+});
+
 test("claim publishes a claim pointer", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const result = await runCli({
