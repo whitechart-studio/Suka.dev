@@ -16,6 +16,44 @@ test("GET /api/state returns the current state", async () => {
   }
 });
 
+test("GET /api/team returns the current team summary", async () => {
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  try {
+    const createResponse = await postJson(`${running.url}/api/pointers`, {
+      type: "presence",
+      id: "ptr_presence_team",
+      workspace_id: "workspace-a",
+      repo_id: "repo-a",
+      session_id: "session-a",
+      agent_id: "codex-trent-01",
+      tool: "codex",
+      repo: "whitechart-studio/Suka.dev",
+      status: "editing",
+      current_files: ["packages/server/src/http.ts"],
+      last_seen: "2026-06-12T10:00:00.000Z",
+      expires_at: "2099-06-12T11:00:00.000Z"
+    });
+    const response = await fetch(`${running.url}/api/team`);
+    const body = await response.json() as {
+      data: {
+        active_agents: number;
+        mode: string;
+        workspaces: Array<{ workspace_id: string; repo_ids: string[]; session_ids: string[] }>;
+      };
+    };
+
+    assert.equal(createResponse.status, 201);
+    assert.equal(response.status, 200);
+    assert.equal(body.data.mode, "scoped");
+    assert.equal(body.data.active_agents, 1);
+    assert.equal(body.data.workspaces[0]?.workspace_id, "workspace-a");
+    assert.deepEqual(body.data.workspaces[0]?.repo_ids, ["repo-a"]);
+    assert.deepEqual(body.data.workspaces[0]?.session_ids, ["session-a"]);
+  } finally {
+    await running.close();
+  }
+});
+
 test("GET /api/repo-map returns repository domains", async () => {
   const running = await listen({ port: 0 }, createSukaHttpServer());
   try {
@@ -85,6 +123,7 @@ test("POST /api/pointers broadcasts pointer updates over WebSocket", async () =>
     const bootstrap = await nextJsonMessage(socket) as { type: string };
     assert.equal(bootstrap.type, "state.bootstrap");
 
+    const messagesPromise = nextJsonMessages(socket, 2);
     const createResponse = await postJson(`${running.url}/api/pointers`, {
       type: "claim",
       id: "ptr_claim_01",
@@ -97,12 +136,16 @@ test("POST /api/pointers broadcasts pointer updates over WebSocket", async () =>
       created_at: "2026-06-12T10:00:00.000Z",
       expires_at: "2099-06-12T11:00:00.000Z"
     });
-    const message = await nextJsonMessage(socket) as { data: { id: string; type: string }; type: string };
+    const [message, teamMessage] = await messagesPromise as [
+      { data: { id: string; type: string }; type: string },
+      { data: { active_agents: number }; type: string }
+    ];
 
     assert.equal(createResponse.status, 201);
     assert.equal(message.type, "pointer.published");
     assert.equal(message.data.type, "claim");
     assert.equal(message.data.id, "ptr_claim_01");
+    assert.equal(teamMessage.type, "team.updated");
   } finally {
     socket.close();
     await running.close();
@@ -116,6 +159,7 @@ test("POST /api/expire broadcasts expired state over WebSocket", async () => {
     const bootstrap = await nextJsonMessage(socket) as { type: string };
     assert.equal(bootstrap.type, "state.bootstrap");
 
+    const createMessagesPromise = nextJsonMessages(socket, 2);
     const createResponse = await postJson(`${running.url}/api/pointers`, {
       type: "claim",
       id: "ptr_claim_01",
@@ -128,18 +172,24 @@ test("POST /api/expire broadcasts expired state over WebSocket", async () => {
       created_at: "2026-06-12T10:00:00.000Z",
       expires_at: "2026-06-12T10:01:00.000Z"
     });
-    const pointerMessage = await nextJsonMessage(socket) as { type: string };
+    const [pointerMessage, createTeamMessage] = await createMessagesPromise as [{ type: string }, { type: string }];
     assert.equal(createResponse.status, 201);
     assert.equal(pointerMessage.type, "pointer.published");
+    assert.equal(createTeamMessage.type, "team.updated");
 
+    const expireMessagesPromise = nextJsonMessages(socket, 2);
     const expireResponse = await postJson(`${running.url}/api/expire`, {
       now: "2026-06-12T10:02:00.000Z"
     });
-    const message = await nextJsonMessage(socket) as { data: { claims: unknown[] }; type: string };
+    const [message, expireTeamMessage] = await expireMessagesPromise as [
+      { data: { claims: unknown[] }; type: string },
+      { type: string }
+    ];
 
     assert.equal(expireResponse.status, 200);
     assert.equal(message.type, "state.expired");
     assert.deepEqual(message.data.claims, []);
+    assert.equal(expireTeamMessage.type, "team.updated");
   } finally {
     socket.close();
     await running.close();
@@ -153,6 +203,7 @@ test("DELETE /api/claims/:id broadcasts claim release over WebSocket", async () 
     const bootstrap = await nextJsonMessage(socket) as { type: string };
     assert.equal(bootstrap.type, "state.bootstrap");
 
+    const createMessagesPromise = nextJsonMessages(socket, 2);
     const createResponse = await postJson(`${running.url}/api/pointers`, {
       type: "claim",
       id: "ptr_claim_01",
@@ -165,18 +216,24 @@ test("DELETE /api/claims/:id broadcasts claim release over WebSocket", async () 
       created_at: "2026-06-12T10:00:00.000Z",
       expires_at: "2099-06-12T11:00:00.000Z"
     });
-    const pointerMessage = await nextJsonMessage(socket) as { type: string };
+    const [pointerMessage, createTeamMessage] = await createMessagesPromise as [{ type: string }, { type: string }];
     assert.equal(createResponse.status, 201);
     assert.equal(pointerMessage.type, "pointer.published");
+    assert.equal(createTeamMessage.type, "team.updated");
 
+    const releaseMessagesPromise = nextJsonMessages(socket, 2);
     const releaseResponse = await fetch(`${running.url}/api/claims/ptr_claim_01`, {
       method: "DELETE"
     });
-    const message = await nextJsonMessage(socket) as { data: { id: string }; type: string };
+    const [message, releaseTeamMessage] = await releaseMessagesPromise as [
+      { data: { id: string }; type: string },
+      { type: string }
+    ];
 
     assert.equal(releaseResponse.status, 200);
     assert.equal(message.type, "claim.released");
     assert.deepEqual(message.data, { id: "ptr_claim_01" });
+    assert.equal(releaseTeamMessage.type, "team.updated");
   } finally {
     socket.close();
     await running.close();
@@ -190,6 +247,7 @@ test("POST /api/cleanup removes scoped state and broadcasts cleaned state", asyn
     const bootstrap = await nextJsonMessage(socket) as { type: string };
     assert.equal(bootstrap.type, "state.bootstrap");
 
+    const createMessagesPromise = nextJsonMessages(socket, 2);
     await postJson(`${running.url}/api/pointers`, {
       type: "claim",
       id: "ptr_claim_session_a",
@@ -205,9 +263,11 @@ test("POST /api/cleanup removes scoped state and broadcasts cleaned state", asyn
       created_at: "2026-06-12T10:00:00.000Z",
       expires_at: "2099-06-12T11:00:00.000Z"
     });
-    const pointerMessage = await nextJsonMessage(socket) as { type: string };
+    const [pointerMessage, createTeamMessage] = await createMessagesPromise as [{ type: string }, { type: string }];
     assert.equal(pointerMessage.type, "pointer.published");
+    assert.equal(createTeamMessage.type, "team.updated");
 
+    const secondCreateMessagesPromise = nextJsonMessages(socket, 2);
     await postJson(`${running.url}/api/pointers`, {
       type: "claim",
       id: "ptr_claim_session_b",
@@ -223,22 +283,28 @@ test("POST /api/cleanup removes scoped state and broadcasts cleaned state", asyn
       created_at: "2026-06-12T10:00:00.000Z",
       expires_at: "2099-06-12T11:00:00.000Z"
     });
-    const secondPointerMessage = await nextJsonMessage(socket) as { type: string };
+    const [secondPointerMessage, secondTeamMessage] = await secondCreateMessagesPromise as [{ type: string }, { type: string }];
     assert.equal(secondPointerMessage.type, "pointer.published");
+    assert.equal(secondTeamMessage.type, "team.updated");
 
+    const cleanupMessagesPromise = nextJsonMessages(socket, 2);
     const response = await postJson(`${running.url}/api/cleanup`, {
       workspace_id: "workspace-a",
       repo_id: "repo-a",
       session_id: "session-a"
     });
     const body = await response.json() as { data: { removed: { claims: number }; state: { claims: Array<{ id: string }> } } };
-    const message = await nextJsonMessage(socket) as { data: { claims: Array<{ id: string }> }; type: string };
+    const [message, cleanupTeamMessage] = await cleanupMessagesPromise as [
+      { data: { claims: Array<{ id: string }> }; type: string },
+      { type: string }
+    ];
 
     assert.equal(response.status, 200);
     assert.equal(body.data.removed.claims, 1);
     assert.deepEqual(body.data.state.claims.map((claim) => claim.id), ["ptr_claim_session_b"]);
     assert.equal(message.type, "state.cleaned");
     assert.deepEqual(message.data.claims.map((claim) => claim.id), ["ptr_claim_session_b"]);
+    assert.equal(cleanupTeamMessage.type, "team.updated");
   } finally {
     socket.close();
     await running.close();
@@ -585,6 +651,43 @@ async function nextJsonMessage(socket: WebSocket): Promise<unknown> {
     const timer = setTimeout(onTimeout, 2000);
 
     socket.once("message", onMessage);
+    socket.once("error", onError);
+  });
+}
+
+async function nextJsonMessages(socket: WebSocket, count: number): Promise<unknown[]> {
+  return await new Promise((resolve, reject) => {
+    const messages: unknown[] = [];
+    const cleanup = () => {
+      clearTimeout(timer);
+      socket.off("message", onMessage);
+      socket.off("error", onError);
+    };
+    const onTimeout = () => {
+      cleanup();
+      reject(new Error("Timed out waiting for WebSocket messages."));
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    const onMessage = (data: WebSocket.RawData) => {
+      try {
+        messages.push(JSON.parse(data.toString()) as unknown);
+      } catch (error) {
+        cleanup();
+        reject(error);
+        return;
+      }
+
+      if (messages.length === count) {
+        cleanup();
+        resolve(messages);
+      }
+    };
+    const timer = setTimeout(onTimeout, 2000);
+
+    socket.on("message", onMessage);
     socket.once("error", onError);
   });
 }

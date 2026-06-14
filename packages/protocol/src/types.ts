@@ -153,3 +153,32 @@ export interface SukaConfig {
   privacy: SukaPrivacyConfig;
   platform: SukaPlatformConfig;
 }
+
+export interface TeamMemberSummary extends CoordinationContext {
+  agent_id: AgentId;
+  user_id?: string;
+  tool: string;
+  status: PresenceStatus;
+  branch?: string;
+  task?: string;
+  current_files: string[];
+  last_seen: IsoTimestamp;
+}
+
+export interface TeamWorkspaceSummary {
+  workspace_id: string;
+  repo_ids: string[];
+  session_ids: string[];
+  active_agents: number;
+  claims: number;
+  events: number;
+  decisions: number;
+}
+
+export interface TeamConnectionSummary {
+  mode: "local" | "scoped";
+  active_agents: number;
+  workspaces: TeamWorkspaceSummary[];
+  members: TeamMemberSummary[];
+  generated_at: IsoTimestamp;
+}
