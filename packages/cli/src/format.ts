@@ -32,12 +32,12 @@ Usage:
   suka init [--repo NAME] [--server URL] [--data-file .suka/state.json]
   suka serve [--host 127.0.0.1] [--port 4366]
   suka status [--server http://127.0.0.1:4366] [--json]
-  suka claim <path> [--agent AGENT] [--reason TEXT] [--ttl 45] [--server URL]
-  suka presence [--agent AGENT] [--tool TOOL] [--repo REPO] [--status editing] [--task TEXT] [--file PATH] [--ttl 120] [--watch] [--interval 15] [--server URL]
-  suka event <type> <summary> [--agent AGENT] [--path PATH] [--api API] [--server URL]
-  suka decision <title> --body TEXT [--path PATH] [--api API] [--table TABLE] [--env NAME] [--domain DOMAIN] [--evidence REF] [--status accepted] [--confidence high] [--agent AGENT]
+  suka claim <path> [--agent AGENT] [--reason TEXT] [--ttl 45] [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
+  suka presence [--agent AGENT] [--tool TOOL] [--repo REPO] [--workspace ID] [--repo-id ID] [--session ID] [--status editing] [--task TEXT] [--file PATH] [--ttl 120] [--watch] [--interval 15] [--server URL]
+  suka event <type> <summary> [--agent AGENT] [--workspace ID] [--repo-id ID] [--session ID] [--path PATH] [--api API] [--server URL]
+  suka decision <title> --body TEXT [--workspace ID] [--repo-id ID] [--session ID] [--path PATH] [--api API] [--table TABLE] [--env NAME] [--domain DOMAIN] [--evidence REF] [--status accepted] [--confidence high] [--agent AGENT]
   suka decisions [--server URL]
-  suka conflicts [--path PATH] [--api API] [--table TABLE] [--env NAME] [--domain DOMAIN] [--server URL]
+  suka conflicts [--workspace ID] [--repo-id ID] [--session ID] [--path PATH] [--api API] [--table TABLE] [--env NAME] [--domain DOMAIN] [--server URL]
   suka release <claim-id> [--server URL]
   suka cleanup [--workspace ID] [--repo ID] [--session ID] [--server URL]
 
@@ -46,5 +46,8 @@ Environment:
   SUKA_DATA_FILE   Server persistence file
   SUKA_AGENT_ID    Default agent identity
   SUKA_AGENT_TOOL  Default agent tool name
+  SUKA_WORKSPACE_ID Default workspace context
+  SUKA_REPO_ID      Default repo context
+  SUKA_SESSION_ID   Default session context
 `;
 }

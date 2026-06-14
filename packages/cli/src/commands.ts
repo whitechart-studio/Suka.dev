@@ -1,6 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { FileSukaStore, createSukaHttpServer, createSukaService, listen } from "@suka/server";
-import { hasAnyScope, type DecisionConfidence, type DecisionStatus, type EventType, type PresenceStatus } from "@suka/protocol";
+import {
+  hasAnyScope,
+  type CoordinationContext,
+  type DecisionConfidence,
+  type DecisionStatus,
+  type EventType,
+  type PresenceStatus
+} from "@suka/protocol";
 import { initProject, loadConfig, resolveProjectPath } from "./config.js";
 import { createPointerId } from "./ids.js";
 import { SukaApiClient } from "./client.js";
@@ -74,7 +81,8 @@ export async function runCli(context: CliContext): Promise<CliResult> {
         const pointer = {
           type: "claim",
           id: createPointerId("claim", now),
-          agent_id: readStringFlag(parsed.flags, "agent") ?? defaultAgentId(),
+          ...coordinationContext(parsed.flags, config, context.env),
+          agent_id: readStringFlag(parsed.flags, "agent") ?? defaultAgentId(context.env),
           scope: {
             paths: [path]
           },
@@ -101,13 +109,14 @@ export async function runCli(context: CliContext): Promise<CliResult> {
         const pointer = {
           type: "event",
           id: createPointerId("event", now),
+          ...coordinationContext(parsed.flags, config, context.env),
           event_type: eventType as EventType,
           summary,
           affected_paths: readCsvFlag(parsed.flags, "path"),
           affected_apis: readCsvFlag(parsed.flags, "api"),
           affected_tables: readCsvFlag(parsed.flags, "table"),
           affected_env: readCsvFlag(parsed.flags, "env"),
-          agent_id: readStringFlag(parsed.flags, "agent") ?? defaultAgentId(),
+          agent_id: readStringFlag(parsed.flags, "agent") ?? defaultAgentId(context.env),
           created_at: now.toISOString()
         };
         const result = await client.publishPointer(pointer);
@@ -116,7 +125,7 @@ export async function runCli(context: CliContext): Promise<CliResult> {
       }
 
       case "decision":
-        return await decisionCommand(context, client, parsed.args, parsed.flags, now);
+        return await decisionCommand(context, client, parsed.args, parsed.flags, config, now);
 
       case "decisions": {
         const result = await client.listDecisions();
@@ -126,7 +135,8 @@ export async function runCli(context: CliContext): Promise<CliResult> {
 
       case "conflicts": {
         const result = await client.checkConflicts({
-          agent_id: readStringFlag(parsed.flags, "agent") ?? defaultAgentId(),
+          ...coordinationContext(parsed.flags, config, context.env),
+          agent_id: readStringFlag(parsed.flags, "agent") ?? defaultAgentId(context.env),
           paths: readCsvFlag(parsed.flags, "path"),
           apis: readCsvFlag(parsed.flags, "api"),
           tables: readCsvFlag(parsed.flags, "table"),
@@ -179,6 +189,7 @@ async function decisionCommand(
   client: SukaApiClient,
   args: string[],
   flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>,
   now: Date
 ): Promise<CliResult> {
   const title = args.join(" ").trim();
@@ -210,6 +221,7 @@ async function decisionCommand(
   const decision = {
     type: "decision",
     id: createPointerId("decision", now),
+    ...coordinationContext(flags, config, context.env),
     title,
     body,
     scope,
@@ -310,6 +322,7 @@ function buildPresencePointer(options: {
   return {
     type: "presence",
     id: createPointerId("presence", options.now),
+    ...coordinationContext(options.flags, options.config, options.env),
     agent_id: readStringFlag(options.flags, "agent") ?? defaultAgentId(options.env),
     tool: readStringFlag(options.flags, "tool") ?? detectAgentTool(options.env),
     repo: readStringFlag(options.flags, "repo") ?? options.config?.repo ?? detectGitRepoName(),
@@ -320,6 +333,22 @@ function buildPresencePointer(options: {
     last_seen: options.now.toISOString(),
     expires_at: new Date(options.now.getTime() + ttlSeconds * 1000).toISOString()
   };
+}
+
+function coordinationContext(
+  flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>,
+  env: NodeJS.ProcessEnv
+): CoordinationContext {
+  const context: CoordinationContext = {};
+  const workspaceId = readStringFlag(flags, "workspace") ?? env.SUKA_WORKSPACE_ID ?? config?.platform.workspace_id;
+  const repoId = readStringFlag(flags, "repo-id") ?? env.SUKA_REPO_ID ?? config?.platform.repo_id;
+  const sessionId = readStringFlag(flags, "session") ?? env.SUKA_SESSION_ID;
+
+  if (workspaceId !== undefined) context.workspace_id = workspaceId;
+  if (repoId !== undefined) context.repo_id = repoId;
+  if (sessionId !== undefined) context.session_id = sessionId;
+  return context;
 }
 
 function detectAgentTool(env: NodeJS.ProcessEnv): string {
