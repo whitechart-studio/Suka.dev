@@ -142,6 +142,95 @@ test("presence uses environment defaults for agent identity and tool", async () 
   assert.equal(body.tool, "cursor");
 });
 
+test("presence includes workspace context from config and session environment", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-cli-context-"));
+  const originalCwd = process.cwd();
+  const requests: Array<{ init?: RequestInit }> = [];
+  try {
+    process.chdir(tempDir);
+    await runCli({
+      argv: ["init", "--repo", "whitechart-studio/Suka.dev", "--server", "http://suka.test"],
+      env: {},
+      fetch: fakeFetch({}),
+      io: silentIo()
+    });
+
+    const result = await runCli({
+      argv: ["presence", "--server", "http://suka.test", "--agent", "codex-01", "--repo", "Suka.dev"],
+      env: {
+        SUKA_SESSION_ID: "session-live"
+      },
+      now: new Date("2026-06-12T10:00:00.000Z"),
+      fetch: async (_url, init) => {
+        const request: { init?: RequestInit } = {};
+        if (init !== undefined) {
+          request.init = init;
+        }
+        requests.push(request);
+        return jsonResponse(201, JSON.parse(String(init?.body)) as unknown);
+      },
+      io: silentIo()
+    });
+
+    assert.equal(result.exitCode, 0);
+    const body = JSON.parse(String(requests[0]?.init?.body)) as {
+      repo_id: string;
+      session_id: string;
+      workspace_id: string;
+    };
+    assert.equal(body.workspace_id, "local-whitechart-studio-suka-dev");
+    assert.equal(body.repo_id, "whitechart-studio-suka-dev");
+    assert.equal(body.session_id, "session-live");
+  } finally {
+    process.chdir(originalCwd);
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
+test("presence context flags override config and environment defaults", async () => {
+  const requests: Array<{ init?: RequestInit }> = [];
+  const result = await runCli({
+    argv: [
+      "presence",
+      "--server",
+      "http://suka.test",
+      "--repo",
+      "suka",
+      "--workspace",
+      "workspace-flag",
+      "--repo-id",
+      "repo-flag",
+      "--session",
+      "session-flag"
+    ],
+    env: {
+      SUKA_WORKSPACE_ID: "workspace-env",
+      SUKA_REPO_ID: "repo-env",
+      SUKA_SESSION_ID: "session-env"
+    },
+    now: new Date("2026-06-12T10:00:00.000Z"),
+    fetch: async (_url, init) => {
+      const request: { init?: RequestInit } = {};
+      if (init !== undefined) {
+        request.init = init;
+      }
+      requests.push(request);
+      return jsonResponse(201, JSON.parse(String(init?.body)) as unknown);
+    },
+    io: silentIo()
+  });
+
+  assert.equal(result.exitCode, 0);
+  const body = JSON.parse(String(requests[0]?.init?.body)) as {
+    repo_id: string;
+    session_id: string;
+    workspace_id: string;
+  };
+  assert.equal(body.workspace_id, "workspace-flag");
+  assert.equal(body.repo_id, "repo-flag");
+  assert.equal(body.session_id, "session-flag");
+});
+
 test("presence watch stops cleanly when aborted", async () => {
   const controller = new AbortController();
   const requests: Array<{ init?: RequestInit }> = [];
@@ -324,6 +413,49 @@ test("decisions lists shared decision memory", async () => {
 
   assert.equal(result.exitCode, 0);
   assert.match(output.join(""), /ptr_decision_01/);
+});
+
+test("conflicts includes workspace context from environment", async () => {
+  const requests: Array<{ init?: RequestInit; url: string }> = [];
+  const result = await runCli({
+    argv: [
+      "conflicts",
+      "--server",
+      "http://suka.test",
+      "--agent",
+      "codex-01",
+      "--path",
+      "packages/server/src/http.ts"
+    ],
+    env: {
+      SUKA_WORKSPACE_ID: "workspace-a",
+      SUKA_REPO_ID: "repo-a",
+      SUKA_SESSION_ID: "session-a"
+    },
+    fetch: async (url, init) => {
+      const request: { init?: RequestInit; url: string } = { url: String(url) };
+      if (init !== undefined) {
+        request.init = init;
+      }
+      requests.push(request);
+      return jsonResponse(200, []);
+    },
+    io: silentIo()
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(requests[0]?.url, "http://suka.test/api/conflicts/check");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    agent_id: "codex-01",
+    apis: [],
+    domains: [],
+    env: [],
+    paths: ["packages/server/src/http.ts"],
+    repo_id: "repo-a",
+    session_id: "session-a",
+    tables: [],
+    workspace_id: "workspace-a"
+  });
 });
 
 test("cleanup posts scoped cleanup context", async () => {

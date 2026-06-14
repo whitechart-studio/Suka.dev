@@ -47,6 +47,37 @@ Stop a heartbeat publisher with `Ctrl+C` or `SIGTERM`; the CLI exits cleanly aft
 
 If `--repo`, `--branch`, or `--file` are omitted, the CLI attempts to detect them from the local Git repository. Repeated `--file` flags and comma-separated file lists are both supported.
 
+## Team Context
+
+Pointers can be scoped to a workspace, repo, and session so multiple agents land
+in the same Team panel.
+
+By default, the CLI reads `workspace_id` and `repo_id` from `.suka/config.json`.
+Use environment variables or flags when an agent wrapper needs explicit context:
+
+```bash
+SUKA_WORKSPACE_ID=workspace-demo \
+SUKA_REPO_ID=suka-dev \
+SUKA_SESSION_ID=session-live \
+node packages/cli/dist/bin.js presence \
+  --agent codex-local \
+  --tool codex \
+  --status editing \
+  --task "Build team presence"
+```
+
+Command flags override environment and config defaults:
+
+```bash
+node packages/cli/dist/bin.js presence \
+  --workspace workspace-demo \
+  --repo-id suka-dev \
+  --session session-live \
+  --task "Review dashboard state"
+```
+
+The same context flags work on `claim`, `event`, `decision`, and `conflicts`.
+
 ## Agent Wrapper Examples
 
 Codex:
@@ -54,6 +85,7 @@ Codex:
 ```bash
 SUKA_AGENT_ID="codex-${USER:-local}" \
 SUKA_AGENT_TOOL=codex \
+SUKA_SESSION_ID=session-live \
 node packages/cli/dist/bin.js presence \
   --status editing \
   --task "Work on Suka" \
