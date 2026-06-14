@@ -11,7 +11,17 @@ import {
 import { findConfigPath, initProject, loadConfig, resolveProjectPath } from "./config.js";
 import { createPointerId } from "./ids.js";
 import { SukaApiClient } from "./client.js";
-import { formatDoctor, formatJson, formatState, formatTeam, helpText, type DoctorCheck, type DoctorReport } from "./format.js";
+import {
+  formatDoctor,
+  formatJson,
+  formatSessionStart,
+  formatState,
+  formatTeam,
+  helpText,
+  type DoctorCheck,
+  type DoctorReport,
+  type SessionStartReport
+} from "./format.js";
 import { parseArgv, readCsvFlag, readNumberFlag, readStringFlag } from "./parse.js";
 import type { CliContext, CliResult } from "./types.js";
 
@@ -45,6 +55,9 @@ export async function runCli(context: CliContext): Promise<CliResult> {
 
       case "doctor":
         return await doctorCommand(context, client, parsed.flags, config, serverUrl);
+
+      case "session":
+        return await sessionCommand(context, client, parsed.args, parsed.flags, config, serverUrl, now);
 
       case "init": {
         const initOptions: Parameters<typeof initProject>[0] = {
@@ -243,6 +256,56 @@ async function decisionCommand(
   };
   const result = await client.createDecision(decision);
   context.io.stdout.write(formatJson(result));
+  return { exitCode: 0 };
+}
+
+async function sessionCommand(
+  context: CliContext,
+  client: SukaApiClient,
+  args: string[],
+  flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>,
+  serverUrl: string,
+  now: Date
+): Promise<CliResult> {
+  const action = args[0];
+  if (action !== "start") {
+    throw new Error("session requires a supported action: start.");
+  }
+
+  const checks: DoctorCheck[] = [];
+  await addApiCheck(checks, "state endpoint", async () => {
+    await client.getState();
+  });
+  await addApiCheck(checks, "team endpoint", async () => {
+    await client.getTeam();
+  });
+  const failed = checks.find((check) => check.status === "fail");
+  if (failed !== undefined) {
+    throw new Error(`Cannot start Suka session: ${failed.name} ${failed.message}.`);
+  }
+
+  const repo = readStringFlag(flags, "repo") ?? config?.repo ?? detectGitRepoName();
+  const repoId = readStringFlag(flags, "repo-id") ?? context.env.SUKA_REPO_ID ?? config?.platform.repo_id ?? slugId(repo);
+  const workspaceId = readStringFlag(flags, "workspace") ?? context.env.SUKA_WORKSPACE_ID ?? config?.platform.workspace_id ?? `local-${repoId}`;
+  const sessionId = readStringFlag(flags, "session") ?? context.env.SUKA_SESSION_ID ?? createSessionId(now);
+  const agentId = readStringFlag(flags, "agent") ?? defaultAgentId(context.env);
+  const tool = readStringFlag(flags, "tool") ?? detectAgentTool(context.env);
+  const report: SessionStartReport = {
+    agent_id: agentId,
+    env: {
+      SUKA_AGENT_ID: agentId,
+      SUKA_AGENT_TOOL: tool,
+      SUKA_REPO_ID: repoId,
+      SUKA_SERVER_URL: serverUrl,
+      SUKA_SESSION_ID: sessionId,
+      SUKA_WORKSPACE_ID: workspaceId
+    },
+    repo,
+    server_url: serverUrl
+  };
+
+  context.io.stdout.write(flags.json === true ? formatJson(report) : formatSessionStart(report));
   return { exitCode: 0 };
 }
 
@@ -457,6 +520,19 @@ function detectChangedFiles(): string[] {
     .map((line) => line.slice(3).trim())
     .filter((line) => line.length > 0 && !line.includes(" -> "))
     .slice(0, 20);
+}
+
+function createSessionId(now: Date): string {
+  const compact = now.toISOString().replace(/\D/g, "").slice(0, 14);
+  return `session-${compact}`;
+}
+
+function slugId(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "workspace";
 }
 
 function gitOutput(args: string[]): string | undefined {

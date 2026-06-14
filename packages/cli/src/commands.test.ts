@@ -159,6 +159,107 @@ test("doctor exits nonzero when APIs are unreachable", async () => {
   }
 });
 
+test("session start prints shared agent environment", async () => {
+  const output: string[] = [];
+  const requests: string[] = [];
+  const result = await runCli({
+    argv: [
+      "session",
+      "start",
+      "--server",
+      "http://suka.test",
+      "--repo",
+      "whitechart-studio/Suka.dev",
+      "--agent",
+      "codex-local",
+      "--tool",
+      "codex"
+    ],
+    env: {},
+    now: new Date("2026-06-14T10:20:30.000Z"),
+    fetch: async (url, init) => {
+      requests.push(String(url));
+      assert.equal(init?.method, "GET");
+      return jsonResponse(200, {});
+    },
+    io: {
+      stdout: { write: (value: string) => output.push(value) },
+      stderr: { write: () => undefined }
+    }
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(requests, ["http://suka.test/api/state", "http://suka.test/api/team"]);
+  assert.match(output.join(""), /Suka session/);
+  assert.match(output.join(""), /export SUKA_SERVER_URL='http:\/\/suka.test'/);
+  assert.match(output.join(""), /export SUKA_WORKSPACE_ID='local-whitechart-studio-suka-dev'/);
+  assert.match(output.join(""), /export SUKA_REPO_ID='whitechart-studio-suka-dev'/);
+  assert.match(output.join(""), /export SUKA_SESSION_ID='session-20260614102030'/);
+  assert.match(output.join(""), /export SUKA_AGENT_ID='codex-local'/);
+  assert.match(output.join(""), /export SUKA_AGENT_TOOL='codex'/);
+});
+
+test("session start supports explicit context and json output", async () => {
+  const output: string[] = [];
+  const result = await runCli({
+    argv: [
+      "session",
+      "start",
+      "--server",
+      "http://suka.test",
+      "--repo",
+      "suka",
+      "--workspace",
+      "workspace-demo",
+      "--repo-id",
+      "repo-demo",
+      "--session",
+      "session-live",
+      "--json"
+    ],
+    env: {
+      SUKA_AGENT_ID: "claude-local",
+      SUKA_AGENT_TOOL: "claude-code"
+    },
+    fetch: fakeFetch({}),
+    io: {
+      stdout: { write: (value: string) => output.push(value) },
+      stderr: { write: () => undefined }
+    }
+  });
+
+  assert.equal(result.exitCode, 0);
+  const body = JSON.parse(output.join("")) as {
+    env: Record<string, string>;
+  };
+  assert.equal(body.env.SUKA_WORKSPACE_ID, "workspace-demo");
+  assert.equal(body.env.SUKA_REPO_ID, "repo-demo");
+  assert.equal(body.env.SUKA_SESSION_ID, "session-live");
+  assert.equal(body.env.SUKA_AGENT_ID, "claude-local");
+  assert.equal(body.env.SUKA_AGENT_TOOL, "claude-code");
+});
+
+test("session start fails when server health checks fail", async () => {
+  const output: string[] = [];
+  const errors: string[] = [];
+  const result = await runCli({
+    argv: ["session", "start", "--server", "http://suka.test", "--repo", "suka"],
+    env: {},
+    fetch: async () => {
+      throw new Error("connection refused");
+    },
+    io: {
+      stdout: { write: (value: string) => output.push(value) },
+      stderr: { write: (value: string) => errors.push(value) }
+    }
+  });
+
+  assert.equal(result.exitCode, 1);
+  assert.deepEqual(output, []);
+  assert.match(errors.join(""), /Cannot start Suka session/);
+  assert.match(errors.join(""), /connection refused/);
+});
+
 test("claim publishes a claim pointer", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const result = await runCli({
