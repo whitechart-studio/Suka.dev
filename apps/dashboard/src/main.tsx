@@ -60,12 +60,18 @@ type SukaState = {
 };
 
 type PresencePointer = {
+  id?: string;
   agent_id: string;
+  user_id?: string;
   tool: string;
   status: string;
   branch?: string;
   task?: string;
   current_files?: string[];
+  last_seen?: string;
+  repo_id?: string;
+  session_id?: string;
+  workspace_id?: string;
 };
 
 type ClaimPointer = {
@@ -150,6 +156,24 @@ type TeamConnection = {
   inviteToken: string;
 };
 
+type TeamConnectionSummary = {
+  mode: "local" | "scoped";
+  active_agents: number;
+  generated_at: string;
+  members: PresencePointer[];
+  workspaces: TeamWorkspaceSummary[];
+};
+
+type TeamWorkspaceSummary = {
+  workspace_id: string;
+  repo_ids: string[];
+  session_ids: string[];
+  active_agents: number;
+  claims: number;
+  events: number;
+  decisions: number;
+};
+
 const emptyState: SukaState = {
   claims: [],
   decisions: [],
@@ -188,6 +212,14 @@ const defaultTeamConnection: TeamConnection = {
   workspaceName: "Local workspace"
 };
 
+const emptyTeamSummary: TeamConnectionSummary = {
+  active_agents: 0,
+  generated_at: "",
+  members: [],
+  mode: "local",
+  workspaces: []
+};
+
 type SelectedDetails =
   | { kind: "agent"; agent: PresencePointer }
   | { kind: "domain"; domain: DomainModel }
@@ -205,6 +237,7 @@ function Dashboard(): React.ReactElement {
   const [dismissedInsightIds, setDismissedInsightIds] = useState<Set<string>>(() => new Set());
   const [teamPanelOpen, setTeamPanelOpen] = useState(false);
   const [teamConnection, setTeamConnection] = useState<TeamConnection>(() => readStoredTeamConnection());
+  const [teamSummary, setTeamSummary] = useState<TeamConnectionSummary>(emptyTeamSummary);
   const viewportRestored = useRef(false);
   const { fitView, setViewport, zoomIn, zoomOut } = useReactFlow();
 
@@ -236,6 +269,17 @@ function Dashboard(): React.ReactElement {
     }
   }, []);
 
+  const loadTeamSummary = useCallback(async () => {
+    try {
+      const response = await fetch("/api/team", { cache: "no-store" });
+      if (!response.ok) return;
+      const payload = await response.json() as { data: TeamConnectionSummary };
+      setTeamSummary(payload.data);
+    } catch {
+      setTeamSummary((current) => current);
+    }
+  }, []);
+
   useEffect(() => {
     void loadState();
     const timer = window.setInterval(() => void loadState(), 5000);
@@ -247,6 +291,12 @@ function Dashboard(): React.ReactElement {
     const timer = window.setInterval(() => void loadRepoMap(), 30000);
     return () => window.clearInterval(timer);
   }, [loadRepoMap]);
+
+  useEffect(() => {
+    void loadTeamSummary();
+    const timer = window.setInterval(() => void loadTeamSummary(), 5000);
+    return () => window.clearInterval(timer);
+  }, [loadTeamSummary]);
 
   const domainCatalog = repoMap.domains.length > 0 ? repoMap.domains : fallbackDomains;
   const model = useMemo(() => buildDomainModel(state, domainCatalog), [domainCatalog, state]);
@@ -271,15 +321,17 @@ function Dashboard(): React.ReactElement {
         claims: current.claims.filter((claim) => claim.id !== claimId)
       }));
       void loadState();
+      void loadTeamSummary();
     } catch {
       setStatus("error");
     } finally {
       setReleasingClaimId("");
     }
-  }, [loadState]);
+  }, [loadState, loadTeamSummary]);
 
   const createClaim = useCallback(async (input: { agent_id: string; reason: string; scope: Scope }) => {
     const now = new Date();
+    const activeWorkspace = teamSummary.workspaces[0];
     const pointer = {
       agent_id: input.agent_id,
       created_at: now.toISOString(),
@@ -287,8 +339,11 @@ function Dashboard(): React.ReactElement {
       id: `claim-${now.getTime()}-${slug(input.agent_id)}`,
       kind: "soft_claim",
       reason: input.reason,
+      repo_id: activeWorkspace?.repo_ids[0],
       scope: input.scope,
-      type: "claim"
+      session_id: activeWorkspace?.session_ids[0],
+      type: "claim",
+      workspace_id: activeWorkspace?.workspace_id === "local" ? undefined : activeWorkspace?.workspace_id
     };
     try {
       const response = await fetch("/api/pointers", {
@@ -305,10 +360,11 @@ function Dashboard(): React.ReactElement {
         claims: [...current.claims.filter((claim) => claim.id !== payload.data.id), payload.data]
       }));
       void loadState();
+      void loadTeamSummary();
     } catch {
       setStatus("error");
     }
-  }, [loadState]);
+  }, [loadState, loadTeamSummary, teamSummary.workspaces]);
 
   const acknowledgeInsight = useCallback((insightId: string) => {
     setDismissedInsightIds((current) => new Set(current).add(insightId));
@@ -372,8 +428,8 @@ function Dashboard(): React.ReactElement {
         </div>
         <div className="top-actions">
           <Badge tone="info" icon={<HardDrive size={13} />}>local workspace</Badge>
-          <Badge tone={teamConnection.mode === "team" ? "live" : "neutral"} icon={<Users size={13} />}>
-            {teamConnection.mode === "team" ? "team connected" : "local only"}
+          <Badge tone={teamSummary.active_agents > 0 ? "live" : "neutral"} icon={<Users size={13} />}>
+            {teamSummary.active_agents > 0 ? `${teamSummary.active_agents} active` : "local only"}
           </Badge>
           <Badge tone={status === "connected" ? "live" : status === "error" ? "fail" : "neutral"} icon={<Wifi size={13} />}>{status}</Badge>
           <button type="button" onClick={toggleTeamPanel}>
@@ -395,6 +451,7 @@ function Dashboard(): React.ReactElement {
             connection={teamConnection}
             repoName={repoMap.root ?? "workspace"}
             serverStatus={status}
+            summary={teamSummary}
             onClose={() => setTeamPanelOpen(false)}
             onUpdate={setTeamConnection}
           />
@@ -532,7 +589,8 @@ function TeamConnectionPanel({
   onClose,
   onUpdate,
   repoName,
-  serverStatus
+  serverStatus,
+  summary
 }: {
   agents: PresencePointer[];
   connection: TeamConnection;
@@ -540,16 +598,18 @@ function TeamConnectionPanel({
   onUpdate(value: TeamConnection): void;
   repoName: string;
   serverStatus: string;
+  summary: TeamConnectionSummary;
 }): React.ReactElement {
   const connected = connection.mode === "team";
   const inviteToken = connection.inviteToken;
   const inviteLink = `suka://join/${inviteToken}`;
-  const teammates = agents.length > 0 ? agents : [{
+  const teammates = summary.members.length > 0 ? summary.members : agents.length > 0 ? agents : [{
     agent_id: "local-agent",
     current_files: [],
     status: "offline",
     tool: "terminal"
   }];
+  const primaryWorkspace = summary.workspaces[0];
 
   return (
     <section className="team-panel" aria-label="Team connection">
@@ -604,7 +664,22 @@ function TeamConnectionPanel({
       </div>
       <div className="team-health">
         <span><i className={`dot ${serverStatus === "connected" ? "blue" : "amber"}`} /> {serverStatus}</span>
-        <span>{agents.length} live agents</span>
+        <span>{summary.active_agents} live agents</span>
+        <span>{summary.workspaces.length || 1} workspace</span>
+      </div>
+      <div className="workspace-strip">
+        <div>
+          <span>workspace</span>
+          <strong>{primaryWorkspace?.workspace_id ?? "local"}</strong>
+        </div>
+        <div>
+          <span>repos</span>
+          <strong>{primaryWorkspace?.repo_ids.length ?? 0}</strong>
+        </div>
+        <div>
+          <span>sessions</span>
+          <strong>{primaryWorkspace?.session_ids.length ?? 0}</strong>
+        </div>
       </div>
       <div className="teammate-list">
         {teammates.slice(0, 4).map((agent) => {

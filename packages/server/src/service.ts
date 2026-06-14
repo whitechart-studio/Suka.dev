@@ -11,9 +11,11 @@ import {
 } from "@suka/protocol";
 import { MemorySukaStore, type SukaStore } from "./memory-store.js";
 import type { SukaState } from "./state.js";
+import { buildTeamSummary } from "./team.js";
 
 export interface SukaService {
   getState(): SukaState;
+  getTeamSummary(): ReturnType<typeof buildTeamSummary>;
   publish(pointer: unknown): ValidationResult<Pointer>;
   checkConflicts(subject: ConflictSubject): ConflictWarning[];
   releaseClaim(id: string): boolean;
@@ -25,6 +27,10 @@ export function createSukaService(store: SukaStore = new MemorySukaStore()): Suk
   return {
     getState() {
       return store.getState();
+    },
+
+    getTeamSummary() {
+      return buildTeamSummary(store.getState());
     },
 
     publish(pointer: unknown) {

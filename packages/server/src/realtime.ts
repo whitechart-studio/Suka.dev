@@ -3,11 +3,16 @@ import { WebSocketServer, type WebSocket } from "ws";
 import type { Pointer } from "@suka/protocol";
 import type { SukaService } from "./service.js";
 import type { SukaState } from "./state.js";
+import type { buildTeamSummary } from "./team.js";
 
 export type RealtimeMessage =
   | {
       data: SukaState;
       type: "state.bootstrap";
+    }
+  | {
+      data: ReturnType<typeof buildTeamSummary>;
+      type: "team.updated";
     }
   | {
       data: Pointer;

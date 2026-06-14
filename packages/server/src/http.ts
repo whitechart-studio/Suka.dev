@@ -142,6 +142,14 @@ async function routeRequest(
     return;
   }
 
+  if (method === "GET" && url.pathname === "/api/team") {
+    service.expire();
+    writeJson(response, 200, {
+      data: service.getTeamSummary()
+    });
+    return;
+  }
+
   if (method === "GET" && url.pathname === "/api/repo-map") {
     writeJson(response, 200, {
       data: await buildRepoMap()
@@ -188,6 +196,10 @@ async function routeRequest(
       data: result.value,
       type: "pointer.published"
     });
+    realtime.broadcast({
+      data: service.getTeamSummary(),
+      type: "team.updated"
+    });
     return;
   }
 
@@ -212,6 +224,10 @@ async function routeRequest(
       data: result.value,
       type: "pointer.published"
     });
+    realtime.broadcast({
+      data: service.getTeamSummary(),
+      type: "team.updated"
+    });
     return;
   }
 
@@ -235,6 +251,10 @@ async function routeRequest(
       data: state,
       type: "state.expired"
     });
+    realtime.broadcast({
+      data: service.getTeamSummary(),
+      type: "team.updated"
+    });
     return;
   }
 
@@ -247,6 +267,10 @@ async function routeRequest(
     realtime.broadcast({
       data: result.state,
       type: "state.cleaned"
+    });
+    realtime.broadcast({
+      data: service.getTeamSummary(),
+      type: "team.updated"
     });
     return;
   }
@@ -274,6 +298,10 @@ async function routeRequest(
         id: decodeURIComponent(claimMatch[1])
       },
       type: "claim.released"
+    });
+    realtime.broadcast({
+      data: service.getTeamSummary(),
+      type: "team.updated"
     });
     return;
   }
