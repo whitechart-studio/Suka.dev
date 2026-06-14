@@ -1,11 +1,12 @@
-import type { ClaimPointer, DecisionPointer, EventPointer, PresencePointer } from "@suka/protocol";
-import { createEmptyState, type SukaState } from "./state.js";
+import type { ClaimPointer, CoordinationContext, DecisionPointer, EventPointer, PresencePointer } from "@suka/protocol";
+import { createEmptyState, type SukaCleanupResult, type SukaState } from "./state.js";
 
 export interface SukaStore {
   getState(): SukaState;
   upsertPresence(pointer: PresencePointer): void;
   upsertClaim(pointer: ClaimPointer): void;
   releaseClaim(id: string): boolean;
+  cleanup(context: CoordinationContext): SukaCleanupResult;
   appendEvent(pointer: EventPointer): void;
   upsertDecision(pointer: DecisionPointer): void;
   expire(now: Date): void;
@@ -46,6 +47,26 @@ export class MemorySukaStore implements SukaStore {
     return this.#state.claims.length !== initialLength;
   }
 
+  cleanup(context: CoordinationContext): SukaCleanupResult {
+    const before = this.getState();
+    this.#state.presence = this.#state.presence.filter((presence) => !matchesContext(presence, context));
+    this.#state.claims = this.#state.claims.filter((claim) => !matchesContext(claim, context));
+    this.#state.events = this.#state.events.filter((event) => !matchesContext(event, context));
+    this.#state.decisions = this.#state.decisions.filter((decision) => !matchesContext(decision, context));
+    const after = this.getState();
+
+    return {
+      context,
+      removed: {
+        presence: before.presence.length - after.presence.length,
+        claims: before.claims.length - after.claims.length,
+        events: before.events.length - after.events.length,
+        decisions: before.decisions.length - after.decisions.length
+      },
+      state: after
+    };
+  }
+
   appendEvent(pointer: EventPointer): void {
     this.#state.events = [...this.#state.events, pointer];
   }
@@ -70,4 +91,12 @@ function upsertById<T extends { id: string }>(items: T[], item: T): T[] {
   const next = [...items];
   next[index] = item;
   return next;
+}
+
+function matchesContext(item: CoordinationContext, context: CoordinationContext): boolean {
+  const keys = ["workspace_id", "repo_id", "session_id"] as const;
+  return keys.some((key) => context[key] !== undefined) && keys.every((key) => {
+    const expected = context[key];
+    return expected === undefined || item[key] === expected;
+  });
 }

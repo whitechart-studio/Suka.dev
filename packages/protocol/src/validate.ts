@@ -63,6 +63,7 @@ export function validatePresencePointer(value: unknown): ValidationResult<Presen
   }
 
   requireString(value, "id", issues);
+  optionalContext(value, issues);
   requireLiteral(value, "type", "presence", issues);
   requireString(value, "agent_id", issues);
   optionalString(value, "user_id", issues);
@@ -85,6 +86,7 @@ export function validateClaimPointer(value: unknown): ValidationResult<ClaimPoin
   }
 
   requireString(value, "id", issues);
+  optionalContext(value, issues);
   requireLiteral(value, "type", "claim", issues);
   requireString(value, "agent_id", issues);
   requireScope(value, "scope", issues);
@@ -103,6 +105,7 @@ export function validateEventPointer(value: unknown): ValidationResult<EventPoin
   }
 
   requireString(value, "id", issues);
+  optionalContext(value, issues);
   requireLiteral(value, "type", "event", issues);
   requireEnum(value, "event_type", EVENT_TYPES, issues);
   requireString(value, "summary", issues);
@@ -123,6 +126,7 @@ export function validateDecisionPointer(value: unknown): ValidationResult<Decisi
   }
 
   requireString(value, "id", issues);
+  optionalContext(value, issues);
   requireLiteral(value, "type", "decision", issues);
   requireString(value, "title", issues);
   requireString(value, "body", issues);
@@ -182,6 +186,12 @@ export function hasAnyScope(scope: PointerScope): boolean {
   );
 }
 
+function optionalContext(record: Record<string, unknown>, issues: MutableIssueList): void {
+  optionalNonEmptyString(record, "workspace_id", issues);
+  optionalNonEmptyString(record, "repo_id", issues);
+  optionalNonEmptyString(record, "session_id", issues);
+}
+
 function requireString(record: Record<string, unknown>, key: string, issues: MutableIssueList): void {
   if (typeof record[key] !== "string" || record[key].length === 0) {
     issues.push({
@@ -198,6 +208,16 @@ function optionalString(record: Record<string, unknown>, key: string, issues: Mu
       code: "invalid_type",
       path: key,
       message: `${key} must be a string when provided.`
+    });
+  }
+}
+
+function optionalNonEmptyString(record: Record<string, unknown>, key: string, issues: MutableIssueList): void {
+  if (record[key] !== undefined && (typeof record[key] !== "string" || record[key].length === 0)) {
+    issues.push({
+      code: "invalid_type",
+      path: key,
+      message: `${key} must be a non-empty string when provided.`
     });
   }
 }

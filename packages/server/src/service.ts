@@ -5,6 +5,7 @@ import {
   type EventPointer,
   type Pointer,
   type PresencePointer,
+  type CoordinationContext,
   type ValidationResult,
   validatePointer
 } from "@suka/protocol";
@@ -16,6 +17,7 @@ export interface SukaService {
   publish(pointer: unknown): ValidationResult<Pointer>;
   checkConflicts(subject: ConflictSubject): ConflictWarning[];
   releaseClaim(id: string): boolean;
+  cleanup(context: CoordinationContext): ReturnType<SukaStore["cleanup"]>;
   expire(now?: Date): void;
 }
 
@@ -49,6 +51,10 @@ export function createSukaService(store: SukaStore = new MemorySukaStore()): Suk
       return store.releaseClaim(id);
     },
 
+    cleanup(context: CoordinationContext) {
+      return store.cleanup(context);
+    },
+
     expire(now = new Date()) {
       store.expire(now);
     }
@@ -71,4 +77,3 @@ function persistPointer(store: SukaStore, pointer: Pointer): void {
       return;
   }
 }
-

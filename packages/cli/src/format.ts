@@ -39,6 +39,7 @@ Usage:
   suka decisions [--server URL]
   suka conflicts [--path PATH] [--api API] [--table TABLE] [--env NAME] [--domain DOMAIN] [--server URL]
   suka release <claim-id> [--server URL]
+  suka cleanup [--workspace ID] [--repo ID] [--session ID] [--server URL]
 
 Environment:
   SUKA_SERVER_URL  Default server URL

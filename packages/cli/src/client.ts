@@ -45,6 +45,10 @@ export class SukaApiClient {
     return this.#request("DELETE", `/api/claims/${encodeURIComponent(id)}`);
   }
 
+  async cleanup(context: unknown): Promise<unknown> {
+    return this.#request("POST", "/api/cleanup", context);
+  }
+
   async #request(method: string, path: string, body?: unknown): Promise<unknown> {
     const init: RequestInit = {
       method

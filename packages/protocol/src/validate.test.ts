@@ -21,6 +21,49 @@ test("accepts a valid presence pointer", () => {
   assert.equal(result.ok, true);
 });
 
+test("accepts optional coordination context on pointers", () => {
+  const result = validatePointer({
+    type: "claim",
+    id: "ptr_context_01",
+    workspace_id: "workspace-a",
+    repo_id: "repo-a",
+    session_id: "session-a",
+    agent_id: "codex-trent-01",
+    scope: {
+      apis: ["POST /api/payments"]
+    },
+    reason: "Working on isolated payment API changes",
+    kind: "soft_claim",
+    created_at: "2026-06-12T10:00:00.000Z",
+    expires_at: "2026-06-12T10:45:00.000Z"
+  });
+
+  assert.equal(result.ok, true);
+});
+
+test("rejects invalid coordination context field types", () => {
+  const result = validatePointer({
+    type: "claim",
+    id: "ptr_context_invalid",
+    workspace_id: 123,
+    repo_id: "",
+    agent_id: "codex-trent-01",
+    scope: {
+      apis: ["POST /api/payments"]
+    },
+    reason: "Working on isolated payment API changes",
+    kind: "soft_claim",
+    created_at: "2026-06-12T10:00:00.000Z",
+    expires_at: "2026-06-12T10:45:00.000Z"
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(result.issues.some((issue) => issue.path === "workspace_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "repo_id" && issue.code === "invalid_type"));
+  }
+});
+
 test("rejects claims without scope", () => {
   const result = validatePointer({
     type: "claim",
@@ -61,4 +104,3 @@ test("requires evidence for accepted decisions", () => {
     assert.equal(result.issues.at(-1)?.path, "evidence");
   }
 });
-

@@ -20,6 +20,10 @@ export type RealtimeMessage =
   | {
       data: SukaState;
       type: "state.expired";
+    }
+  | {
+      data: SukaState;
+      type: "state.cleaned";
     };
 
 export interface RealtimeHubOptions {

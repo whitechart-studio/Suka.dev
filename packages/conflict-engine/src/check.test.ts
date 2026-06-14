@@ -51,3 +51,113 @@ test("detects API overlap as high severity", () => {
   assert.equal(warnings[0]?.reason, "api_overlap");
 });
 
+test("filters claims by workspace and session context when provided", () => {
+  const matchingClaim: ClaimPointer = {
+    ...claim,
+    id: "ptr_claim_matching",
+    workspace_id: "workspace-a",
+    repo_id: "repo-a",
+    session_id: "session-a"
+  };
+  const unrelatedClaim: ClaimPointer = {
+    ...claim,
+    id: "ptr_claim_unrelated",
+    workspace_id: "workspace-a",
+    repo_id: "repo-a",
+    session_id: "session-b"
+  };
+  const legacyClaim: ClaimPointer = {
+    ...claim,
+    id: "ptr_claim_legacy"
+  };
+
+  const warnings = checkConflicts({
+    subject: {
+      workspace_id: "workspace-a",
+      repo_id: "repo-a",
+      session_id: "session-a",
+      agent_id: "cursor-maya-01",
+      apis: ["POST /api/payments"]
+    },
+    active_claims: [matchingClaim, unrelatedClaim, legacyClaim]
+  });
+
+  assert.equal(warnings.length, 1);
+  assert.deepEqual(warnings[0]?.pointers, ["ptr_claim_matching"]);
+});
+
+test("filters claims by partial coordination context when provided", () => {
+  const matchingClaim: ClaimPointer = {
+    ...claim,
+    id: "ptr_claim_workspace_match",
+    workspace_id: "workspace-a",
+    repo_id: "repo-a",
+    session_id: "session-a"
+  };
+  const matchingOtherSessionClaim: ClaimPointer = {
+    ...claim,
+    id: "ptr_claim_workspace_match_other_session",
+    workspace_id: "workspace-a",
+    repo_id: "repo-a",
+    session_id: "session-b"
+  };
+  const unrelatedWorkspaceClaim: ClaimPointer = {
+    ...claim,
+    id: "ptr_claim_workspace_unrelated",
+    workspace_id: "workspace-b",
+    repo_id: "repo-a",
+    session_id: "session-a"
+  };
+
+  const workspaceWarnings = checkConflicts({
+    subject: {
+      workspace_id: "workspace-a",
+      agent_id: "cursor-maya-01",
+      apis: ["POST /api/payments"]
+    },
+    active_claims: [matchingClaim, matchingOtherSessionClaim, unrelatedWorkspaceClaim]
+  });
+
+  assert.equal(workspaceWarnings.length, 2);
+  assert.deepEqual(workspaceWarnings.map((warning) => warning.pointers[0]), [
+    "ptr_claim_workspace_match",
+    "ptr_claim_workspace_match_other_session"
+  ]);
+
+  const repoWarnings = checkConflicts({
+    subject: {
+      workspace_id: "workspace-a",
+      repo_id: "repo-a",
+      agent_id: "cursor-maya-01",
+      apis: ["POST /api/payments"]
+    },
+    active_claims: [matchingClaim, matchingOtherSessionClaim, unrelatedWorkspaceClaim]
+  });
+
+  assert.equal(repoWarnings.length, 2);
+  assert.deepEqual(repoWarnings.map((warning) => warning.pointers[0]), [
+    "ptr_claim_workspace_match",
+    "ptr_claim_workspace_match_other_session"
+  ]);
+});
+
+test("keeps legacy unscoped conflict checks global", () => {
+  const scopedClaim: ClaimPointer = {
+    ...claim,
+    id: "ptr_claim_scoped",
+    workspace_id: "workspace-a",
+    repo_id: "repo-a",
+    session_id: "session-a"
+  };
+
+  const warnings = checkConflicts({
+    subject: {
+      agent_id: "cursor-maya-01",
+      apis: ["POST /api/payments"]
+    },
+    active_claims: [scopedClaim]
+  });
+
+  assert.equal(warnings.length, 1);
+  assert.deepEqual(warnings[0]?.pointers, ["ptr_claim_scoped"]);
+});

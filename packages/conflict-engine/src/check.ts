@@ -11,11 +11,21 @@ import type {
 export function checkConflicts(input: ConflictCheckInput): ConflictWarning[] {
   const warnings: ConflictWarning[] = [];
 
-  for (const claim of input.active_claims) {
+  for (const claim of input.active_claims.filter((claim) => matchesContext(input.subject, claim))) {
     warnings.push(...checkClaim(input.subject, claim));
   }
 
   return warnings.sort(compareSeverity);
+}
+
+function matchesContext(subject: ConflictSubject, claim: ClaimPointer): boolean {
+  const contextKeys = ["workspace_id", "repo_id", "session_id"] as const;
+  const scopedKeys = contextKeys.filter((key) => subject[key] !== undefined);
+  if (scopedKeys.length === 0) {
+    return true;
+  }
+
+  return scopedKeys.every((key) => claim[key] === subject[key]);
 }
 
 function checkClaim(subject: ConflictSubject, claim: ClaimPointer): ConflictWarning[] {
@@ -125,4 +135,3 @@ function severityRank(severity: ConflictSeverity): number {
       return 1;
   }
 }
-

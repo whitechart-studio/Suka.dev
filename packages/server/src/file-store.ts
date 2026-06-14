@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { ClaimPointer, DecisionPointer, EventPointer, PresencePointer } from "@suka/protocol";
+import type { ClaimPointer, CoordinationContext, DecisionPointer, EventPointer, PresencePointer } from "@suka/protocol";
 import { MemorySukaStore, type SukaStore } from "./memory-store.js";
-import { createEmptyState, type SukaState } from "./state.js";
+import { createEmptyState, type SukaCleanupResult, type SukaState } from "./state.js";
 
 export class FileSukaStore implements SukaStore {
   readonly #path: string;
@@ -35,6 +35,14 @@ export class FileSukaStore implements SukaStore {
     return released;
   }
 
+  cleanup(context: CoordinationContext): SukaCleanupResult {
+    const result = this.#store.cleanup(context);
+    if (hasRemovedPointers(result)) {
+      this.#persist();
+    }
+    return result;
+  }
+
   appendEvent(pointer: EventPointer): void {
     this.#store.appendEvent(pointer);
     this.#persist();
@@ -63,6 +71,10 @@ export class FileSukaStore implements SukaStore {
   }
 }
 
+function hasRemovedPointers(result: SukaCleanupResult): boolean {
+  return result.removed.presence > 0 || result.removed.claims > 0 || result.removed.events > 0 || result.removed.decisions > 0;
+}
+
 function loadState(path: string): SukaState {
   if (!existsSync(path)) {
     return createEmptyState();
@@ -78,4 +90,3 @@ function loadState(path: string): SukaState {
     decisions: Array.isArray(parsed.decisions) ? parsed.decisions : []
   };
 }
-

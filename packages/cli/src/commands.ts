@@ -147,6 +147,24 @@ export async function runCli(context: CliContext): Promise<CliResult> {
         return { exitCode: 0 };
       }
 
+      case "cleanup": {
+        const cleanupContext = {
+          workspace_id: readStringFlag(parsed.flags, "workspace"),
+          repo_id: readStringFlag(parsed.flags, "repo"),
+          session_id: readStringFlag(parsed.flags, "session")
+        };
+        if (
+          cleanupContext.workspace_id === undefined &&
+          cleanupContext.repo_id === undefined &&
+          cleanupContext.session_id === undefined
+        ) {
+          throw new Error("cleanup requires at least one scope flag: --workspace, --repo, or --session.");
+        }
+        const result = await client.cleanup(cleanupContext);
+        context.io.stdout.write(formatJson(result));
+        return { exitCode: 0 };
+      }
+
       default:
         throw new Error(`Unknown command: ${parsed.command}`);
     }

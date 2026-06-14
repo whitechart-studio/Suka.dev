@@ -183,6 +183,68 @@ test("DELETE /api/claims/:id broadcasts claim release over WebSocket", async () 
   }
 });
 
+test("POST /api/cleanup removes scoped state and broadcasts cleaned state", async () => {
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  const socket = new WebSocket(`${running.url.replace("http://", "ws://")}/api/realtime`);
+  try {
+    const bootstrap = await nextJsonMessage(socket) as { type: string };
+    assert.equal(bootstrap.type, "state.bootstrap");
+
+    await postJson(`${running.url}/api/pointers`, {
+      type: "claim",
+      id: "ptr_claim_session_a",
+      workspace_id: "workspace-a",
+      repo_id: "repo-a",
+      session_id: "session-a",
+      agent_id: "codex-trent-01",
+      scope: {
+        paths: ["src/billing/**"]
+      },
+      reason: "Clean session A work",
+      kind: "soft_claim",
+      created_at: "2026-06-12T10:00:00.000Z",
+      expires_at: "2099-06-12T11:00:00.000Z"
+    });
+    const pointerMessage = await nextJsonMessage(socket) as { type: string };
+    assert.equal(pointerMessage.type, "pointer.published");
+
+    await postJson(`${running.url}/api/pointers`, {
+      type: "claim",
+      id: "ptr_claim_session_b",
+      workspace_id: "workspace-a",
+      repo_id: "repo-a",
+      session_id: "session-b",
+      agent_id: "codex-trent-02",
+      scope: {
+        paths: ["src/billing/**"]
+      },
+      reason: "Keep session B work",
+      kind: "soft_claim",
+      created_at: "2026-06-12T10:00:00.000Z",
+      expires_at: "2099-06-12T11:00:00.000Z"
+    });
+    const secondPointerMessage = await nextJsonMessage(socket) as { type: string };
+    assert.equal(secondPointerMessage.type, "pointer.published");
+
+    const response = await postJson(`${running.url}/api/cleanup`, {
+      workspace_id: "workspace-a",
+      repo_id: "repo-a",
+      session_id: "session-a"
+    });
+    const body = await response.json() as { data: { removed: { claims: number }; state: { claims: Array<{ id: string }> } } };
+    const message = await nextJsonMessage(socket) as { data: { claims: Array<{ id: string }> }; type: string };
+
+    assert.equal(response.status, 200);
+    assert.equal(body.data.removed.claims, 1);
+    assert.deepEqual(body.data.state.claims.map((claim) => claim.id), ["ptr_claim_session_b"]);
+    assert.equal(message.type, "state.cleaned");
+    assert.deepEqual(message.data.claims.map((claim) => claim.id), ["ptr_claim_session_b"]);
+  } finally {
+    socket.close();
+    await running.close();
+  }
+});
+
 test("realtime origin validation allows local clients and rejects remote browser origins", () => {
   assert.equal(isAllowedRealtimeOrigin(undefined, "127.0.0.1:4366"), true);
   assert.equal(isAllowedRealtimeOrigin("http://127.0.0.1:4366", "127.0.0.1:4366"), true);
@@ -191,6 +253,20 @@ test("realtime origin validation allows local clients and rejects remote browser
   assert.equal(isAllowedRealtimeOrigin("http://192.168.1.20:4366", "192.168.1.10:4366"), false);
   assert.equal(isAllowedRealtimeOrigin("https://example.com", "127.0.0.1:4366"), false);
   assert.equal(isAllowedRealtimeOrigin("not a url", "127.0.0.1:4366"), false);
+});
+
+test("POST /api/cleanup rejects empty cleanup context", async () => {
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  try {
+    const response = await postJson(`${running.url}/api/cleanup`, {});
+    const body = await response.json() as { error: { code: string; message: string } };
+
+    assert.equal(response.status, 400);
+    assert.equal(body.error.code, "invalid_body");
+    assert.match(body.error.message, /requires at least one context field/);
+  } finally {
+    await running.close();
+  }
 });
 
 test("POST /api/pointers validates and stores pointers", async () => {
@@ -387,6 +463,58 @@ test("POST /api/conflicts/check returns claim conflicts", async () => {
 
     assert.equal(response.status, 200);
     assert.equal(body.data[0]?.reason, "path_overlap");
+  } finally {
+    await running.close();
+  }
+});
+
+test("POST /api/conflicts/check filters conflicts by coordination context", async () => {
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  try {
+    await postJson(`${running.url}/api/pointers`, {
+      type: "claim",
+      id: "ptr_claim_session_a",
+      workspace_id: "workspace-a",
+      repo_id: "repo-a",
+      session_id: "session-a",
+      agent_id: "codex-trent-01",
+      scope: {
+        apis: ["POST /api/payments"]
+      },
+      reason: "Implement session A payment flow",
+      kind: "soft_claim",
+      created_at: "2026-06-12T10:00:00.000Z",
+      expires_at: "2099-06-12T11:00:00.000Z"
+    });
+    await postJson(`${running.url}/api/pointers`, {
+      type: "claim",
+      id: "ptr_claim_session_b",
+      workspace_id: "workspace-a",
+      repo_id: "repo-a",
+      session_id: "session-b",
+      agent_id: "codex-trent-02",
+      scope: {
+        apis: ["POST /api/payments"]
+      },
+      reason: "Implement session B payment flow",
+      kind: "soft_claim",
+      created_at: "2026-06-12T10:00:00.000Z",
+      expires_at: "2099-06-12T11:00:00.000Z"
+    });
+
+    const response = await postJson(`${running.url}/api/conflicts/check`, {
+      workspace_id: "workspace-a",
+      repo_id: "repo-a",
+      session_id: "session-a",
+      agent_id: "cursor-maya-01",
+      apis: ["POST /api/payments"]
+    });
+    const body = await response.json() as { data: Array<{ pointers: string[]; reason: string }> };
+
+    assert.equal(response.status, 200);
+    assert.equal(body.data.length, 1);
+    assert.equal(body.data[0]?.reason, "api_overlap");
+    assert.deepEqual(body.data[0]?.pointers, ["ptr_claim_session_a"]);
   } finally {
     await running.close();
   }
