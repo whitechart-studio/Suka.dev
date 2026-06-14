@@ -104,6 +104,16 @@ node packages/cli/dist/bin.js session join \
   --task "Build session workflow"
 ```
 
+Inspect the active session:
+
+```bash
+node packages/cli/dist/bin.js session status \
+  --server http://127.0.0.1:4366 \
+  --workspace local-whitechart-studio-suka-dev \
+  --repo-id whitechart-studio-suka-dev \
+  --session session-20260614102030
+```
+
 ## CLI Examples
 
 Publish live presence:

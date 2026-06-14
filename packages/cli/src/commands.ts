@@ -15,12 +15,14 @@ import {
   formatDoctor,
   formatJson,
   formatSessionStart,
+  formatSessionStatus,
   formatState,
   formatTeam,
   helpText,
   type DoctorCheck,
   type DoctorReport,
-  type SessionStartReport
+  type SessionStartReport,
+  type SessionStatusReport
 } from "./format.js";
 import { parseArgv, readCsvFlag, readNumberFlag, readStringFlag } from "./parse.js";
 import type { CliContext, CliResult } from "./types.js";
@@ -281,7 +283,11 @@ async function sessionCommand(
     return await presenceCommand(context, client, flags, config, now);
   }
 
-  throw new Error("session requires a supported action: start or join.");
+  if (action === "status") {
+    return await sessionStatusCommand(context, client, flags, config);
+  }
+
+  throw new Error("session requires a supported action: start, join, or status.");
 }
 
 async function sessionStartCommand(
@@ -327,6 +333,37 @@ async function sessionStartCommand(
   context.io.stdout.write(flags.json === true ? formatJson(report) : formatSessionStart(report));
   return { exitCode: 0 };
 }
+
+async function sessionStatusCommand(
+  context: CliContext,
+  client: SukaApiClient,
+  flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>
+): Promise<CliResult> {
+  const sessionContext = coordinationContext(flags, config, context.env);
+  if (sessionContext.workspace_id === undefined || sessionContext.repo_id === undefined || sessionContext.session_id === undefined) {
+    throw new Error("session status requires workspace, repo, and session context.");
+  }
+
+  const team = await client.getTeam() as SessionTeamSummary;
+  const report: SessionStatusReport = {
+    members: (team.members ?? []).filter((member) =>
+      member.workspace_id === sessionContext.workspace_id &&
+      member.repo_id === sessionContext.repo_id &&
+      member.session_id === sessionContext.session_id
+    ),
+    repo_id: sessionContext.repo_id,
+    session_id: sessionContext.session_id,
+    workspace_id: sessionContext.workspace_id
+  };
+
+  context.io.stdout.write(flags.json === true ? formatJson(report) : formatSessionStatus(report));
+  return { exitCode: 0 };
+}
+
+type SessionTeamSummary = {
+  members?: SessionStatusReport["members"];
+};
 
 async function doctorCommand(
   context: CliContext,
