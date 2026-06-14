@@ -83,9 +83,7 @@ export function formatSessionStart(report: SessionStartReport): string {
   lines.push(`agent: ${report.agent_id}`);
   lines.push("");
 
-  for (const [key, value] of Object.entries(report.env)) {
-    lines.push(`export ${key}=${shellQuote(value)}`);
-  }
+  lines.push(...formatEnvExports(report.env));
 
   return `${lines.join("\n")}\n`;
 }
@@ -152,7 +150,7 @@ Usage:
   suka init [--repo NAME] [--server URL] [--data-file .suka/state.json]
   suka serve [--host 127.0.0.1] [--port 4366]
   suka doctor [--server http://127.0.0.1:4366] [--workspace ID] [--repo-id ID] [--session ID] [--json]
-  suka session start [--repo NAME] [--agent AGENT] [--tool TOOL] [--workspace ID] [--repo-id ID] [--session ID] [--server URL] [--json]
+  suka session start [--repo NAME] [--agent AGENT] [--tool TOOL] [--workspace ID] [--repo-id ID] [--session ID] [--server URL] [--env-file .suka/session.env] [--json]
   suka session join [--agent AGENT] [--tool TOOL] [--workspace ID] [--repo-id ID] [--session ID] [--status editing] [--task TEXT] [--file PATH] [--watch] [--server URL]
   suka session status [--workspace ID] [--repo-id ID] [--session ID] [--server URL] [--json]
   suka session end [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
@@ -180,4 +178,8 @@ Environment:
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+export function formatEnvExports(env: Record<string, string>): string[] {
+  return Object.entries(env).map(([key, value]) => `export ${key}=${shellQuote(value)}`);
 }

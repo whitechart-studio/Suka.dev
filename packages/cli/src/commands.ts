@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { FileSukaStore, createSukaHttpServer, createSukaService, listen } from "@suka/server";
 import {
   hasAnyScope,
@@ -13,6 +15,7 @@ import { createPointerId } from "./ids.js";
 import { SukaApiClient } from "./client.js";
 import {
   formatDoctor,
+  formatEnvExports,
   formatJson,
   formatSessionStart,
   formatSessionStatus,
@@ -334,8 +337,19 @@ async function sessionStartCommand(
     server_url: serverUrl
   };
 
+  const envFile = readStringFlag(flags, "env-file");
+  if (envFile !== undefined) {
+    writeSessionEnvFile(envFile, report.env);
+  }
+
   context.io.stdout.write(flags.json === true ? formatJson(report) : formatSessionStart(report));
   return { exitCode: 0 };
+}
+
+function writeSessionEnvFile(path: string, env: Record<string, string>): void {
+  const destination = resolve(process.cwd(), path);
+  mkdirSync(dirname(destination), { recursive: true });
+  writeFileSync(destination, `${formatEnvExports(env).join("\n")}\n`, "utf8");
 }
 
 async function sessionStatusCommand(

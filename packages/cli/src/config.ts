@@ -37,7 +37,7 @@ export function initProject(options: InitProjectOptions): InitProjectResult {
   mkdirSync(join(sukaDir, "decisions"), { recursive: true });
   mkdirSync(join(sukaDir, "schemas"), { recursive: true });
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
-  writeFileSync(join(sukaDir, ".gitignore"), "state.json\nstate.json.tmp\n", "utf8");
+  writeFileSync(join(sukaDir, ".gitignore"), "session.env\nstate.json\nstate.json.tmp\n", "utf8");
 
   return {
     config,

@@ -65,8 +65,11 @@ Start a shared session and export the generated context into each agent shell:
 node packages/cli/dist/bin.js session start \
   --server http://127.0.0.1:4366 \
   --repo whitechart-studio/Suka.dev \
-  --agent codex-local
+  --agent codex-local \
+  --env-file .suka/session.env
 ```
+
+The generated env file is local runtime state and should be sourced by each agent shell that joins the session.
 
 Join that session and publish the first presence update:
 

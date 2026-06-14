@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { runCli } from "./index.js";
@@ -237,6 +237,46 @@ test("session start supports explicit context and json output", async () => {
   assert.equal(body.env.SUKA_SESSION_ID, "session-live");
   assert.equal(body.env.SUKA_AGENT_ID, "claude-local");
   assert.equal(body.env.SUKA_AGENT_TOOL, "claude-code");
+});
+
+test("session start writes env exports to a file", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-cli-session-env-"));
+  const originalCwd = process.cwd();
+  try {
+    process.chdir(tempDir);
+    const result = await runCli({
+      argv: [
+        "session",
+        "start",
+        "--server",
+        "http://suka.test",
+        "--repo",
+        "whitechart-studio/Suka.dev",
+        "--agent",
+        "codex-local",
+        "--tool",
+        "codex",
+        "--env-file",
+        ".suka/session.env"
+      ],
+      env: {},
+      now: new Date("2026-06-14T10:20:30.000Z"),
+      fetch: fakeFetch({}),
+      io: silentIo()
+    });
+
+    assert.equal(result.exitCode, 0);
+    const envFile = readFileSync(join(tempDir, ".suka", "session.env"), "utf8");
+    assert.match(envFile, /export SUKA_SERVER_URL='http:\/\/suka.test'/);
+    assert.match(envFile, /export SUKA_WORKSPACE_ID='local-whitechart-studio-suka-dev'/);
+    assert.match(envFile, /export SUKA_REPO_ID='whitechart-studio-suka-dev'/);
+    assert.match(envFile, /export SUKA_SESSION_ID='session-20260614102030'/);
+    assert.match(envFile, /export SUKA_AGENT_ID='codex-local'/);
+    assert.match(envFile, /export SUKA_AGENT_TOOL='codex'/);
+  } finally {
+    process.chdir(originalCwd);
+    rmSync(tempDir, { force: true, recursive: true });
+  }
 });
 
 test("session start fails when server health checks fail", async () => {
