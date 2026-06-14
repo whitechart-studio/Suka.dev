@@ -18,6 +18,13 @@ export interface DoctorReport {
   server_url: string;
 }
 
+export interface SessionStartReport {
+  agent_id: string;
+  env: Record<string, string>;
+  repo: string;
+  server_url: string;
+}
+
 export function formatState(value: unknown): string {
   const state = value as SukaState;
   const lines: string[] = [];
@@ -55,6 +62,22 @@ export function formatDoctor(report: DoctorReport): string {
 
   for (const check of report.checks) {
     lines.push(`- ${check.status} ${check.name}: ${check.message}`);
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
+export function formatSessionStart(report: SessionStartReport): string {
+  const lines: string[] = [];
+
+  lines.push("Suka session");
+  lines.push(`server: ${report.server_url}`);
+  lines.push(`repo: ${report.repo}`);
+  lines.push(`agent: ${report.agent_id}`);
+  lines.push("");
+
+  for (const [key, value] of Object.entries(report.env)) {
+    lines.push(`export ${key}=${shellQuote(value)}`);
   }
 
   return `${lines.join("\n")}\n`;
@@ -102,6 +125,7 @@ Usage:
   suka init [--repo NAME] [--server URL] [--data-file .suka/state.json]
   suka serve [--host 127.0.0.1] [--port 4366]
   suka doctor [--server http://127.0.0.1:4366] [--workspace ID] [--repo-id ID] [--session ID] [--json]
+  suka session start [--repo NAME] [--agent AGENT] [--tool TOOL] [--workspace ID] [--repo-id ID] [--session ID] [--server URL] [--json]
   suka status [--server http://127.0.0.1:4366] [--json]
   suka team [--server http://127.0.0.1:4366] [--json]
   suka claim <path> [--agent AGENT] [--reason TEXT] [--ttl 45] [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
@@ -122,4 +146,8 @@ Environment:
   SUKA_REPO_ID      Default repo context
   SUKA_SESSION_ID   Default session context
 `;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }

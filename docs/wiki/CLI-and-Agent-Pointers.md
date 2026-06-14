@@ -59,6 +59,15 @@ node packages/cli/dist/bin.js doctor \
   --server http://127.0.0.1:4366
 ```
 
+Start a shared session and export the generated context into each agent shell:
+
+```bash
+node packages/cli/dist/bin.js session start \
+  --server http://127.0.0.1:4366 \
+  --repo whitechart-studio/Suka.dev \
+  --agent codex-local
+```
+
 By default, the CLI reads `workspace_id` and `repo_id` from `.suka/config.json`.
 Use environment variables or flags when an agent wrapper needs explicit context:
 
