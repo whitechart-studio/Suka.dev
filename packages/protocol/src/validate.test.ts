@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import type { TeamConnectionSummary } from "./index.js";
 import { validatePointer } from "./index.js";
 
 test("accepts a valid presence pointer", () => {
@@ -62,6 +63,37 @@ test("rejects invalid coordination context field types", () => {
     assert.ok(result.issues.some((issue) => issue.path === "workspace_id" && issue.code === "invalid_type"));
     assert.ok(result.issues.some((issue) => issue.path === "repo_id" && issue.code === "invalid_type"));
   }
+});
+
+test("documents the team connection summary contract", () => {
+  const summary = {
+    active_agents: 1,
+    generated_at: "2026-06-12T10:00:00.000Z",
+    members: [{
+      agent_id: "codex-trent-01",
+      current_files: ["packages/server/src/team.ts"],
+      last_seen: "2026-06-12T09:59:59.000Z",
+      repo_id: "repo-a",
+      session_id: "session-a",
+      status: "editing",
+      tool: "codex",
+      workspace_id: "workspace-a"
+    }],
+    mode: "scoped",
+    workspaces: [{
+      active_agents: 1,
+      claims: 2,
+      decisions: 1,
+      events: 3,
+      repo_ids: ["repo-a"],
+      session_ids: ["session-a"],
+      workspace_id: "workspace-a"
+    }]
+  } satisfies TeamConnectionSummary;
+
+  assert.equal(summary.mode, "scoped");
+  assert.equal(summary.workspaces[0]?.workspace_id, "workspace-a");
+  assert.equal(summary.members[0]?.agent_id, "codex-trent-01");
 });
 
 test("rejects claims without scope", () => {
