@@ -89,8 +89,11 @@ Start a shared agent session:
 node packages/cli/dist/bin.js session start \
   --server http://127.0.0.1:4366 \
   --repo whitechart-studio/Suka.dev \
-  --agent codex-local
+  --agent codex-local \
+  --env-file .suka/session.env
 ```
+
+The env file is local runtime state. Source it in each agent shell before running `session join`.
 
 Join the session from an agent:
 

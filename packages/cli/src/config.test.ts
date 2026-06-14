@@ -20,7 +20,7 @@ test("initializes repo-local Suka config", () => {
     assert.deepEqual(result.config.domains, []);
     assert.equal(findConfigPath(tempDir), result.configPath);
     assert.equal(loadConfig(tempDir)?.data_file, ".suka/state.json");
-    assert.equal(readFileSync(join(tempDir, ".suka", ".gitignore"), "utf8"), "state.json\nstate.json.tmp\n");
+    assert.equal(readFileSync(join(tempDir, ".suka", ".gitignore"), "utf8"), "session.env\nstate.json\nstate.json.tmp\n");
   } finally {
     rmSync(tempDir, { force: true, recursive: true });
   }
