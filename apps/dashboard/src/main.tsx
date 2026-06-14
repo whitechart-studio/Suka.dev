@@ -174,6 +174,15 @@ type TeamWorkspaceSummary = {
   decisions: number;
 };
 
+type SessionRoom = {
+  id: string;
+  workspace_id: string;
+  repo_id: string;
+  session_id: string;
+  members: PresencePointer[];
+  latestTask?: string;
+};
+
 const emptyState: SukaState = {
   claims: [],
   decisions: [],
@@ -610,6 +619,7 @@ function TeamConnectionPanel({
     tool: "terminal"
   }];
   const primaryWorkspace = summary.workspaces[0];
+  const sessionRooms = buildSessionRooms(summary.members.length > 0 ? summary.members : agents);
 
   return (
     <section className="team-panel" aria-label="Team connection">
@@ -681,6 +691,24 @@ function TeamConnectionPanel({
           <strong>{primaryWorkspace?.session_ids.length ?? 0}</strong>
         </div>
       </div>
+      <div className="session-room-list">
+        <div className="session-room-head">
+          <h3><RadioTower size={13} /> Session Rooms</h3>
+          <span>{sessionRooms.length} active</span>
+        </div>
+        {sessionRooms.length === 0 ? (
+          <p className="empty">No scoped sessions yet.</p>
+        ) : sessionRooms.slice(0, 5).map((room) => (
+          <div className="session-room" key={room.id}>
+            <div className="session-room-title">
+              <strong>{room.session_id}</strong>
+              <Badge tone="info" icon={<Users size={12} />}>{room.members.length}</Badge>
+            </div>
+            <p>{room.workspace_id} / {room.repo_id}</p>
+            {room.latestTask !== undefined ? <span>{room.latestTask}</span> : null}
+          </div>
+        ))}
+      </div>
       <div className="teammate-list">
         {teammates.slice(0, 4).map((agent) => {
           const identity = agentIdentity(agent);
@@ -708,6 +736,34 @@ function TeamConnectionPanel({
       </div>
     </section>
   );
+}
+
+function buildSessionRooms(members: PresencePointer[]): SessionRoom[] {
+  const rooms = new Map<string, SessionRoom>();
+
+  for (const member of members) {
+    const workspaceId = member.workspace_id ?? "local";
+    const repoId = member.repo_id ?? "local-repo";
+    const sessionId = member.session_id ?? "local-session";
+    const id = `${workspaceId}:${repoId}:${sessionId}`;
+    const room = rooms.get(id) ?? {
+      id,
+      members: [],
+      repo_id: repoId,
+      session_id: sessionId,
+      workspace_id: workspaceId
+    };
+    room.members.push(member);
+    if (member.task !== undefined && member.task.length > 0) {
+      room.latestTask = member.task;
+    }
+    rooms.set(id, room);
+  }
+
+  return [...rooms.values()].sort((left, right) => {
+    if (right.members.length !== left.members.length) return right.members.length - left.members.length;
+    return left.session_id.localeCompare(right.session_id);
+  });
 }
 
 function DomainNode({ data }: any): React.ReactElement {
