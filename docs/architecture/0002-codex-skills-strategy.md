@@ -2,32 +2,32 @@
 
 ## Status
 
-Accepted
+Superseded by the repository hygiene decision to keep agent skills local and out
+of version control.
 
 ## Context
 
-Suka needs repeatable engineering behavior across architecture, backend, dashboard, hosted platform, and quality review work. Codex skills are the right mechanism because they package task-specific instructions, references, and optional resources for repeated workflows.
+Suka needs repeatable engineering behavior across architecture, backend, dashboard, hosted platform, and quality review work. Codex skills can package task-specific instructions, references, and optional resources for repeated workflows.
 
-OpenAI's Codex Skills documentation says repo-scoped skills are discovered from `.agents/skills` and that Codex uses progressive disclosure: it starts with skill metadata and loads full instructions only when a skill is selected.
+The earlier repository strategy considered checking Codex skill files into the
+repo, but that would couple the public codebase to one tool's local discovery
+format.
 
 ## Decision
 
-Store Suka project skills in:
+Do not track `.agent/` or `.agents/` content in the Suka repository. Treat agent
+skills, prompts, and tool-specific working memory as local developer
+configuration.
 
-```text
-.agents/skills/
-```
+Keep durable project guidance in repository-owned documentation instead:
 
-Maintain these skills:
-
-- `suka-architecture`
-- `suka-backend`
-- `suka-dashboard`
-- `suka-hosted-platform`
-- `suka-quality-review`
-
-Each skill must keep trigger descriptions concise and front-loaded. Long details must move into `references/` so Codex can load them only when needed.
+- `docs/architecture/` for accepted design decisions.
+- `docs/wiki/` for contributor and operator guidance.
+- `README.md` for the public product entrypoint.
 
 ## Consequences
 
-Future Codex sessions launched inside the repository can discover and use Suka-specific skills automatically. The project now has a practical way to preserve engineering discipline across many AI-assisted coding sessions.
+Agent-specific skills can still exist on a contributor's machine, but they are not
+part of the open source codebase. Project standards now live in normal docs so
+every contributor can review them without depending on one AI tool's local skill
+format.
