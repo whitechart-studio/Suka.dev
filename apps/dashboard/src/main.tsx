@@ -412,6 +412,12 @@ function Dashboard(): React.ReactElement {
   }, [selectedNodeId]);
 
   useEffect(() => {
+    if (activeSessionId.length === 0) return;
+    if (sessionRooms.some((room) => room.id === activeSessionId)) return;
+    setActiveSessionId("");
+  }, [activeSessionId, sessionRooms]);
+
+  useEffect(() => {
     writeStoredString("activeSessionId", activeSessionId);
   }, [activeSessionId]);
 
@@ -721,6 +727,7 @@ function TeamConnectionPanel({
           <p className="empty">No scoped sessions yet.</p>
         ) : sessionRooms.slice(0, 5).map((room) => (
           <button
+            aria-pressed={room.id === activeSessionId}
             className={room.id === activeSessionId ? "session-room active" : "session-room"}
             key={room.id}
             type="button"
