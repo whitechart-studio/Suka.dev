@@ -495,6 +495,8 @@ code {
 .team-panel-head p,
 .team-health,
 .workspace-strip span,
+.session-room p,
+.session-room-head span,
 .teammate-row p,
 .team-field span,
 .invite-box span {
@@ -588,6 +590,40 @@ code {
 .teammate-list {
   display: grid;
   gap: 5px;
+}
+
+.session-room-list {
+  display: grid;
+  gap: 6px;
+}
+
+.session-room-head,
+.session-room-title {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.session-room {
+  background: #fff;
+  border: 1px solid #e5ebf2;
+  border-left: 3px solid var(--blue);
+  border-radius: 6px;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 7px;
+}
+
+.session-room strong,
+.session-room span {
+  overflow-wrap: anywhere;
+}
+
+.session-room > span {
+  color: var(--ink);
+  font-size: 11px;
 }
 
 .teammate-row {
