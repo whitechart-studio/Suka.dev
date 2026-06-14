@@ -606,14 +606,28 @@ code {
 }
 
 .session-room {
+  align-items: stretch;
   background: #fff;
   border: 1px solid #e5ebf2;
   border-left: 3px solid var(--blue);
   border-radius: 6px;
+  color: var(--ink);
   display: grid;
   gap: 3px;
+  justify-items: stretch;
   min-width: 0;
   padding: 7px;
+  text-align: left;
+}
+
+.session-room:hover {
+  background: #f8fbff;
+  border-color: rgba(37, 99, 235, 0.28);
+}
+
+.session-room.active {
+  background: #eff6ff;
+  border-color: rgba(37, 99, 235, 0.46);
 }
 
 .session-room strong,

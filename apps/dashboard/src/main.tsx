@@ -247,6 +247,7 @@ function Dashboard(): React.ReactElement {
   const [teamPanelOpen, setTeamPanelOpen] = useState(false);
   const [teamConnection, setTeamConnection] = useState<TeamConnection>(() => readStoredTeamConnection());
   const [teamSummary, setTeamSummary] = useState<TeamConnectionSummary>(emptyTeamSummary);
+  const [activeSessionId, setActiveSessionId] = useState(() => readStoredString("activeSessionId"));
   const viewportRestored = useRef(false);
   const { fitView, setViewport, zoomIn, zoomOut } = useReactFlow();
 
@@ -309,6 +310,11 @@ function Dashboard(): React.ReactElement {
 
   const domainCatalog = repoMap.domains.length > 0 ? repoMap.domains : fallbackDomains;
   const model = useMemo(() => buildDomainModel(state, domainCatalog), [domainCatalog, state]);
+  const sessionRooms = useMemo(
+    () => buildSessionRooms(teamSummary.members.length > 0 ? teamSummary.members : state.presence),
+    [state.presence, teamSummary.members]
+  );
+  const activeSession = sessionRooms.find((room) => room.id === activeSessionId);
   const { edges, nodes } = useMemo(() => buildFlow(model, state, selectedNodeId, repoMap.edges), [model, repoMap.edges, selectedNodeId, state]);
   const conflictInsights = useMemo(() => buildConflictInsights(state), [state]);
   const visibleConflictInsights = useMemo(
@@ -406,6 +412,10 @@ function Dashboard(): React.ReactElement {
   }, [selectedNodeId]);
 
   useEffect(() => {
+    writeStoredString("activeSessionId", activeSessionId);
+  }, [activeSessionId]);
+
+  useEffect(() => {
     writeStoredTeamConnection(teamConnection);
   }, [teamConnection]);
 
@@ -440,6 +450,9 @@ function Dashboard(): React.ReactElement {
           <Badge tone={teamSummary.active_agents > 0 ? "live" : "neutral"} icon={<Users size={13} />}>
             {teamSummary.active_agents > 0 ? `${teamSummary.active_agents} active` : "local only"}
           </Badge>
+          {activeSession !== undefined ? (
+            <Badge tone="info" icon={<RadioTower size={13} />}>{activeSession.session_id}</Badge>
+          ) : null}
           <Badge tone={status === "connected" ? "live" : status === "error" ? "fail" : "neutral"} icon={<Wifi size={13} />}>{status}</Badge>
           <button type="button" onClick={toggleTeamPanel}>
             <Link2 size={14} />
@@ -456,12 +469,15 @@ function Dashboard(): React.ReactElement {
         </div>
         {teamPanelOpen ? (
           <TeamConnectionPanel
+            activeSessionId={activeSessionId}
             agents={state.presence}
             connection={teamConnection}
             repoName={repoMap.root ?? "workspace"}
             serverStatus={status}
+            sessionRooms={sessionRooms}
             summary={teamSummary}
             onClose={() => setTeamPanelOpen(false)}
+            onSelectSession={setActiveSessionId}
             onUpdate={setTeamConnection}
           />
         ) : null}
@@ -593,20 +609,26 @@ function Dashboard(): React.ReactElement {
 }
 
 function TeamConnectionPanel({
+  activeSessionId,
   agents,
   connection,
   onClose,
+  onSelectSession,
   onUpdate,
   repoName,
   serverStatus,
+  sessionRooms,
   summary
 }: {
+  activeSessionId: string;
   agents: PresencePointer[];
   connection: TeamConnection;
   onClose(): void;
+  onSelectSession(value: string): void;
   onUpdate(value: TeamConnection): void;
   repoName: string;
   serverStatus: string;
+  sessionRooms: SessionRoom[];
   summary: TeamConnectionSummary;
 }): React.ReactElement {
   const connected = connection.mode === "team";
@@ -619,7 +641,6 @@ function TeamConnectionPanel({
     tool: "terminal"
   }];
   const primaryWorkspace = summary.workspaces[0];
-  const sessionRooms = buildSessionRooms(summary.members.length > 0 ? summary.members : agents);
 
   return (
     <section className="team-panel" aria-label="Team connection">
@@ -699,14 +720,19 @@ function TeamConnectionPanel({
         {sessionRooms.length === 0 ? (
           <p className="empty">No scoped sessions yet.</p>
         ) : sessionRooms.slice(0, 5).map((room) => (
-          <div className="session-room" key={room.id}>
+          <button
+            className={room.id === activeSessionId ? "session-room active" : "session-room"}
+            key={room.id}
+            type="button"
+            onClick={() => onSelectSession(room.id)}
+          >
             <div className="session-room-title">
               <strong>{room.session_id}</strong>
               <Badge tone="info" icon={<Users size={12} />}>{room.members.length}</Badge>
             </div>
             <p>{room.workspace_id} / {room.repo_id}</p>
             {room.latestTask !== undefined ? <span>{room.latestTask}</span> : null}
-          </div>
+          </button>
         ))}
       </div>
       <div className="teammate-list">
