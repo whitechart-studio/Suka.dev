@@ -1,4 +1,0 @@
-interface:
-  display_name: "Suka Quality Review"
-  short_description: "Industrial-grade review and test bar"
-  default_prompt: "Use $suka-quality-review to review Suka changes for production readiness."

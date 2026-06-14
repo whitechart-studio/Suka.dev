@@ -40,5 +40,5 @@ Suka is in early foundation stage. The repository includes:
 - CLI package.
 - React dashboard with repo map and inspector.
 - Docker self-hosting path.
-- Project-specific Codex skills.
+- Project guidance in architecture docs and wiki pages.
 - Visual QA script for the dashboard.

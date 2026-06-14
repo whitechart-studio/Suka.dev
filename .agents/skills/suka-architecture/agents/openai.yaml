@@ -1,4 +1,0 @@
-interface:
-  display_name: "Suka Architecture"
-  short_description: "Architecture guardrails for Suka"
-  default_prompt: "Use $suka-architecture to design or review Suka architecture changes."

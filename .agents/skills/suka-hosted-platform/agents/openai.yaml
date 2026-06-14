@@ -1,4 +1,0 @@
-interface:
-  display_name: "Suka Hosted Platform"
-  short_description: "Self-hosted and cloud architecture"
-  default_prompt: "Use $suka-hosted-platform to design Suka self-hosted or cloud-ready changes."
