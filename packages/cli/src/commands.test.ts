@@ -346,6 +346,125 @@ test("session join requires complete session context", async () => {
   assert.match(errors.join(""), /session join requires workspace, repo, and session context/);
 });
 
+test("session status filters team members by session context", async () => {
+  const output: string[] = [];
+  const result = await runCli({
+    argv: [
+      "session",
+      "status",
+      "--server",
+      "http://suka.test",
+      "--workspace",
+      "workspace-demo",
+      "--repo-id",
+      "repo-demo",
+      "--session",
+      "session-live"
+    ],
+    env: {},
+    fetch: async (url, init) => {
+      assert.equal(String(url), "http://suka.test/api/team");
+      assert.equal(init?.method, "GET");
+      return jsonResponse(200, {
+        active_agents: 2,
+        generated_at: "2026-06-14T10:35:00.000Z",
+        members: [
+          {
+            agent_id: "codex-local",
+            current_files: ["packages/cli/src/commands.ts"],
+            last_seen: "2026-06-14T10:35:00.000Z",
+            repo_id: "repo-demo",
+            session_id: "session-live",
+            status: "editing",
+            task: "Build status",
+            tool: "codex",
+            workspace_id: "workspace-demo"
+          },
+          {
+            agent_id: "other-agent",
+            current_files: [],
+            last_seen: "2026-06-14T10:35:00.000Z",
+            repo_id: "repo-demo",
+            session_id: "other-session",
+            status: "online",
+            tool: "terminal",
+            workspace_id: "workspace-demo"
+          }
+        ],
+        mode: "scoped",
+        workspaces: []
+      });
+    },
+    io: {
+      stdout: { write: (value: string) => output.push(value) },
+      stderr: { write: () => undefined }
+    }
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.match(output.join(""), /Suka session status/);
+  assert.match(output.join(""), /active agents: 1/);
+  assert.match(output.join(""), /codex-local codex editing Build status/);
+  assert.doesNotMatch(output.join(""), /other-agent/);
+});
+
+test("session status supports json output", async () => {
+  const output: string[] = [];
+  const result = await runCli({
+    argv: [
+      "session",
+      "status",
+      "--server",
+      "http://suka.test",
+      "--workspace",
+      "workspace-demo",
+      "--repo-id",
+      "repo-demo",
+      "--session",
+      "session-live",
+      "--json"
+    ],
+    env: {},
+    fetch: fakeFetch({
+      active_agents: 0,
+      generated_at: "2026-06-14T10:35:00.000Z",
+      members: [],
+      mode: "scoped",
+      workspaces: []
+    }),
+    io: {
+      stdout: { write: (value: string) => output.push(value) },
+      stderr: { write: () => undefined }
+    }
+  });
+
+  assert.equal(result.exitCode, 0);
+  const body = JSON.parse(output.join("")) as { members: unknown[]; session_id: string };
+  assert.equal(body.session_id, "session-live");
+  assert.deepEqual(body.members, []);
+});
+
+test("session status requires complete session context", async () => {
+  const requests: unknown[] = [];
+  const errors: string[] = [];
+  const result = await runCli({
+    argv: ["session", "status", "--server", "http://suka.test", "--session", "session-live"],
+    env: {},
+    fetch: async (url, init) => {
+      requests.push({ init, url });
+      return jsonResponse(200, {});
+    },
+    io: {
+      stdout: { write: () => undefined },
+      stderr: { write: (value: string) => errors.push(value) }
+    }
+  });
+
+  assert.equal(result.exitCode, 1);
+  assert.equal(requests.length, 0);
+  assert.match(errors.join(""), /session status requires workspace, repo, and session context/);
+});
+
 test("claim publishes a claim pointer", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const result = await runCli({

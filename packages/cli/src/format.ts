@@ -25,6 +25,13 @@ export interface SessionStartReport {
   server_url: string;
 }
 
+export interface SessionStatusReport {
+  members: TeamConnectionSummary["members"];
+  repo_id: string;
+  session_id: string;
+  workspace_id: string;
+}
+
 export function formatState(value: unknown): string {
   const state = value as SukaState;
   const lines: string[] = [];
@@ -83,6 +90,26 @@ export function formatSessionStart(report: SessionStartReport): string {
   return `${lines.join("\n")}\n`;
 }
 
+export function formatSessionStatus(report: SessionStatusReport): string {
+  const lines: string[] = [];
+
+  lines.push("Suka session status");
+  lines.push(`workspace: ${report.workspace_id}`);
+  lines.push(`repo: ${report.repo_id}`);
+  lines.push(`session: ${report.session_id}`);
+  lines.push(`active agents: ${report.members.length}`);
+
+  for (const member of report.members) {
+    const details = [member.tool, member.status, member.task].filter((item) => item !== undefined && item.length > 0);
+    lines.push(`- ${member.agent_id} ${details.join(" ")}`.trim());
+    if (member.current_files.length > 0) {
+      lines.push(`  files: ${member.current_files.join(", ")}`);
+    }
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
 export function formatTeam(value: unknown): string {
   const summary = value as TeamConnectionSummary;
   const lines: string[] = [];
@@ -127,6 +154,7 @@ Usage:
   suka doctor [--server http://127.0.0.1:4366] [--workspace ID] [--repo-id ID] [--session ID] [--json]
   suka session start [--repo NAME] [--agent AGENT] [--tool TOOL] [--workspace ID] [--repo-id ID] [--session ID] [--server URL] [--json]
   suka session join [--agent AGENT] [--tool TOOL] [--workspace ID] [--repo-id ID] [--session ID] [--status editing] [--task TEXT] [--file PATH] [--watch] [--server URL]
+  suka session status [--workspace ID] [--repo-id ID] [--session ID] [--server URL] [--json]
   suka status [--server http://127.0.0.1:4366] [--json]
   suka team [--server http://127.0.0.1:4366] [--json]
   suka claim <path> [--agent AGENT] [--reason TEXT] [--ttl 45] [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
