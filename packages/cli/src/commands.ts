@@ -269,10 +269,29 @@ async function sessionCommand(
   now: Date
 ): Promise<CliResult> {
   const action = args[0];
-  if (action !== "start") {
-    throw new Error("session requires a supported action: start.");
+  if (action === "start") {
+    return await sessionStartCommand(context, client, flags, config, serverUrl, now);
   }
 
+  if (action === "join") {
+    const sessionContext = coordinationContext(flags, config, context.env);
+    if (sessionContext.workspace_id === undefined || sessionContext.repo_id === undefined || sessionContext.session_id === undefined) {
+      throw new Error("session join requires workspace, repo, and session context.");
+    }
+    return await presenceCommand(context, client, flags, config, now);
+  }
+
+  throw new Error("session requires a supported action: start or join.");
+}
+
+async function sessionStartCommand(
+  context: CliContext,
+  client: SukaApiClient,
+  flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>,
+  serverUrl: string,
+  now: Date
+): Promise<CliResult> {
   const checks: DoctorCheck[] = [];
   await addApiCheck(checks, "state endpoint", async () => {
     await client.getState();

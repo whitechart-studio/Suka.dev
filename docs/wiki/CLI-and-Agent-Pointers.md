@@ -68,6 +68,19 @@ node packages/cli/dist/bin.js session start \
   --agent codex-local
 ```
 
+Join that session and publish the first presence update:
+
+```bash
+node packages/cli/dist/bin.js session join \
+  --workspace local-whitechart-studio-suka-dev \
+  --repo-id whitechart-studio-suka-dev \
+  --session session-20260614102030 \
+  --agent codex-local \
+  --tool codex \
+  --status editing \
+  --task "Build session workflow"
+```
+
 By default, the CLI reads `workspace_id` and `repo_id` from `.suka/config.json`.
 Use environment variables or flags when an agent wrapper needs explicit context:
 

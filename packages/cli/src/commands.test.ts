@@ -260,6 +260,92 @@ test("session start fails when server health checks fail", async () => {
   assert.match(errors.join(""), /connection refused/);
 });
 
+test("session join publishes scoped presence", async () => {
+  const requests: Array<{ init?: RequestInit; url: string }> = [];
+  const result = await runCli({
+    argv: [
+      "session",
+      "join",
+      "--server",
+      "http://suka.test",
+      "--workspace",
+      "workspace-demo",
+      "--repo-id",
+      "repo-demo",
+      "--session",
+      "session-live",
+      "--agent",
+      "codex-local",
+      "--tool",
+      "codex",
+      "--repo",
+      "suka",
+      "--status",
+      "editing",
+      "--task",
+      "Implement session join",
+      "--file",
+      "packages/cli/src/commands.ts"
+    ],
+    env: {},
+    now: new Date("2026-06-14T10:30:00.000Z"),
+    fetch: async (url, init) => {
+      const request: { init?: RequestInit; url: string } = { url: String(url) };
+      if (init !== undefined) {
+        request.init = init;
+      }
+      requests.push(request);
+      return jsonResponse(201, JSON.parse(String(init?.body)) as unknown);
+    },
+    io: silentIo()
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(requests[0]?.url, "http://suka.test/api/pointers");
+  assert.equal(requests[0]?.init?.method, "POST");
+  const body = JSON.parse(String(requests[0]?.init?.body)) as {
+    agent_id: string;
+    current_files: string[];
+    repo_id: string;
+    session_id: string;
+    status: string;
+    task: string;
+    tool: string;
+    type: string;
+    workspace_id: string;
+  };
+  assert.equal(body.type, "presence");
+  assert.equal(body.workspace_id, "workspace-demo");
+  assert.equal(body.repo_id, "repo-demo");
+  assert.equal(body.session_id, "session-live");
+  assert.equal(body.agent_id, "codex-local");
+  assert.equal(body.tool, "codex");
+  assert.equal(body.status, "editing");
+  assert.equal(body.task, "Implement session join");
+  assert.deepEqual(body.current_files, ["packages/cli/src/commands.ts"]);
+});
+
+test("session join requires complete session context", async () => {
+  const requests: unknown[] = [];
+  const errors: string[] = [];
+  const result = await runCli({
+    argv: ["session", "join", "--server", "http://suka.test", "--workspace", "workspace-demo"],
+    env: {},
+    fetch: async (url, init) => {
+      requests.push({ init, url });
+      return jsonResponse(201, {});
+    },
+    io: {
+      stdout: { write: () => undefined },
+      stderr: { write: (value: string) => errors.push(value) }
+    }
+  });
+
+  assert.equal(result.exitCode, 1);
+  assert.equal(requests.length, 0);
+  assert.match(errors.join(""), /session join requires workspace, repo, and session context/);
+});
+
 test("claim publishes a claim pointer", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const result = await runCli({

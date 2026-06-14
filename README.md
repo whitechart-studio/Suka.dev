@@ -92,6 +92,18 @@ node packages/cli/dist/bin.js session start \
   --agent codex-local
 ```
 
+Join the session from an agent:
+
+```bash
+node packages/cli/dist/bin.js session join \
+  --server http://127.0.0.1:4366 \
+  --workspace local-whitechart-studio-suka-dev \
+  --repo-id whitechart-studio-suka-dev \
+  --session session-20260614102030 \
+  --agent codex-local \
+  --task "Build session workflow"
+```
+
 ## CLI Examples
 
 Publish live presence:
