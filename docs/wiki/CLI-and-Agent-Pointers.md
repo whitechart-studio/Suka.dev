@@ -171,7 +171,7 @@ SUKA_AGENT_ID="terminal-${USER:-local}" \
 SUKA_AGENT_TOOL=terminal \
 node packages/cli/dist/bin.js presence \
   --task "Manual maintenance" \
-  --file packages/server/src/http.ts
+  --file apps/server/src/http.ts
 ```
 
 ## Claims

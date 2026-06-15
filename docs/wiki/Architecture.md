@@ -6,7 +6,7 @@ Suka is designed as a local-first coordination system that can grow into hosted 
 
 - `packages/protocol`: shared pointer types, constants, and validation.
 - `packages/conflict-engine`: path/API/domain overlap detection.
-- `packages/server`: local HTTP server, persistence, repo map, and dashboard serving.
+- `apps/server`: local HTTP server, persistence, repo map, and dashboard serving.
 - `packages/cli`: command-line interface for publishing and reading coordination state.
 - `apps/dashboard`: React dashboard for the operations canvas.
 

@@ -30,8 +30,8 @@ Git shows what changed after the fact. Chat explains intent to humans. Suka give
 
 | Signal | What it answers | Example |
 | --- | --- | --- |
-| Presence | Who is active right now? | `codex` is editing `packages/server/src/http.ts` |
-| Claims | What work area is temporarily owned or blocked? | `packages/server/**` is claimed, `packages/protocol/**` is do-not-touch |
+| Presence | Who is active right now? | `codex` is editing `apps/server/src/http.ts` |
+| Claims | What work area is temporarily owned or blocked? | `apps/server/**` is claimed, `packages/protocol/**` is do-not-touch |
 | Events | What just happened? | `POST /api/cleanup` contract changed |
 | Conflicts | What work may collide? | API, path, domain, table, or env overlap |
 | Decisions | What should future agents remember? | Cleanup must be scoped by workspace, repo, or session |
@@ -62,7 +62,7 @@ git clone git@github.com:whitechart-studio/Suka.dev.git
 cd Suka.dev
 npm install
 npm run build
-node packages/server/dist/bin.js
+node apps/server/dist/bin.js
 ```
 
 Open:
@@ -140,13 +140,13 @@ node packages/cli/dist/bin.js presence \
   --repo whitechart-studio/Suka.dev \
   --status editing \
   --task "Implement cleanup API" \
-  --file packages/server/src/http.ts
+  --file apps/server/src/http.ts
 ```
 
 Claim a work area:
 
 ```bash
-node packages/cli/dist/bin.js claim "packages/server/**" \
+node packages/cli/dist/bin.js claim "apps/server/**" \
   --server http://127.0.0.1:4366 \
   --agent codex-local \
   --reason "Own cleanup and realtime state updates"
@@ -167,7 +167,7 @@ Check for conflicts:
 node packages/cli/dist/bin.js conflicts \
   --server http://127.0.0.1:4366 \
   --agent claude-code-local \
-  --path packages/server/src/http.ts \
+  --path apps/server/src/http.ts \
   --api "POST /api/cleanup"
 ```
 

@@ -48,7 +48,7 @@ test("accepts blocked scope ownership boundaries", () => {
     id: "ptr_blocked_scope_01",
     agent_id: "codex-trent-01",
     scope: {
-      paths: ["packages/server/src/**"]
+      paths: ["apps/server/src/**"]
     },
     reason: "Do not edit server routing during refactor",
     kind: "blocked_scope",
@@ -65,7 +65,7 @@ test("rejects unknown claim kinds", () => {
     id: "ptr_claim_unknown_kind",
     agent_id: "codex-trent-01",
     scope: {
-      paths: ["packages/server/src/**"]
+      paths: ["apps/server/src/**"]
     },
     reason: "Invalid claim kind",
     kind: "exclusive_lock",
@@ -108,7 +108,7 @@ test("documents the team connection summary contract", () => {
     generated_at: "2026-06-12T10:00:00.000Z",
     members: [{
       agent_id: "codex-trent-01",
-      current_files: ["packages/server/src/team.ts"],
+      current_files: ["apps/server/src/team.ts"],
       last_seen: "2026-06-12T09:59:59.000Z",
       repo_id: "repo-a",
       session_id: "session-a",

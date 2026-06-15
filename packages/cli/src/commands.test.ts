@@ -1175,7 +1175,7 @@ test("remind reports missing shared-truth updates for changed files", async () =
       "--server",
       "http://suka.test",
       "--path",
-      "package.json,packages/server/src/schema.ts",
+      "package.json,apps/server/src/schema.ts",
       "--workspace",
       "workspace-a",
       "--repo-id",
@@ -1268,7 +1268,7 @@ test("conflicts includes workspace context from environment", async () => {
       "--agent",
       "codex-01",
       "--path",
-      "packages/server/src/http.ts",
+      "apps/server/src/http.ts",
       "--since-session-start"
     ],
     env: {
@@ -1295,7 +1295,7 @@ test("conflicts includes workspace context from environment", async () => {
     apis: [],
     domains: [],
     env: [],
-    paths: ["packages/server/src/http.ts"],
+    paths: ["apps/server/src/http.ts"],
     repo_id: "repo-a",
     session_id: "session-a",
     since: "2026-06-12T10:00:00.000Z",
@@ -1313,7 +1313,7 @@ test("conflicts requires session start timestamp when requested", async () => {
       "--server",
       "http://suka.test",
       "--path",
-      "packages/server/src/http.ts",
+      "apps/server/src/http.ts",
       "--since-session-start"
     ],
     env: {},

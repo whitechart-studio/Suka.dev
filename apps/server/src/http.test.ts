@@ -29,7 +29,7 @@ test("GET /api/team returns the current team summary", async () => {
       tool: "codex",
       repo: "whitechart-studio/Suka.dev",
       status: "editing",
-      current_files: ["packages/server/src/http.ts"],
+      current_files: ["apps/server/src/http.ts"],
       last_seen: "2026-06-12T10:00:00.000Z",
       expires_at: "2099-06-12T11:00:00.000Z"
     });
@@ -67,7 +67,7 @@ test("GET /api/repo-map returns repository domains", async () => {
 
     assert.equal(response.status, 200);
     assert.ok(body.data.domains.some((domain) => domain.path === "apps/dashboard"));
-    assert.ok(body.data.domains.some((domain) => domain.path === "packages/server"));
+    assert.ok(body.data.domains.some((domain) => domain.path === "apps/server"));
     assert.ok(body.data.edges.length > 0);
   } finally {
     await running.close();

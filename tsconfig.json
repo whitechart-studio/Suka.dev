@@ -8,7 +8,7 @@
       "path": "./packages/conflict-engine"
     },
     {
-      "path": "./packages/server"
+      "path": "./apps/server"
     },
     {
       "path": "./packages/cli"
