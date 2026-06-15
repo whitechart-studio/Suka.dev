@@ -966,6 +966,159 @@ test("decisions lists shared decision memory", async () => {
   assert.match(output.join(""), /ptr_decision_01/);
 });
 
+test("brief write publishes a session handoff", async () => {
+  const requests: Array<{ init?: RequestInit; url: string }> = [];
+  const result = await runCli({
+    argv: [
+      "brief",
+      "write",
+      "Dashboard focus handoff",
+      "--server",
+      "http://suka.test",
+      "--workspace",
+      "workspace-a",
+      "--repo-id",
+      "repo-a",
+      "--session",
+      "session-a",
+      "--changed",
+      "apps/dashboard/src/main.tsx",
+      "--decision",
+      "Keep session selection local",
+      "--assumption",
+      "Server state remains source of truth",
+      "--skipped",
+      "Hosted persistence",
+      "--risk",
+      "Stale browser state",
+      "--blocker",
+      "None",
+      "--next",
+      "Add Current Truth panel",
+      "--related-claim",
+      "claim_dashboard",
+      "--related-session",
+      "session-a",
+      "--worktree",
+      "codex/dashboard-session-focus",
+      "--agent",
+      "codex-01"
+    ],
+    env: {},
+    now: new Date("2026-06-12T10:00:00.000Z"),
+    fetch: async (url, init) => {
+      const request: { init?: RequestInit; url: string } = { url: String(url) };
+      if (init !== undefined) {
+        request.init = init;
+      }
+      requests.push(request);
+      return jsonResponse(201, JSON.parse(String(init?.body)) as unknown);
+    },
+    io: silentIo()
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(requests[0]?.url, "http://suka.test/api/briefs");
+  const body = JSON.parse(String(requests[0]?.init?.body)) as {
+    agent_id: string;
+    assumptions: string[];
+    changed_files: string[];
+    decisions_made: string[];
+    next_action: string;
+    related_claims: string[];
+    related_sessions: string[];
+    risks: string[];
+    skipped_work: string[];
+    summary: string;
+    type: string;
+    worktree: string;
+  };
+  assert.equal(body.type, "brief");
+  assert.equal(body.summary, "Dashboard focus handoff");
+  assert.equal(body.agent_id, "codex-01");
+  assert.equal(body.next_action, "Add Current Truth panel");
+  assert.deepEqual(body.changed_files, ["apps/dashboard/src/main.tsx"]);
+  assert.deepEqual(body.decisions_made, ["Keep session selection local"]);
+  assert.deepEqual(body.assumptions, ["Server state remains source of truth"]);
+  assert.deepEqual(body.skipped_work, ["Hosted persistence"]);
+  assert.deepEqual(body.risks, ["Stale browser state"]);
+  assert.deepEqual(body.related_claims, ["claim_dashboard"]);
+  assert.deepEqual(body.related_sessions, ["session-a"]);
+  assert.equal(body.worktree, "codex/dashboard-session-focus");
+});
+
+test("brief write requires a next action before publishing", async () => {
+  const requests: unknown[] = [];
+  const errors: string[] = [];
+  const result = await runCli({
+    argv: ["brief", "write", "Dashboard focus handoff", "--server", "http://suka.test"],
+    env: {},
+    fetch: async (url, init) => {
+      requests.push({ init, url });
+      return jsonResponse(201, {});
+    },
+    io: {
+      stdout: { write: () => undefined },
+      stderr: { write: (value: string) => errors.push(value) }
+    }
+  });
+
+  assert.equal(result.exitCode, 1);
+  assert.equal(requests.length, 0);
+  assert.match(errors.join(""), /brief write requires --next/);
+});
+
+test("brief read filters by current session context", async () => {
+  const output: string[] = [];
+  const result = await runCli({
+    argv: [
+      "brief",
+      "read",
+      "--server",
+      "http://suka.test",
+      "--workspace",
+      "workspace-a",
+      "--repo-id",
+      "repo-a",
+      "--session",
+      "current"
+    ],
+    env: {
+      SUKA_SESSION_ID: "session-a"
+    },
+    fetch: async (url, init) => {
+      assert.equal(String(url), "http://suka.test/api/briefs");
+      assert.equal(init?.method, "GET");
+      return jsonResponse(200, [
+        {
+          type: "brief",
+          id: "ptr_brief_session_a",
+          workspace_id: "workspace-a",
+          repo_id: "repo-a",
+          session_id: "session-a",
+          summary: "Keep this brief"
+        },
+        {
+          type: "brief",
+          id: "ptr_brief_session_b",
+          workspace_id: "workspace-a",
+          repo_id: "repo-a",
+          session_id: "session-b",
+          summary: "Filter this brief"
+        }
+      ]);
+    },
+    io: {
+      stdout: { write: (value: string) => output.push(value) },
+      stderr: { write: () => undefined }
+    }
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.match(output.join(""), /ptr_brief_session_a/);
+  assert.doesNotMatch(output.join(""), /ptr_brief_session_b/);
+});
+
 test("conflicts includes workspace context from environment", async () => {
   const requests: Array<{ init?: RequestInit; url: string }> = [];
   const result = await runCli({

@@ -446,6 +446,69 @@ test("POST /api/decisions rejects non-decision pointers without persisting them"
   }
 });
 
+test("POST /api/briefs stores session handoff briefs", async () => {
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  try {
+    const createResponse = await postJson(`${running.url}/api/briefs`, {
+      id: "ptr_brief_01",
+      workspace_id: "workspace-a",
+      repo_id: "repo-a",
+      session_id: "session-a",
+      agent_id: "codex-trent-01",
+      summary: "Dashboard focus handoff",
+      changed_files: ["apps/dashboard/src/main.tsx"],
+      decisions_made: ["Keep session selection local"],
+      assumptions: ["Server state remains source of truth"],
+      skipped_work: ["Hosted persistence"],
+      risks: ["Stale browser state"],
+      blockers: [],
+      next_action: "Add Current Truth panel",
+      related_claims: ["claim_dashboard"],
+      related_sessions: ["session-a"],
+      created_at: "2026-06-12T10:00:00.000Z"
+    });
+    const body = await createResponse.json() as { data: { id: string; type: string } };
+
+    assert.equal(createResponse.status, 201);
+    assert.equal(body.data.type, "brief");
+    assert.equal(body.data.id, "ptr_brief_01");
+
+    const listResponse = await fetch(`${running.url}/api/briefs`);
+    const listBody = await listResponse.json() as { data: Array<{ id: string }> };
+
+    assert.equal(listResponse.status, 200);
+    assert.deepEqual(listBody.data.map((brief) => brief.id), ["ptr_brief_01"]);
+  } finally {
+    await running.close();
+  }
+});
+
+test("POST /api/briefs rejects non-brief pointers without persisting them", async () => {
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  try {
+    const response = await postJson(`${running.url}/api/briefs`, {
+      type: "claim",
+      id: "ptr_claim_01",
+      agent_id: "codex-trent-01",
+      scope: {
+        paths: ["src/billing/**"]
+      },
+      reason: "Implement Stripe webhook handling",
+      kind: "soft_claim",
+      created_at: "2026-06-12T10:00:00.000Z",
+      expires_at: "2099-06-12T11:00:00.000Z"
+    });
+    const stateResponse = await fetch(`${running.url}/api/state`);
+    const state = await stateResponse.json() as { data: { briefs: unknown[]; claims: unknown[] } };
+
+    assert.equal(response.status, 400);
+    assert.equal(state.data.briefs.length, 0);
+    assert.equal(state.data.claims.length, 0);
+  } finally {
+    await running.close();
+  }
+});
+
 test("POST /api/pointers returns validation issues for invalid pointers", async () => {
   const running = await listen({ port: 0 }, createSukaHttpServer());
   try {
