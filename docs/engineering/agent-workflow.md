@@ -154,4 +154,3 @@ node packages/cli/dist/bin.js session end
 ```
 
 Never rely on unscoped cleanup for multi-agent work. Suka requires cleanup scope so a session cannot accidentally remove another team member's state.
-
