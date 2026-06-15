@@ -37,6 +37,27 @@ test("detects path overlap against a soft claim", () => {
   assert.equal(warnings[0]?.reason, "path_overlap");
 });
 
+test("detects blocked scope as high severity do-not-touch guidance", () => {
+  const blockedClaim: ClaimPointer = {
+    ...claim,
+    id: "ptr_blocked_scope_01",
+    kind: "blocked_scope",
+    reason: "Keep billing untouched while the webhook migration is in progress"
+  };
+  const warnings = checkConflicts({
+    subject: {
+      agent_id: "cursor-maya-01",
+      paths: ["src/billing/invoice.ts"]
+    },
+    active_claims: [blockedClaim]
+  });
+
+  assert.equal(warnings.length, 1);
+  assert.equal(warnings[0]?.severity, "high");
+  assert.equal(warnings[0]?.reason, "blocked_scope");
+  assert.match(warnings[0]?.message ?? "", /Do-not-touch scope blocked by codex-trent-01/);
+});
+
 test("detects API overlap as high severity", () => {
   const warnings = checkConflicts({
     subject: {

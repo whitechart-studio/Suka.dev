@@ -42,6 +42,43 @@ test("accepts optional coordination context on pointers", () => {
   assert.equal(result.ok, true);
 });
 
+test("accepts blocked scope ownership boundaries", () => {
+  const result = validatePointer({
+    type: "claim",
+    id: "ptr_blocked_scope_01",
+    agent_id: "codex-trent-01",
+    scope: {
+      paths: ["packages/server/src/**"]
+    },
+    reason: "Do not edit server routing during refactor",
+    kind: "blocked_scope",
+    created_at: "2026-06-12T10:00:00.000Z",
+    expires_at: "2026-06-12T10:45:00.000Z"
+  });
+
+  assert.equal(result.ok, true);
+});
+
+test("rejects unknown claim kinds", () => {
+  const result = validatePointer({
+    type: "claim",
+    id: "ptr_claim_unknown_kind",
+    agent_id: "codex-trent-01",
+    scope: {
+      paths: ["packages/server/src/**"]
+    },
+    reason: "Invalid claim kind",
+    kind: "exclusive_lock",
+    created_at: "2026-06-12T10:00:00.000Z",
+    expires_at: "2026-06-12T10:45:00.000Z"
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(result.issues.some((issue) => issue.path === "kind" && issue.code === "invalid_value"));
+  }
+});
+
 test("rejects invalid coordination context field types", () => {
   const result = validatePointer({
     type: "claim",

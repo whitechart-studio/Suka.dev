@@ -832,6 +832,7 @@ code {
 }
 
 .domain-node.failing { border-color: var(--rose); }
+.domain-node.blocked { border-color: var(--rose); }
 .domain-node.claimed { border-color: var(--amber); }
 .domain-node.active { border-color: var(--blue); }
 
