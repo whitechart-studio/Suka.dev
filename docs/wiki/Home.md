@@ -14,6 +14,7 @@ It helps a team answer the operational questions that matter during agentic deve
 
 - **Agent presence**: a live signal showing an agent, tool, task, branch, and active files.
 - **Claims**: temporary work ownership over paths, APIs, tables, env keys, or domains.
+- **Briefs**: structured handoffs that capture changed files, decisions, assumptions, risks, and next action.
 - **Conflict radar**: warnings when planned work overlaps with existing claims or risky areas.
 - **Repo map**: a visual map of the repository and active coordination signals.
 - **Decision memory**: shared technical decisions that agents and humans should follow.
@@ -24,10 +25,11 @@ It helps a team answer the operational questions that matter during agentic deve
 2. [[Architecture]]
 3. [[Dashboard]]
 4. [[CLI and Agent Pointers]]
-5. [[Self-Hosting]]
-6. [[Security and Privacy]]
-7. [[Release Workflow]]
-8. [[Roadmap]]
+5. [Agent Coordination Workflow](../engineering/agent-workflow.md)
+6. [[Self-Hosting]]
+7. [[Security and Privacy]]
+8. [[Release Workflow]]
+9. [[Roadmap]]
 
 ## Current Status
 

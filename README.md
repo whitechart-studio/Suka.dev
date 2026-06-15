@@ -31,20 +31,21 @@ Git shows what changed after the fact. Chat explains intent to humans. Suka give
 | Signal | What it answers | Example |
 | --- | --- | --- |
 | Presence | Who is active right now? | `codex` is editing `packages/server/src/http.ts` |
-| Claims | What work area is temporarily owned? | `packages/server/**` is claimed for cleanup API changes |
+| Claims | What work area is temporarily owned or blocked? | `packages/server/**` is claimed, `packages/protocol/**` is do-not-touch |
 | Events | What just happened? | `POST /api/cleanup` contract changed |
 | Conflicts | What work may collide? | API, path, domain, table, or env overlap |
 | Decisions | What should future agents remember? | Cleanup must be scoped by workspace, repo, or session |
+| Briefs | What should the next agent know? | Changed files, decisions, assumptions, risks, and next action |
 
 Claims are advisory, not locks. Suka warns about risk without taking control away from developers.
 
 ## Core Capabilities
 
 - Realtime dashboard for active agents, claims, events, and decisions.
-- Typed protocol for presence, claims, events, decisions, and project configuration.
+- Typed protocol for presence, claims, events, decisions, briefs, and project configuration.
 - Deterministic conflict engine for paths, APIs, domains, tables, and environment keys.
 - Local HTTP/WebSocket server with in-memory or file-backed persistence.
-- CLI for serving, publishing, checking conflicts, releasing claims, and scoped cleanup.
+- CLI for serving, publishing, checking conflicts, writing briefs, reminders, releasing claims, and scoped cleanup.
 - Scoped coordination context with `workspace_id`, `repo_id`, and `session_id`.
 - Self-hostable foundation with Docker and CI gates.
 - Privacy-first posture: metadata over prompts, transcripts, code content, or raw terminal logs.
@@ -151,6 +152,15 @@ node packages/cli/dist/bin.js claim "packages/server/**" \
   --reason "Own cleanup and realtime state updates"
 ```
 
+Block a do-not-touch area while focused work is in progress:
+
+```bash
+node packages/cli/dist/bin.js block "packages/protocol/**" \
+  --server http://127.0.0.1:4366 \
+  --agent codex-local \
+  --reason "Do not edit protocol types during validator changes"
+```
+
 Check for conflicts:
 
 ```bash
@@ -159,6 +169,23 @@ node packages/cli/dist/bin.js conflicts \
   --agent claude-code-local \
   --path packages/server/src/http.ts \
   --api "POST /api/cleanup"
+```
+
+Check changed files for missing shared-truth updates:
+
+```bash
+node packages/cli/dist/bin.js remind \
+  --server http://127.0.0.1:4366 \
+  --changed
+```
+
+Write a session handoff:
+
+```bash
+node packages/cli/dist/bin.js brief write "Finished scoped cleanup API" \
+  --server http://127.0.0.1:4366 \
+  --changed \
+  --next "Review dashboard Current Truth panel"
 ```
 
 View the connected team:
@@ -253,6 +280,7 @@ No stable release is available yet.
 - [CLI and Agent Pointers](docs/wiki/CLI-and-Agent-Pointers.md)
 - [Security and Privacy](docs/wiki/Security-and-Privacy.md)
 - [Self-Hosting](docs/wiki/Self-Hosting.md)
+- [Agent Coordination Workflow](docs/engineering/agent-workflow.md)
 - [PR Gate](docs/engineering/pr-gate.md)
 - [Project Hygiene](docs/engineering/project-hygiene.md)
 - [Social Preview](docs/open-source/social-preview.md)

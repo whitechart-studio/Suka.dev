@@ -8,6 +8,9 @@ Suka represents coordination state as pointers.
 - `claim`: an agent has claimed a scope.
 - `event`: something happened in the workflow.
 - `decision`: a durable technical decision.
+- `brief`: a structured handoff for changed files, decisions, assumptions, risks, and next action.
+
+For the standard start-work, claim, conflict-check, reminder, and handoff sequence, see [Agent Coordination Workflow](../engineering/agent-workflow.md).
 
 ## Presence
 
@@ -133,7 +136,7 @@ node packages/cli/dist/bin.js team \
   --server http://127.0.0.1:4366
 ```
 
-The same context flags work on `presence`, `claim`, `event`, `decision`, and `conflicts`.
+The same context flags work on `presence`, `claim`, `block`, `event`, `decision`, `brief`, `remind`, and `conflicts`.
 
 ## Agent Wrapper Examples
 
