@@ -160,6 +160,9 @@ export async function runCli(context: CliContext): Promise<CliResult> {
         return { exitCode: 0 };
       }
 
+      case "brief":
+        return await briefCommand(context, client, parsed.args, parsed.flags, config, now);
+
       case "conflicts": {
         const result = await client.checkConflicts({
           ...coordinationContext(parsed.flags, config, context.env),
@@ -209,6 +212,79 @@ export async function runCli(context: CliContext): Promise<CliResult> {
     context.io.stderr.write(`${error instanceof Error ? error.message : "Unexpected CLI error."}\n`);
     return { exitCode: 1 };
   }
+}
+
+async function briefCommand(
+  context: CliContext,
+  client: SukaApiClient,
+  args: string[],
+  flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>,
+  now: Date
+): Promise<CliResult> {
+  const action = args[0];
+  if (action === "write") {
+    return await briefWriteCommand(context, client, args.slice(1), flags, config, now);
+  }
+  if (action === "read") {
+    return await briefReadCommand(context, client, flags, config);
+  }
+
+  throw new Error("brief requires a supported action: write or read.");
+}
+
+async function briefWriteCommand(
+  context: CliContext,
+  client: SukaApiClient,
+  args: string[],
+  flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>,
+  now: Date
+): Promise<CliResult> {
+  const summary = readStringFlag(flags, "summary") ?? args.join(" ").trim();
+  const nextAction = readStringFlag(flags, "next");
+  if (summary.length === 0) {
+    throw new Error("brief write requires a summary.");
+  }
+  if (nextAction === undefined) {
+    throw new Error("brief write requires --next.");
+  }
+
+  const brief = {
+    type: "brief",
+    id: createPointerId("brief", now),
+    ...coordinationContext(flags, config, context.env),
+    agent_id: readStringFlag(flags, "agent") ?? defaultAgentId(context.env),
+    summary,
+    changed_files: changedFilesFromFlag(flags),
+    decisions_made: readCsvFlag(flags, "decision"),
+    assumptions: readCsvFlag(flags, "assumption"),
+    skipped_work: readCsvFlag(flags, "skipped"),
+    risks: readCsvFlag(flags, "risk"),
+    blockers: readCsvFlag(flags, "blocker"),
+    next_action: nextAction,
+    related_claims: readCsvFlag(flags, "related-claim"),
+    related_sessions: readCsvFlag(flags, "related-session"),
+    worktree: readStringFlag(flags, "worktree"),
+    created_at: now.toISOString()
+  };
+  const result = await client.createBrief(brief);
+  context.io.stdout.write(formatJson(result));
+  return { exitCode: 0 };
+}
+
+async function briefReadCommand(
+  context: CliContext,
+  client: SukaApiClient,
+  flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>
+): Promise<CliResult> {
+  const effectiveFlags = normalizeCurrentSessionFlag(flags, context.env);
+  const filter = coordinationContext(effectiveFlags, config, context.env);
+  const result = await client.listBriefs();
+  const briefs = Array.isArray(result) ? result.filter((brief) => matchesContextFilter(brief, filter)) : result;
+  context.io.stdout.write(formatJson(briefs));
+  return { exitCode: 0 };
 }
 
 async function decisionCommand(
@@ -262,6 +338,34 @@ async function decisionCommand(
   const result = await client.createDecision(decision);
   context.io.stdout.write(formatJson(result));
   return { exitCode: 0 };
+}
+
+function normalizeCurrentSessionFlag(
+  flags: Parameters<typeof readStringFlag>[0],
+  env: NodeJS.ProcessEnv
+): Parameters<typeof readStringFlag>[0] {
+  if (readStringFlag(flags, "session") !== "current") {
+    return flags;
+  }
+  if (env.SUKA_SESSION_ID === undefined) {
+    throw new Error("brief read --session current requires SUKA_SESSION_ID.");
+  }
+  return {
+    ...flags,
+    session: env.SUKA_SESSION_ID
+  };
+}
+
+function matchesContextFilter(value: unknown, context: CoordinationContext): boolean {
+  const keys = ["workspace_id", "repo_id", "session_id"] as const;
+  if (!isRecord(value)) {
+    return false;
+  }
+  return keys.every((key) => context[key] === undefined || value[key] === context[key]);
+}
+
+function changedFilesFromFlag(flags: Parameters<typeof readStringFlag>[0]): string[] {
+  return flags.changed === true ? detectChangedFiles() : readCsvFlag(flags, "changed");
 }
 
 async function sessionCommand(
@@ -585,6 +689,10 @@ function coordinationContext(
   if (repoId !== undefined) context.repo_id = repoId;
   if (sessionId !== undefined) context.session_id = sessionId;
   return context;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function detectAgentTool(env: NodeJS.ProcessEnv): string {

@@ -41,6 +41,14 @@ export class SukaApiClient {
     return this.#request("POST", "/api/decisions", decision);
   }
 
+  async listBriefs(): Promise<unknown> {
+    return this.#request("GET", "/api/briefs");
+  }
+
+  async createBrief(brief: unknown): Promise<unknown> {
+    return this.#request("POST", "/api/briefs", brief);
+  }
+
   async checkConflicts(subject: unknown): Promise<unknown> {
     return this.#request("POST", "/api/conflicts/check", subject);
   }

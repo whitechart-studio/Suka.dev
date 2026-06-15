@@ -119,7 +119,7 @@ export function formatTeam(value: unknown): string {
 
   for (const workspace of summary.workspaces ?? []) {
     lines.push(
-      `- workspace ${workspace.workspace_id}: ${workspace.active_agents} agents, ${workspace.claims} claims, ${workspace.events} events, ${workspace.decisions} decisions, ${workspace.briefs} briefs`
+      `- workspace ${workspace.workspace_id}: ${workspace.active_agents} agents, ${workspace.claims} claims, ${workspace.events} events, ${workspace.decisions} decisions, ${workspace.briefs ?? 0} briefs`
     );
     if (workspace.repo_ids.length > 0) {
       lines.push(`  repos: ${workspace.repo_ids.join(", ")}`);
@@ -162,6 +162,8 @@ Usage:
   suka event <type> <summary> [--agent AGENT] [--workspace ID] [--repo-id ID] [--session ID] [--path PATH] [--api API] [--server URL]
   suka decision <title> --body TEXT [--workspace ID] [--repo-id ID] [--session ID] [--path PATH] [--api API] [--table TABLE] [--env NAME] [--domain DOMAIN] [--evidence REF] [--status accepted] [--confidence high] [--agent AGENT]
   suka decisions [--server URL]
+  suka brief write <summary> --next TEXT [--changed PATH] [--decision TEXT] [--assumption TEXT] [--skipped TEXT] [--risk TEXT] [--blocker TEXT] [--related-claim ID] [--related-session ID] [--worktree NAME] [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
+  suka brief read [--workspace ID] [--repo-id ID] [--session ID|current] [--server URL] [--json]
   suka conflicts [--workspace ID] [--repo-id ID] [--session ID] [--path PATH] [--api API] [--table TABLE] [--env NAME] [--domain DOMAIN] [--server URL]
   suka release <claim-id> [--server URL]
   suka cleanup [--workspace ID] [--repo ID] [--session ID] [--server URL]
