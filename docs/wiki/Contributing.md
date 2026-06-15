@@ -40,3 +40,7 @@ docker build --tag suka:local .
 - Keep GitHub Actions pinned to full commit SHAs.
 - Keep workflow `permissions` scoped to the minimum needed.
 - Update Self-Hosting, Release Workflow, or Security and Privacy docs when operator behavior changes.
+
+## Project Tracking
+
+Use issues for product/work tracking and pull requests as implementation records. Keep project status updates aligned with the [Project Hygiene](../engineering/project-hygiene.md) guide.

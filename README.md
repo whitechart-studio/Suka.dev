@@ -254,6 +254,7 @@ No stable release is available yet.
 - [Security and Privacy](docs/wiki/Security-and-Privacy.md)
 - [Self-Hosting](docs/wiki/Self-Hosting.md)
 - [PR Gate](docs/engineering/pr-gate.md)
+- [Project Hygiene](docs/engineering/project-hygiene.md)
 - [Social Preview](docs/open-source/social-preview.md)
 
 ## Contributing
