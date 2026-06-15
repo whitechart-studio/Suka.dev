@@ -1,4 +1,4 @@
-import type { ClaimPointer, PointerScope } from "@suka/protocol";
+import type { ClaimPointer, EventPointer, PointerScope, PresencePointer } from "@suka/protocol";
 import { normalizeRepoPath, pathsOverlap } from "./path.js";
 import type {
   ConflictCheckInput,
@@ -15,17 +15,22 @@ export function checkConflicts(input: ConflictCheckInput): ConflictWarning[] {
     warnings.push(...checkClaim(input.subject, claim));
   }
 
+  const subjectPresence = latestPresenceForSubject(input.subject, input.active_presence ?? []);
+  for (const event of (input.recent_events ?? []).filter((event) => matchesContext(input.subject, event))) {
+    warnings.push(...checkEvent(input.subject, event, subjectPresence));
+  }
+
   return warnings.sort(compareSeverity);
 }
 
-function matchesContext(subject: ConflictSubject, claim: ClaimPointer): boolean {
+function matchesContext(subject: ConflictSubject, pointer: ClaimPointer | EventPointer | PresencePointer): boolean {
   const contextKeys = ["workspace_id", "repo_id", "session_id"] as const;
   const scopedKeys = contextKeys.filter((key) => subject[key] !== undefined);
   if (scopedKeys.length === 0) {
     return true;
   }
 
-  return scopedKeys.every((key) => claim[key] === subject[key]);
+  return scopedKeys.every((key) => pointer[key] === subject[key]);
 }
 
 function checkClaim(subject: ConflictSubject, claim: ClaimPointer): ConflictWarning[] {
@@ -64,6 +69,42 @@ function checkClaim(subject: ConflictSubject, claim: ClaimPointer): ConflictWarn
   return warnings;
 }
 
+function checkEvent(
+  subject: ConflictSubject,
+  event: EventPointer,
+  subjectPresence: PresencePointer | undefined
+): ConflictWarning[] {
+  if (event.agent_id === subject.agent_id) {
+    return [];
+  }
+
+  const threshold = eventThreshold(subject, subjectPresence);
+  if (threshold !== undefined && Date.parse(event.created_at) <= threshold) {
+    return [];
+  }
+
+  const warnings: ConflictWarning[] = [];
+  const subjectPaths = subject.paths?.map(normalizeRepoPath) ?? [];
+  const eventPaths = event.affected_paths.map(normalizeRepoPath);
+  const overlappingPaths = subjectPaths.filter((path) =>
+    eventPaths.some((eventPath) => pathsOverlap(eventPath, path) || pathsOverlap(path, eventPath))
+  );
+  if (overlappingPaths.length > 0) {
+    const firstPath = overlappingPaths[0] as string;
+    warnings.push(eventWarning("medium", "recent_file_change", recentEventMessage("file", event, firstPath), {
+      paths: overlappingPaths
+    }, event, subject));
+  }
+
+  warnings.push(...recentOverlapWarnings("high", "recent_api_change", "API", subject.apis, event.affected_apis, event, subject));
+  warnings.push(
+    ...recentOverlapWarnings("high", "recent_table_change", "database table", subject.tables, event.affected_tables, event, subject)
+  );
+  warnings.push(...recentOverlapWarnings("high", "recent_env_change", "environment variable", subject.env, event.affected_env, event, subject));
+
+  return warnings;
+}
+
 function overlapWarnings(
   severity: ConflictSeverity,
   reason: ConflictReason,
@@ -87,6 +128,30 @@ function overlapWarnings(
   ];
 }
 
+function recentOverlapWarnings(
+  severity: ConflictSeverity,
+  reason: ConflictReason,
+  label: string,
+  subjectValues: string[] | undefined,
+  eventValues: string[],
+  event: EventPointer,
+  subject: ConflictSubject
+): ConflictWarning[] {
+  const subjectSet = new Set(subjectValues ?? []);
+  const matches = eventValues.filter((value) => subjectSet.has(value));
+  if (matches.length === 0) {
+    return [];
+  }
+
+  const scopeKey = scopeKeyForReason(reason);
+  const firstMatch = matches[0] as string;
+  return [
+    eventWarning(severity, reason, recentEventMessage(label, event, firstMatch), {
+      [scopeKey]: matches
+    }, event, subject)
+  ];
+}
+
 function warning(
   severity: ConflictSeverity,
   reason: ConflictReason,
@@ -105,6 +170,51 @@ function warning(
   };
 }
 
+function eventWarning(
+  severity: ConflictSeverity,
+  reason: ConflictReason,
+  message: string,
+  matched_scope: PointerScope,
+  event: EventPointer,
+  subject: ConflictSubject
+): ConflictWarning {
+  return {
+    severity,
+    reason,
+    message,
+    matched_scope,
+    pointers: [event.id],
+    subject
+  };
+}
+
+function recentEventMessage(label: string, event: EventPointer, value: string): string {
+  return `Recent ${label} change by ${event.agent_id}: ${value}.`;
+}
+
+function eventThreshold(subject: ConflictSubject, presence: PresencePointer | undefined): number | undefined {
+  const timestamps = [subject.since, presence?.last_seen]
+    .map((value) => value === undefined ? Number.NaN : Date.parse(value))
+    .filter((value) => Number.isFinite(value));
+  if (timestamps.length === 0) {
+    return undefined;
+  }
+  return Math.max(...timestamps);
+}
+
+function latestPresenceForSubject(
+  subject: ConflictSubject,
+  presence: PresencePointer[]
+): PresencePointer | undefined {
+  if (subject.agent_id === undefined) {
+    return undefined;
+  }
+
+  return presence
+    .filter((item) => item.agent_id === subject.agent_id && matchesContext(subject, item))
+    .sort((left, right) => Date.parse(right.last_seen) - Date.parse(left.last_seen))[0];
+}
+
 function scopeKeyForReason(reason: ConflictReason): keyof PointerScope {
   switch (reason) {
     case "api_overlap":
@@ -115,6 +225,13 @@ function scopeKeyForReason(reason: ConflictReason): keyof PointerScope {
       return "env";
     case "domain_overlap":
       return "domains";
+    case "recent_api_change":
+      return "apis";
+    case "recent_table_change":
+      return "tables";
+    case "recent_env_change":
+      return "env";
+    case "recent_file_change":
     case "path_overlap":
     case "same_file":
       return "paths";
