@@ -170,15 +170,15 @@ async function edgesFor(root: string, domains: RepoMapDomain[]): Promise<RepoMap
 
   edges.push(...await inferredEdgesFor(root, domains));
 
-  addEdge(edges, byPath, "apps/dashboard", "packages/server");
+  addEdge(edges, byPath, "apps/dashboard", "apps/server");
   addEdge(edges, byPath, "apps/dashboard", "packages/protocol");
-  addEdge(edges, byPath, "packages/cli", "packages/server");
+  addEdge(edges, byPath, "packages/cli", "apps/server");
   addEdge(edges, byPath, "packages/cli", "packages/protocol");
-  addEdge(edges, byPath, "packages/server", "packages/protocol");
-  addEdge(edges, byPath, "packages/server", "packages/conflict-engine");
+  addEdge(edges, byPath, "apps/server", "packages/protocol");
+  addEdge(edges, byPath, "apps/server", "packages/conflict-engine");
   addEdge(edges, byPath, "packages/conflict-engine", "packages/protocol");
   addEdge(edges, byPath, "project-skills/suka-dashboard", "apps/dashboard");
-  addEdge(edges, byPath, "project-skills/suka-backend", "packages/server");
+  addEdge(edges, byPath, "project-skills/suka-backend", "apps/server");
   addEdge(edges, byPath, "project-skills/suka-architecture", "packages/protocol");
   addEdge(edges, byPath, "docs", "project-skills/suka-architecture");
   addEdge(edges, byPath, "scripts", "packages/cli");

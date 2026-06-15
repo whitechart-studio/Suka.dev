@@ -27,7 +27,7 @@ npm test
 ## Start the Local Server
 
 ```bash
-SUKA_PORT=4366 SUKA_DATA_FILE=.suka/state.json node packages/server/dist/bin.js
+SUKA_PORT=4366 SUKA_DATA_FILE=.suka/state.json node apps/server/dist/bin.js
 ```
 
 Open:

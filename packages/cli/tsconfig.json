@@ -12,8 +12,7 @@
       "path": "../protocol"
     },
     {
-      "path": "../server"
+      "path": "../../apps/server"
     }
   ]
 }
-

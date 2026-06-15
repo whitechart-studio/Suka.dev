@@ -9,10 +9,10 @@
   "include": ["src/**/*.ts"],
   "references": [
     {
-      "path": "../protocol"
+      "path": "../../packages/protocol"
     },
     {
-      "path": "../conflict-engine"
+      "path": "../../packages/conflict-engine"
     }
   ]
 }

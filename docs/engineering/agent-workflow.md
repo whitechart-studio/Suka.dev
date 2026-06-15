@@ -45,7 +45,7 @@ Check whether the intended scope collides with active work:
 
 ```bash
 node packages/cli/dist/bin.js conflicts \
-  --path packages/server/src/http.ts \
+  --path apps/server/src/http.ts \
   --api "POST /api/conflicts/check" \
   --since-session-start
 ```
@@ -61,7 +61,7 @@ node packages/cli/dist/bin.js conflicts --changed --since-session-start
 Use a normal claim when an agent owns a focused work area:
 
 ```bash
-node packages/cli/dist/bin.js claim "packages/server/**" \
+node packages/cli/dist/bin.js claim "apps/server/**" \
   --reason "Refactor scoped cleanup and realtime broadcasts"
 ```
 

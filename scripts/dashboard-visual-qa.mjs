@@ -80,7 +80,7 @@ try {
 
   console.log(JSON.stringify({
     errors,
-    inspectorHasServer: inspectorText.includes("Server") && inspectorText.includes("packages/server"),
+    inspectorHasServer: inspectorText.includes("Server") && inspectorText.includes("apps/server"),
     leftRailHiddenAfterCollapse,
     leftStoredAfterCollapse,
     leftStoredAfterRestore,

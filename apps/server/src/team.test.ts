@@ -7,7 +7,7 @@ test("builds local team summary from unscoped presence", () => {
     ...createEmptyState(),
     presence: [{
       agent_id: "codex-local-01",
-      current_files: ["packages/server/src/http.ts"],
+      current_files: ["apps/server/src/http.ts"],
       expires_at: "2099-06-12T11:00:00.000Z",
       id: "ptr_presence_local",
       last_seen: "2026-06-12T10:00:00.000Z",
@@ -32,7 +32,7 @@ test("builds scoped team summary across workspaces and sessions", () => {
       agent_id: "codex-a",
       assumptions: ["Session A owns server API work."],
       blockers: [],
-      changed_files: ["packages/server/src/http.ts"],
+      changed_files: ["apps/server/src/http.ts"],
       created_at: "2026-06-12T10:12:00.000Z",
       decisions_made: ["Keep brief storage scoped by session."],
       id: "ptr_brief_a",
@@ -56,7 +56,7 @@ test("builds scoped team summary across workspaces and sessions", () => {
       reason: "Claim API work",
       repo_id: "repo-a",
       scope: {
-        paths: ["packages/server/**"]
+        paths: ["apps/server/**"]
       },
       session_id: "session-a",
       type: "claim",
@@ -66,7 +66,7 @@ test("builds scoped team summary across workspaces and sessions", () => {
     events: [{
       affected_apis: [],
       affected_env: [],
-      affected_paths: ["packages/server/src/http.ts"],
+      affected_paths: ["apps/server/src/http.ts"],
       affected_tables: [],
       agent_id: "codex-a",
       created_at: "2026-06-12T10:05:00.000Z",
@@ -80,7 +80,7 @@ test("builds scoped team summary across workspaces and sessions", () => {
     }],
     presence: [{
       agent_id: "codex-a",
-      current_files: ["packages/server/src/http.ts"],
+      current_files: ["apps/server/src/http.ts"],
       expires_at: "2099-06-12T11:00:00.000Z",
       id: "ptr_presence_a",
       last_seen: "2026-06-12T10:10:00.000Z",
