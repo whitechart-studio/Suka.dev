@@ -1166,6 +1166,98 @@ test("brief read filters by current session context", async () => {
   assert.doesNotMatch(output.join(""), /ptr_brief_session_b/);
 });
 
+test("remind reports missing shared-truth updates for changed files", async () => {
+  const requests: Array<{ init?: RequestInit; url: string }> = [];
+  const output: string[] = [];
+  const result = await runCli({
+    argv: [
+      "remind",
+      "--server",
+      "http://suka.test",
+      "--path",
+      "package.json,packages/server/src/schema.ts",
+      "--workspace",
+      "workspace-a",
+      "--repo-id",
+      "repo-a",
+      "--session",
+      "session-a"
+    ],
+    env: {
+      SUKA_SESSION_ID: "session-a"
+    },
+    now: new Date("2026-06-12T10:00:00.000Z"),
+    fetch: async (url, init) => {
+      const request: { init?: RequestInit; url: string } = { url: String(url) };
+      if (init !== undefined) {
+        request.init = init;
+      }
+      requests.push(request);
+      if (String(url).endsWith("/api/state")) {
+        return jsonResponse(200, {
+          briefs: [],
+          events: []
+        });
+      }
+      return jsonResponse(200, [{ reason: "path_overlap" }]);
+    },
+    io: {
+      stdout: { write: (value: string) => output.push(value) },
+      stderr: { write: () => undefined }
+    }
+  });
+
+  assert.equal(result.exitCode, 1);
+  assert.equal(requests[0]?.url, "http://suka.test/api/state");
+  assert.equal(requests[1]?.url, "http://suka.test/api/conflicts/check");
+  assert.match(output.join(""), /Write a handoff brief/);
+  assert.match(output.join(""), /Publish shared contract change/);
+  assert.match(output.join(""), /Resolve conflict warnings/);
+});
+
+test("remind passes when changed files already have shared truth", async () => {
+  const output: string[] = [];
+  const result = await runCli({
+    argv: [
+      "remind",
+      "--server",
+      "http://suka.test",
+      "--path",
+      "packages/cli/src/commands.ts",
+      "--workspace",
+      "workspace-a",
+      "--repo-id",
+      "repo-a",
+      "--session",
+      "session-a"
+    ],
+    env: {
+      SUKA_SESSION_ID: "session-a"
+    },
+    fetch: async (url) => {
+      if (String(url).endsWith("/api/state")) {
+        return jsonResponse(200, {
+          briefs: [{
+            changed_files: ["packages/cli/src/commands.ts"],
+            repo_id: "repo-a",
+            session_id: "session-a",
+            workspace_id: "workspace-a"
+          }],
+          events: []
+        });
+      }
+      return jsonResponse(200, []);
+    },
+    io: {
+      stdout: { write: (value: string) => output.push(value) },
+      stderr: { write: () => undefined }
+    }
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.match(output.join(""), /shared truth looks current/);
+});
+
 test("conflicts includes workspace context from environment", async () => {
   const requests: Array<{ init?: RequestInit; url: string }> = [];
   const result = await runCli({

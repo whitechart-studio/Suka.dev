@@ -21,11 +21,14 @@ import {
   formatSessionStatus,
   formatState,
   formatTeam,
+  formatTruthReminders,
   helpText,
   type DoctorCheck,
   type DoctorReport,
   type SessionStartReport,
-  type SessionStatusReport
+  type SessionStatusReport,
+  type TruthReminder,
+  type TruthReminderReport
 } from "./format.js";
 import { parseArgv, readCsvFlag, readNumberFlag, readStringFlag } from "./parse.js";
 import type { CliContext, CliResult } from "./types.js";
@@ -98,6 +101,9 @@ export async function runCli(context: CliContext): Promise<CliResult> {
         return { exitCode: 0 };
       }
 
+      case "remind":
+        return await remindCommand(context, client, parsed.flags, config, now);
+
       case "claim":
       case "block": {
         const path = parsed.args[0];
@@ -169,7 +175,7 @@ export async function runCli(context: CliContext): Promise<CliResult> {
         const result = await client.checkConflicts({
           ...coordinationContext(parsed.flags, config, context.env),
           agent_id: readStringFlag(parsed.flags, "agent") ?? defaultAgentId(context.env),
-          paths: readCsvFlag(parsed.flags, "path"),
+          paths: conflictPathsFromFlags(parsed.flags),
           apis: readCsvFlag(parsed.flags, "api"),
           tables: readCsvFlag(parsed.flags, "table"),
           env: readCsvFlag(parsed.flags, "env"),
@@ -234,6 +240,80 @@ async function briefCommand(
   }
 
   throw new Error("brief requires a supported action: write or read.");
+}
+
+async function remindCommand(
+  context: CliContext,
+  client: SukaApiClient,
+  flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>,
+  now: Date
+): Promise<CliResult> {
+  const changedFiles = reminderChangedFiles(flags);
+  const reminders: TruthReminder[] = [];
+  const scopedContext = coordinationContext(flags, config, context.env);
+  const state = await client.getState();
+  const briefs = readPointerArray(state, "briefs").filter((brief) => matchesContextFilter(brief, scopedContext));
+  const events = readPointerArray(state, "events").filter((event) => matchesContextFilter(event, scopedContext));
+  const conflictWarnings = changedFiles.length === 0
+    ? []
+    : await client.checkConflicts({
+      ...scopedContext,
+      agent_id: readStringFlag(flags, "agent") ?? defaultAgentId(context.env),
+      paths: changedFiles,
+      ...conflictSinceContext(flags, context.env)
+    });
+  const warningCount = Array.isArray(conflictWarnings) ? conflictWarnings.length : 0;
+
+  if (context.env.SUKA_SESSION_ID === undefined) {
+    reminders.push({
+      action: "run `suka session start` and export the printed environment",
+      level: "warn",
+      paths: [],
+      reason: "session context is not set, so handoffs and cleanup cannot target the current work session",
+      title: "Start a coordinated session"
+    });
+  }
+
+  if (changedFiles.length > 0 && !hasBriefForFiles(briefs, changedFiles)) {
+    reminders.push({
+      action: "run `suka brief write \"<summary>\" --changed --next \"<next action>\"`",
+      level: "warn",
+      paths: changedFiles,
+      reason: "repo changes are not represented in a recent session brief",
+      title: "Write a handoff brief"
+    });
+  }
+
+  const criticalFiles = changedFiles.filter(isSharedTruthCriticalPath);
+  if (criticalFiles.length > 0 && !hasEventForFiles(events, criticalFiles)) {
+    reminders.push({
+      action: "run `suka event updated \"<what changed>\" --path <file>` for shared contracts",
+      level: "warn",
+      paths: criticalFiles,
+      reason: "schema, dependency, workflow, or environment-adjacent files changed without a matching event pointer",
+      title: "Publish shared contract change"
+    });
+  }
+
+  if (warningCount > 0) {
+    reminders.push({
+      action: "run `suka conflicts --changed --since-session-start` and review warnings before continuing",
+      level: "warn",
+      paths: changedFiles,
+      reason: `${warningCount} conflict warning${warningCount === 1 ? "" : "s"} matched the changed files`,
+      title: "Resolve conflict warnings"
+    });
+  }
+
+  const report: TruthReminderReport = {
+    changed_files: changedFiles,
+    conflict_warnings: warningCount,
+    generated_at: now.toISOString(),
+    reminders
+  };
+  context.io.stdout.write(flags.json === true ? formatJson(report) : formatTruthReminders(report));
+  return { exitCode: reminders.some((reminder) => reminder.level === "warn") ? 1 : 0 };
 }
 
 async function briefWriteCommand(
@@ -369,6 +449,73 @@ function matchesContextFilter(value: unknown, context: CoordinationContext): boo
 
 function changedFilesFromFlag(flags: Parameters<typeof readStringFlag>[0]): string[] {
   return flags.changed === true ? detectChangedFiles() : readCsvFlag(flags, "changed");
+}
+
+function reminderChangedFiles(flags: Parameters<typeof readStringFlag>[0]): string[] {
+  const explicitPaths = readCsvFlag(flags, "path");
+  if (explicitPaths.length > 0) {
+    return explicitPaths;
+  }
+  return detectChangedFiles();
+}
+
+function conflictPathsFromFlags(flags: Parameters<typeof readStringFlag>[0]): string[] {
+  if (flags.changed === true) {
+    return detectChangedFiles();
+  }
+  return readCsvFlag(flags, "path");
+}
+
+function readPointerArray(state: unknown, key: string): Record<string, unknown>[] {
+  if (!isRecord(state) || !Array.isArray(state[key])) {
+    return [];
+  }
+  return state[key].filter(isRecord);
+}
+
+function hasBriefForFiles(briefs: Record<string, unknown>[], files: string[]): boolean {
+  return briefs.some((brief) => {
+    const changedFiles = readStringArrayField(brief, "changed_files");
+    return files.some((file) => changedFiles.some((changedFile) => pathsOverlapForReminder(file, changedFile)));
+  });
+}
+
+function hasEventForFiles(events: Record<string, unknown>[], files: string[]): boolean {
+  return events.some((event) => {
+    const affectedPaths = readStringArrayField(event, "affected_paths");
+    return files.some((file) => affectedPaths.some((affectedPath) => pathsOverlapForReminder(file, affectedPath)));
+  });
+}
+
+function readStringArrayField(value: Record<string, unknown>, key: string): string[] {
+  const field = value[key];
+  return Array.isArray(field) ? field.filter((item): item is string => typeof item === "string") : [];
+}
+
+function pathsOverlapForReminder(left: string, right: string): boolean {
+  const normalizedLeft = normalizeReminderPath(left);
+  const normalizedRight = normalizeReminderPath(right);
+  return normalizedLeft === normalizedRight ||
+    normalizedLeft.startsWith(`${normalizedRight}/`) ||
+    normalizedRight.startsWith(`${normalizedLeft}/`);
+}
+
+function normalizeReminderPath(path: string): string {
+  return path.replaceAll("\\", "/").replace(/^\.\//, "").replace(/\/+/g, "/").replace(/\/$/, "");
+}
+
+function isSharedTruthCriticalPath(path: string): boolean {
+  const normalized = normalizeReminderPath(path).toLowerCase();
+  return normalized === "package.json" ||
+    normalized.endsWith("/package.json") ||
+    normalized.includes("package-lock.json") ||
+    normalized.includes("pnpm-lock.yaml") ||
+    normalized.includes("yarn.lock") ||
+    normalized.includes("schema") ||
+    normalized.includes("migration") ||
+    normalized.includes(".github/workflows/") ||
+    normalized.includes("dockerfile") ||
+    normalized.includes(".env");
 }
 
 async function sessionCommand(
