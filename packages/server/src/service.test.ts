@@ -138,6 +138,25 @@ test("cleans up pointers only inside provided coordination context", () => {
     created_at: "2026-06-12T10:00:00.000Z"
   });
   service.publish({
+    type: "brief",
+    id: "ptr_brief_session_a",
+    workspace_id: "workspace-a",
+    repo_id: "repo-a",
+    session_id: "session-a",
+    agent_id: "codex-trent-01",
+    summary: "Session A cleanup should include briefs.",
+    changed_files: ["src/billing/webhook.ts"],
+    decisions_made: ["Keep cleanup scoped to the active session."],
+    assumptions: [],
+    skipped_work: [],
+    risks: [],
+    blockers: [],
+    next_action: "Continue session B work.",
+    related_claims: ["ptr_claim_session_a"],
+    related_sessions: ["session-a"],
+    created_at: "2026-06-12T10:00:00.000Z"
+  });
+  service.publish({
     type: "claim",
     id: "ptr_claim_session_b",
     workspace_id: "workspace-a",
@@ -163,9 +182,11 @@ test("cleans up pointers only inside provided coordination context", () => {
     presence: 1,
     claims: 1,
     events: 1,
-    decisions: 1
+    decisions: 1,
+    briefs: 1
   });
   assert.deepEqual(result.state.claims.map((claim) => claim.id), ["ptr_claim_session_b"]);
+  assert.deepEqual(result.state.briefs, []);
 });
 
 test("rejects invalid pointers before persistence", () => {

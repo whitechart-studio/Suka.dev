@@ -1,4 +1,4 @@
-import type { ClaimPointer, CoordinationContext, DecisionPointer, EventPointer, PresencePointer } from "@suka/protocol";
+import type { BriefPointer, ClaimPointer, CoordinationContext, DecisionPointer, EventPointer, PresencePointer } from "@suka/protocol";
 import { createEmptyState, type SukaCleanupResult, type SukaState } from "./state.js";
 
 export interface SukaStore {
@@ -9,6 +9,7 @@ export interface SukaStore {
   cleanup(context: CoordinationContext): SukaCleanupResult;
   appendEvent(pointer: EventPointer): void;
   upsertDecision(pointer: DecisionPointer): void;
+  upsertBrief(pointer: BriefPointer): void;
   expire(now: Date): void;
 }
 
@@ -20,7 +21,8 @@ export class MemorySukaStore implements SukaStore {
       presence: [...initialState.presence],
       claims: [...initialState.claims],
       events: [...initialState.events],
-      decisions: [...initialState.decisions]
+      decisions: [...initialState.decisions],
+      briefs: [...initialState.briefs]
     };
   }
 
@@ -29,7 +31,8 @@ export class MemorySukaStore implements SukaStore {
       presence: [...this.#state.presence],
       claims: [...this.#state.claims],
       events: [...this.#state.events],
-      decisions: [...this.#state.decisions]
+      decisions: [...this.#state.decisions],
+      briefs: [...this.#state.briefs]
     };
   }
 
@@ -53,6 +56,7 @@ export class MemorySukaStore implements SukaStore {
     this.#state.claims = this.#state.claims.filter((claim) => !matchesContext(claim, context));
     this.#state.events = this.#state.events.filter((event) => !matchesContext(event, context));
     this.#state.decisions = this.#state.decisions.filter((decision) => !matchesContext(decision, context));
+    this.#state.briefs = this.#state.briefs.filter((brief) => !matchesContext(brief, context));
     const after = this.getState();
 
     return {
@@ -61,7 +65,8 @@ export class MemorySukaStore implements SukaStore {
         presence: before.presence.length - after.presence.length,
         claims: before.claims.length - after.claims.length,
         events: before.events.length - after.events.length,
-        decisions: before.decisions.length - after.decisions.length
+        decisions: before.decisions.length - after.decisions.length,
+        briefs: before.briefs.length - after.briefs.length
       },
       state: after
     };
@@ -73,6 +78,10 @@ export class MemorySukaStore implements SukaStore {
 
   upsertDecision(pointer: DecisionPointer): void {
     this.#state.decisions = upsertById(this.#state.decisions, pointer);
+  }
+
+  upsertBrief(pointer: BriefPointer): void {
+    this.#state.briefs = upsertById(this.#state.briefs, pointer);
   }
 
   expire(now: Date): void {
