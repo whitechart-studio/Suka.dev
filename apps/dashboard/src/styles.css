@@ -348,9 +348,92 @@ code {
 .right-stack {
   display: grid;
   gap: 8px;
-  grid-template-rows: minmax(150px, 0.9fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(260px, 1.2fr) minmax(150px, 0.8fr) minmax(0, 1fr) minmax(0, 0.8fr);
   height: 100%;
   min-height: 0;
+}
+
+.section-title {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.truth-section {
+  border-bottom: 1px solid var(--line);
+}
+
+.truth-grid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.truth-grid > div {
+  background: #f8fafc;
+  border: 1px solid #e5ebf2;
+  border-radius: 6px;
+  display: grid;
+  gap: 1px;
+  padding: 7px;
+}
+
+.truth-grid strong {
+  font-size: 16px;
+}
+
+.truth-grid span,
+.truth-row span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 680;
+  text-transform: uppercase;
+}
+
+.truth-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+}
+
+.truth-card.primary {
+  border-left: 3px solid var(--blue);
+}
+
+.truth-list {
+  display: grid;
+  gap: 5px;
+}
+
+.truth-list h3 {
+  align-items: center;
+  color: #334155;
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.truth-row {
+  background: #fff;
+  border: 1px solid #e5ebf2;
+  border-radius: 6px;
+  display: grid;
+  gap: 5px;
+  padding: 7px;
+}
+
+.truth-row > div {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.truth-row strong {
+  overflow-wrap: anywhere;
 }
 
 .inspector-section {
@@ -685,7 +768,7 @@ code {
 .metrics {
   display: grid;
   gap: 6px;
-  grid-template-columns: repeat(4, minmax(76px, 1fr));
+  grid-template-columns: repeat(5, minmax(68px, 1fr));
 }
 
 .metric {
