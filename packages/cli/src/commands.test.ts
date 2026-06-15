@@ -195,6 +195,7 @@ test("session start prints shared agent environment", async () => {
   assert.match(output.join(""), /export SUKA_WORKSPACE_ID='local-whitechart-studio-suka-dev'/);
   assert.match(output.join(""), /export SUKA_REPO_ID='whitechart-studio-suka-dev'/);
   assert.match(output.join(""), /export SUKA_SESSION_ID='session-20260614102030'/);
+  assert.match(output.join(""), /export SUKA_SESSION_STARTED_AT='2026-06-14T10:20:30.000Z'/);
   assert.match(output.join(""), /export SUKA_AGENT_ID='codex-local'/);
   assert.match(output.join(""), /export SUKA_AGENT_TOOL='codex'/);
 });
@@ -221,6 +222,7 @@ test("session start supports explicit context and json output", async () => {
       SUKA_AGENT_ID: "claude-local",
       SUKA_AGENT_TOOL: "claude-code"
     },
+    now: new Date("2026-06-14T10:20:30.000Z"),
     fetch: fakeFetch({}),
     io: {
       stdout: { write: (value: string) => output.push(value) },
@@ -235,6 +237,7 @@ test("session start supports explicit context and json output", async () => {
   assert.equal(body.env.SUKA_WORKSPACE_ID, "workspace-demo");
   assert.equal(body.env.SUKA_REPO_ID, "repo-demo");
   assert.equal(body.env.SUKA_SESSION_ID, "session-live");
+  assert.equal(body.env.SUKA_SESSION_STARTED_AT, "2026-06-14T10:20:30.000Z");
   assert.equal(body.env.SUKA_AGENT_ID, "claude-local");
   assert.equal(body.env.SUKA_AGENT_TOOL, "claude-code");
 });
@@ -271,6 +274,7 @@ test("session start writes env exports to a file", async () => {
     assert.match(envFile, /export SUKA_WORKSPACE_ID='local-whitechart-studio-suka-dev'/);
     assert.match(envFile, /export SUKA_REPO_ID='whitechart-studio-suka-dev'/);
     assert.match(envFile, /export SUKA_SESSION_ID='session-20260614102030'/);
+    assert.match(envFile, /export SUKA_SESSION_STARTED_AT='2026-06-14T10:20:30.000Z'/);
     assert.match(envFile, /export SUKA_AGENT_ID='codex-local'/);
     assert.match(envFile, /export SUKA_AGENT_TOOL='codex'/);
   } finally {
@@ -972,12 +976,14 @@ test("conflicts includes workspace context from environment", async () => {
       "--agent",
       "codex-01",
       "--path",
-      "packages/server/src/http.ts"
+      "packages/server/src/http.ts",
+      "--since-session-start"
     ],
     env: {
       SUKA_WORKSPACE_ID: "workspace-a",
       SUKA_REPO_ID: "repo-a",
-      SUKA_SESSION_ID: "session-a"
+      SUKA_SESSION_ID: "session-a",
+      SUKA_SESSION_STARTED_AT: "2026-06-12T10:00:00.000Z"
     },
     fetch: async (url, init) => {
       const request: { init?: RequestInit; url: string } = { url: String(url) };
@@ -1000,9 +1006,38 @@ test("conflicts includes workspace context from environment", async () => {
     paths: ["packages/server/src/http.ts"],
     repo_id: "repo-a",
     session_id: "session-a",
+    since: "2026-06-12T10:00:00.000Z",
     tables: [],
     workspace_id: "workspace-a"
   });
+});
+
+test("conflicts requires session start timestamp when requested", async () => {
+  const requests: unknown[] = [];
+  const errors: string[] = [];
+  const result = await runCli({
+    argv: [
+      "conflicts",
+      "--server",
+      "http://suka.test",
+      "--path",
+      "packages/server/src/http.ts",
+      "--since-session-start"
+    ],
+    env: {},
+    fetch: async (url, init) => {
+      requests.push({ init, url });
+      return jsonResponse(200, []);
+    },
+    io: {
+      stdout: { write: () => undefined },
+      stderr: { write: (value: string) => errors.push(value) }
+    }
+  });
+
+  assert.equal(result.exitCode, 1);
+  assert.equal(requests.length, 0);
+  assert.match(errors.join(""), /SUKA_SESSION_STARTED_AT/);
 });
 
 test("cleanup posts scoped cleanup context", async () => {

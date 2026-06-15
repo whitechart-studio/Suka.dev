@@ -8,7 +8,11 @@ export type ConflictReason =
   | "api_overlap"
   | "table_overlap"
   | "env_overlap"
-  | "domain_overlap";
+  | "domain_overlap"
+  | "recent_file_change"
+  | "recent_api_change"
+  | "recent_table_change"
+  | "recent_env_change";
 
 export interface ConflictSubject extends CoordinationContext {
   agent_id?: string;
@@ -18,6 +22,7 @@ export interface ConflictSubject extends CoordinationContext {
   tables?: string[];
   env?: string[];
   domains?: string[];
+  since?: string;
 }
 
 export interface ConflictWarning {

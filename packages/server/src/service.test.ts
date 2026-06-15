@@ -74,6 +74,38 @@ test("checks conflicts only inside provided coordination context", () => {
   assert.deepEqual(warnings[0]?.pointers, ["ptr_claim_session_a"]);
 });
 
+test("checks recent events for stale-context warnings", () => {
+  const service = createSukaService();
+  service.publish({
+    type: "event",
+    id: "ptr_event_api_change",
+    workspace_id: "workspace-a",
+    repo_id: "repo-a",
+    session_id: "session-a",
+    event_type: "api_contract_changed",
+    summary: "Payment API contract changed",
+    affected_paths: [],
+    affected_apis: ["POST /api/payments"],
+    affected_tables: [],
+    affected_env: [],
+    agent_id: "codex-trent-01",
+    created_at: "2026-06-12T10:05:00.000Z"
+  });
+
+  const warnings = service.checkConflicts({
+    workspace_id: "workspace-a",
+    repo_id: "repo-a",
+    session_id: "session-a",
+    agent_id: "cursor-maya-01",
+    apis: ["POST /api/payments"],
+    since: "2026-06-12T10:00:00.000Z"
+  });
+
+  assert.equal(warnings.length, 1);
+  assert.equal(warnings[0]?.reason, "recent_api_change");
+  assert.deepEqual(warnings[0]?.pointers, ["ptr_event_api_change"]);
+});
+
 test("cleans up pointers only inside provided coordination context", () => {
   const service = createSukaService();
   service.publish({
