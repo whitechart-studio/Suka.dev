@@ -32,6 +32,21 @@ export interface SessionStatusReport {
   workspace_id: string;
 }
 
+export interface TruthReminder {
+  action: string;
+  level: "info" | "warn";
+  paths: string[];
+  reason: string;
+  title: string;
+}
+
+export interface TruthReminderReport {
+  changed_files: string[];
+  conflict_warnings: number;
+  generated_at: string;
+  reminders: TruthReminder[];
+}
+
 export function formatState(value: unknown): string {
   const state = value as SukaState;
   const lines: string[] = [];
@@ -144,6 +159,33 @@ export function formatTeam(value: unknown): string {
   return `${lines.join("\n")}\n`;
 }
 
+export function formatTruthReminders(report: TruthReminderReport): string {
+  const lines: string[] = [];
+
+  lines.push("Suka shared-truth reminders");
+  lines.push(`changed files: ${report.changed_files.length}`);
+  lines.push(`conflict warnings: ${report.conflict_warnings}`);
+
+  if (report.changed_files.length > 0) {
+    lines.push(`files: ${report.changed_files.join(", ")}`);
+  }
+
+  if (report.reminders.length === 0) {
+    lines.push("- ok shared truth looks current");
+    return `${lines.join("\n")}\n`;
+  }
+
+  for (const reminder of report.reminders) {
+    lines.push(`- ${reminder.level} ${reminder.title}: ${reminder.reason}`);
+    lines.push(`  action: ${reminder.action}`);
+    if (reminder.paths.length > 0) {
+      lines.push(`  paths: ${reminder.paths.join(", ")}`);
+    }
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
 export function helpText(): string {
   return `Suka CLI
 
@@ -157,6 +199,7 @@ Usage:
   suka session end [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
   suka status [--server http://127.0.0.1:4366] [--json]
   suka team [--server http://127.0.0.1:4366] [--json]
+  suka remind [--changed] [--path PATH] [--workspace ID] [--repo-id ID] [--session ID] [--server URL] [--json]
   suka claim <path> [--block] [--agent AGENT] [--reason TEXT] [--ttl 45] [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
   suka block <path> [--agent AGENT] [--reason TEXT] [--ttl 45] [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
   suka presence [--agent AGENT] [--tool TOOL] [--repo REPO] [--workspace ID] [--repo-id ID] [--session ID] [--status editing] [--task TEXT] [--file PATH] [--ttl 120] [--watch] [--interval 15] [--server URL]
@@ -165,7 +208,7 @@ Usage:
   suka decisions [--server URL]
   suka brief write <summary> --next TEXT [--changed PATH] [--decision TEXT] [--assumption TEXT] [--skipped TEXT] [--risk TEXT] [--blocker TEXT] [--related-claim ID] [--related-session ID] [--worktree NAME] [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
   suka brief read [--workspace ID] [--repo-id ID] [--session ID|current] [--server URL] [--json]
-  suka conflicts [--workspace ID] [--repo-id ID] [--session ID] [--path PATH] [--api API] [--table TABLE] [--env NAME] [--domain DOMAIN] [--since ISO] [--since-session-start] [--server URL]
+  suka conflicts [--changed] [--workspace ID] [--repo-id ID] [--session ID] [--path PATH] [--api API] [--table TABLE] [--env NAME] [--domain DOMAIN] [--since ISO] [--since-session-start] [--server URL]
   suka release <claim-id> [--server URL]
   suka cleanup [--workspace ID] [--repo ID] [--session ID] [--server URL]
 
