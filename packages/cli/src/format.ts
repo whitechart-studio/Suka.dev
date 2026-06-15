@@ -164,7 +164,7 @@ Usage:
   suka decisions [--server URL]
   suka brief write <summary> --next TEXT [--changed PATH] [--decision TEXT] [--assumption TEXT] [--skipped TEXT] [--risk TEXT] [--blocker TEXT] [--related-claim ID] [--related-session ID] [--worktree NAME] [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
   suka brief read [--workspace ID] [--repo-id ID] [--session ID|current] [--server URL] [--json]
-  suka conflicts [--workspace ID] [--repo-id ID] [--session ID] [--path PATH] [--api API] [--table TABLE] [--env NAME] [--domain DOMAIN] [--server URL]
+  suka conflicts [--workspace ID] [--repo-id ID] [--session ID] [--path PATH] [--api API] [--table TABLE] [--env NAME] [--domain DOMAIN] [--since ISO] [--since-session-start] [--server URL]
   suka release <claim-id> [--server URL]
   suka cleanup [--workspace ID] [--repo ID] [--session ID] [--server URL]
 
@@ -176,6 +176,7 @@ Environment:
   SUKA_WORKSPACE_ID Default workspace context
   SUKA_REPO_ID      Default repo context
   SUKA_SESSION_ID   Default session context
+  SUKA_SESSION_STARTED_AT Default session start timestamp for conflict checks
 `;
 }
 

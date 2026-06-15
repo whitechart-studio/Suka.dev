@@ -171,7 +171,8 @@ export async function runCli(context: CliContext): Promise<CliResult> {
           apis: readCsvFlag(parsed.flags, "api"),
           tables: readCsvFlag(parsed.flags, "table"),
           env: readCsvFlag(parsed.flags, "env"),
-          domains: readCsvFlag(parsed.flags, "domain")
+          domains: readCsvFlag(parsed.flags, "domain"),
+          ...conflictSinceContext(parsed.flags, context.env)
         });
         context.io.stdout.write(formatJson(result));
         return { exitCode: 0 };
@@ -434,6 +435,7 @@ async function sessionStartCommand(
       SUKA_AGENT_TOOL: tool,
       SUKA_REPO_ID: repoId,
       SUKA_SERVER_URL: serverUrl,
+      SUKA_SESSION_STARTED_AT: now.toISOString(),
       SUKA_SESSION_ID: sessionId,
       SUKA_WORKSPACE_ID: workspaceId
     },
@@ -693,6 +695,23 @@ function coordinationContext(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function conflictSinceContext(
+  flags: Parameters<typeof readStringFlag>[0],
+  env: NodeJS.ProcessEnv
+): { since?: string } {
+  const explicitSince = readStringFlag(flags, "since");
+  if (explicitSince !== undefined) {
+    return { since: explicitSince };
+  }
+  if (flags["since-session-start"] === true) {
+    if (env.SUKA_SESSION_STARTED_AT === undefined) {
+      throw new Error("conflicts --since-session-start requires SUKA_SESSION_STARTED_AT.");
+    }
+    return { since: env.SUKA_SESSION_STARTED_AT };
+  }
+  return {};
 }
 
 function detectAgentTool(env: NodeJS.ProcessEnv): string {
