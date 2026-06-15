@@ -18,9 +18,11 @@ import {
   Activity,
   Bot,
   CheckCheck,
+  ClipboardList,
   Code2,
   Crosshair,
   Copy,
+  FileClock,
   Gauge,
   GitBranch,
   HardDrive,
@@ -57,6 +59,7 @@ type SukaState = {
   claims: ClaimPointer[];
   events: EventPointer[];
   decisions: DecisionPointer[];
+  briefs: BriefPointer[];
 };
 
 type PresencePointer = {
@@ -89,6 +92,8 @@ type EventPointer = {
   created_at: string;
   affected_paths?: string[];
   affected_apis?: string[];
+  affected_tables?: string[];
+  affected_env?: string[];
 };
 
 type DecisionPointer = {
@@ -97,6 +102,25 @@ type DecisionPointer = {
   confidence?: string;
   evidence?: string[];
   scope?: Scope;
+  created_at?: string;
+  updated_at?: string;
+};
+
+type BriefPointer = {
+  id: string;
+  agent_id: string;
+  summary: string;
+  changed_files: string[];
+  decisions_made: string[];
+  assumptions: string[];
+  skipped_work: string[];
+  risks: string[];
+  blockers: string[];
+  next_action: string;
+  related_claims: string[];
+  related_sessions: string[];
+  worktree?: string;
+  created_at: string;
 };
 
 type Scope = {
@@ -172,6 +196,7 @@ type TeamWorkspaceSummary = {
   claims: number;
   events: number;
   decisions: number;
+  briefs: number;
 };
 
 type SessionRoom = {
@@ -184,6 +209,7 @@ type SessionRoom = {
 };
 
 const emptyState: SukaState = {
+  briefs: [],
   claims: [],
   decisions: [],
   events: [],
@@ -258,8 +284,8 @@ function Dashboard(): React.ReactElement {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
-      const payload = await response.json() as { data: SukaState };
-      setState(payload.data);
+      const payload = await response.json() as { data: Partial<SukaState> };
+      setState(normalizeState(payload.data));
       setStatus("connected");
     } catch {
       setStatus("error");
@@ -521,6 +547,7 @@ function Dashboard(): React.ReactElement {
               <Metric icon={<LockKeyhole size={13} />} label="claims" value={state.claims.length} />
               <Metric icon={<Activity size={13} />} label="events" value={state.events.length} />
               <Metric icon={<CheckCheck size={13} />} label="decisions" value={state.decisions.length} />
+              <Metric icon={<FileClock size={13} />} label="briefs" value={state.briefs.length} />
             </div>
           </div>
           <div className="flow-wrap">
@@ -591,6 +618,13 @@ function Dashboard(): React.ReactElement {
           />
           {rightOpen ? (
             <div className="right-stack">
+              <CurrentTruthPanel
+                briefs={state.briefs}
+                claims={state.claims}
+                decisions={state.decisions}
+                events={state.events}
+                insights={visibleConflictInsights}
+              />
               <SelectionInspector
                 defaultAgentId={state.presence[0]?.agent_id ?? "local-agent"}
                 onCreateClaim={createClaim}
@@ -886,6 +920,145 @@ function CompactRisk({ count }: { count: number }): React.ReactElement {
   return <div className="compact-risk"><TriangleAlert size={18} /><span>{count}</span></div>;
 }
 
+function CurrentTruthPanel({
+  briefs,
+  claims,
+  decisions,
+  events,
+  insights
+}: {
+  briefs: BriefPointer[];
+  claims: ClaimPointer[];
+  decisions: DecisionPointer[];
+  events: EventPointer[];
+  insights: ConflictInsight[];
+}): React.ReactElement {
+  const latestBrief = briefs.slice().sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))[0];
+  const latestDecision = decisions.slice().sort((left, right) => pointerTime(right) - pointerTime(left))[0];
+  const recentEvents = events.slice().sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at)).slice(0, 3);
+  const ownerCount = new Set(claims.map((claim) => claim.agent_id)).size;
+  const activeBlockers = briefs.flatMap((brief) => brief.blockers).filter(Boolean).slice(0, 3);
+  const staleSignals = recentEvents
+    .filter((event) => hasCriticalScope(event) || event.event_type.includes("failed"))
+    .slice(0, 3);
+
+  return (
+    <section className="rail-section truth-section">
+      <div className="section-title">
+        <h2><ClipboardList size={14} /> Current Truth</h2>
+        <Badge tone={insights.length > 0 || activeBlockers.length > 0 ? "risk" : "live"} icon={<Gauge size={13} />}>
+          {insights.length + activeBlockers.length} risks
+        </Badge>
+      </div>
+      <div className="truth-grid">
+        <TruthStat label="owners" value={ownerCount} />
+        <TruthStat label="claims" value={claims.length} />
+        <TruthStat label="briefs" value={briefs.length} />
+      </div>
+      {latestBrief ? (
+        <article className="truth-card primary">
+          <div className="rail-card-head">
+            <strong><FileClock size={13} />{truncate(latestBrief.summary, 58)}</strong>
+            <Badge tone="info" icon={<Bot size={13} />}>{latestBrief.agent_id}</Badge>
+          </div>
+          <p>{relativeTime(latestBrief.created_at)} / next: {truncate(latestBrief.next_action, 72)}</p>
+          <PathList paths={[...latestBrief.changed_files, ...latestBrief.related_claims, ...latestBrief.related_sessions]} />
+        </article>
+      ) : (
+        <p className="empty">No session brief written yet.</p>
+      )}
+      <TruthList
+        icon={<LockKeyhole size={13} />}
+        items={claims.slice(0, 3).map((claim) => ({
+          key: claim.id,
+          meta: claim.agent_id,
+          paths: scopeValues(claim.scope),
+          title: claim.reason
+        }))}
+        title="Ownership"
+      />
+      <TruthList
+        icon={<Activity size={13} />}
+        items={recentEvents.map((event) => ({
+          key: `${event.agent_id}:${event.created_at}:${event.summary}`,
+          meta: `${event.agent_id} / ${relativeTime(event.created_at)}`,
+          paths: eventScopeValues(event),
+          title: event.summary
+        }))}
+        title="Recent Changes"
+      />
+      <TruthList
+        icon={<CheckCheck size={13} />}
+        items={latestDecision ? [{
+          key: latestDecision.title,
+          meta: latestDecision.confidence ?? latestDecision.status,
+          paths: scopeValues(latestDecision.scope),
+          title: latestDecision.title
+        }] : []}
+        title="Accepted Decision"
+      />
+      <TruthList
+        icon={<TriangleAlert size={13} />}
+        items={[
+          ...activeBlockers.map((blocker, index) => ({
+            key: `blocker:${index}:${blocker}`,
+            meta: "brief blocker",
+            paths: [],
+            title: blocker
+          })),
+          ...staleSignals.map((event) => ({
+            key: `stale:${event.agent_id}:${event.created_at}:${event.summary}`,
+            meta: event.event_type,
+            paths: eventScopeValues(event),
+            title: `Recent ${event.event_type.replaceAll("_", " ")}`
+          })),
+          ...insights.slice(0, 2).map((insight) => ({
+            key: insight.id,
+            meta: insight.severity,
+            paths: insight.paths,
+            title: insight.message
+          }))
+        ]}
+        title="Risky To Touch"
+      />
+    </section>
+  );
+}
+
+function TruthStat({ label, value }: { label: string; value: number }): React.ReactElement {
+  return (
+    <div>
+      <strong>{value}</strong>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function TruthList({
+  icon,
+  items,
+  title
+}: {
+  icon: React.ReactNode;
+  items: Array<{ key: string; meta: string; paths: string[]; title: string }>;
+  title: string;
+}): React.ReactElement {
+  return (
+    <div className="truth-list">
+      <h3>{icon}{title}</h3>
+      {items.length === 0 ? <p className="empty">None.</p> : items.map((item) => (
+        <article className="truth-row" key={item.key}>
+          <div>
+            <strong>{truncate(item.title, 62)}</strong>
+            <span>{truncate(item.meta, 68)}</span>
+          </div>
+          <PathList paths={item.paths} />
+        </article>
+      ))}
+    </div>
+  );
+}
+
 function SelectionInspector({
   defaultAgentId,
   onCreateClaim,
@@ -1103,7 +1276,7 @@ function ActivityStream({ events }: { events: EventPointer[] }): React.ReactElem
             <Badge tone="neutral" icon={<Sparkles size={13} />}>{event.event_type}</Badge>
           </div>
           <p>{event.agent_id} / {event.created_at}</p>
-          <PathList paths={[...(event.affected_paths ?? []), ...(event.affected_apis ?? [])]} />
+          <PathList paths={eventScopeValues(event)} />
         </article>
       ))}
     </section>
@@ -1118,11 +1291,21 @@ function PathList({ paths }: { paths: string[] }): React.ReactElement {
   return <div className="paths">{safePaths.map((path) => <code key={path}>{path}</code>)}</div>;
 }
 
+function normalizeState(state: Partial<SukaState>): SukaState {
+  return {
+    briefs: Array.isArray(state.briefs) ? state.briefs : [],
+    claims: Array.isArray(state.claims) ? state.claims : [],
+    decisions: Array.isArray(state.decisions) ? state.decisions : [],
+    events: Array.isArray(state.events) ? state.events : [],
+    presence: Array.isArray(state.presence) ? state.presence : []
+  };
+}
+
 function buildDomainModel(state: SukaState, domains: Domain[]): DomainModel[] {
   return domains.map((domain) => {
     const claims = state.claims.filter((item) => touchesDomain(domain, scopeValues(item.scope)));
     const presence = state.presence.filter((item) => touchesDomain(domain, [...(item.current_files ?? []), item.task ?? "", item.branch ?? ""]));
-    const events = state.events.filter((item) => touchesDomain(domain, [...(item.affected_paths ?? []), ...(item.affected_apis ?? []), item.summary ?? ""]));
+    const events = state.events.filter((item) => touchesDomain(domain, [...eventScopeValues(item), item.summary ?? ""]));
     const decisions = state.decisions.filter((item) => touchesDomain(domain, [...scopeValues(item.scope), item.title ?? ""]));
     const failures = events.filter((event) => event.event_type.includes("failed"));
     return { ...domain, claims, decisions, events, failures, presence };
@@ -1281,6 +1464,28 @@ function scopeValues(scope: Scope | undefined): string[] {
   ];
 }
 
+function eventScopeValues(event: EventPointer): string[] {
+  return [
+    ...(event.affected_paths ?? []),
+    ...(event.affected_apis ?? []),
+    ...(event.affected_tables ?? []),
+    ...(event.affected_env ?? [])
+  ];
+}
+
+function hasCriticalScope(event: EventPointer): boolean {
+  return Boolean(
+    (event.affected_apis?.length ?? 0) > 0 ||
+    (event.affected_tables?.length ?? 0) > 0 ||
+    (event.affected_env?.length ?? 0) > 0
+  );
+}
+
+function pointerTime(pointer: { created_at?: string; updated_at?: string }): number {
+  const value = Date.parse(pointer.updated_at ?? pointer.created_at ?? "");
+  return Number.isNaN(value) ? 0 : value;
+}
+
 function touchesDomain(domain: Domain, values: string[]): boolean {
   const haystack = values.join(" ").toLowerCase();
   const domainPath = domain.path?.toLowerCase();
@@ -1347,6 +1552,18 @@ function initials(value: string): string {
 
 function truncate(value: string, maxLength: number): string {
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
+}
+
+function relativeTime(timestamp: string): string {
+  const time = Date.parse(timestamp);
+  if (Number.isNaN(time)) return "unknown";
+  const seconds = Math.max(0, Math.round((Date.now() - time) / 1000));
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
 }
 
 function slug(value: string): string {
