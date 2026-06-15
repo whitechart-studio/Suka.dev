@@ -604,6 +604,53 @@ test("claim publishes a claim pointer", async () => {
   assert.equal(body.agent_id, "codex-01");
 });
 
+test("block publishes a blocked scope claim pointer", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const result = await runCli({
+    argv: ["block", "src/billing/**", "--server", "http://suka.test", "--agent", "codex-01", "--reason", "Keep billing isolated"],
+    env: {},
+    now: new Date("2026-06-12T10:00:00.000Z"),
+    fetch: async (url, init) => {
+      const request: { url: string; init?: RequestInit } = { url: String(url) };
+      if (init !== undefined) {
+        request.init = init;
+      }
+      requests.push(request);
+      return jsonResponse(201, JSON.parse(String(init?.body)) as unknown);
+    },
+    io: silentIo()
+  });
+
+  assert.equal(result.exitCode, 0);
+  const body = JSON.parse(String(requests[0]?.init?.body)) as { kind: string; reason: string; scope: { paths: string[] } };
+  assert.equal(body.kind, "blocked_scope");
+  assert.equal(body.reason, "Keep billing isolated");
+  assert.deepEqual(body.scope.paths, ["src/billing/**"]);
+});
+
+test("claim supports blocked ownership boundaries", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const result = await runCli({
+    argv: ["claim", "src/api/**", "--block", "--server", "http://suka.test", "--agent", "codex-01"],
+    env: {},
+    now: new Date("2026-06-12T10:00:00.000Z"),
+    fetch: async (url, init) => {
+      const request: { url: string; init?: RequestInit } = { url: String(url) };
+      if (init !== undefined) {
+        request.init = init;
+      }
+      requests.push(request);
+      return jsonResponse(201, JSON.parse(String(init?.body)) as unknown);
+    },
+    io: silentIo()
+  });
+
+  assert.equal(result.exitCode, 0);
+  const body = JSON.parse(String(requests[0]?.init?.body)) as { kind: string; reason: string };
+  assert.equal(body.kind, "blocked_scope");
+  assert.equal(body.reason, "Do not touch src/api/**");
+});
+
 test("presence publishes an agent heartbeat with repeated files", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const result = await runCli({

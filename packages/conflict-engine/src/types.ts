@@ -3,6 +3,7 @@ import type { ClaimPointer, CoordinationContext, EventPointer, PointerScope, Pre
 export type ConflictSeverity = "low" | "medium" | "high";
 
 export type ConflictReason =
+  | "blocked_scope"
   | "same_file"
   | "path_overlap"
   | "api_overlap"

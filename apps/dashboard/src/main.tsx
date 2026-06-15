@@ -80,6 +80,7 @@ type PresencePointer = {
 type ClaimPointer = {
   id: string;
   agent_id: string;
+  kind?: "soft_claim" | "blocked_scope";
   reason: string;
   scope: Scope;
   expires_at?: string;
@@ -971,7 +972,7 @@ function CurrentTruthPanel({
         icon={<LockKeyhole size={13} />}
         items={claims.slice(0, 3).map((claim) => ({
           key: claim.id,
-          meta: claim.agent_id,
+          meta: `${claim.kind === "blocked_scope" ? "blocked by" : "owned by"} ${claim.agent_id}`,
           paths: scopeValues(claim.scope),
           title: claim.reason
         }))}
@@ -1204,7 +1205,7 @@ function RiskQueue({
         <article className="rail-card" key={domain.id}>
           <div className="rail-card-head">
             <strong>{domain.failures.length > 0 ? <TriangleAlert size={13} /> : <LockKeyhole size={13} />}{domain.name}</strong>
-            <Badge tone={domain.failures.length > 0 ? "fail" : "risk"} icon={domain.failures.length > 0 ? <TriangleAlert size={13} /> : <LockKeyhole size={13} />}>{domain.failures.length > 0 ? "failing" : "claimed"}</Badge>
+            <Badge tone={domain.failures.length > 0 || hasBlockedClaims(domain) ? "fail" : "risk"} icon={domain.failures.length > 0 || hasBlockedClaims(domain) ? <TriangleAlert size={13} /> : <LockKeyhole size={13} />}>{domain.failures.length > 0 ? "failing" : hasBlockedClaims(domain) ? "blocked" : "claimed"}</Badge>
           </div>
           <p>{domain.claims.length} claims / {domain.failures.length} failures / {domain.events.length} events</p>
           <PathList paths={domain.claims.flatMap((claim) => claim.scope?.paths ?? [])} />
@@ -1510,6 +1511,7 @@ function severityRank(severity: ConflictInsight["severity"]): number {
 
 function domainState(domain: DomainModel): string {
   if (domain.failures.length > 0) return "failing";
+  if (hasBlockedClaims(domain)) return "blocked";
   if (domain.claims.length > 0) return "claimed";
   if (domain.presence.length > 0) return "active";
   if (domain.decisions.length > 0) return "decision";
@@ -1518,10 +1520,15 @@ function domainState(domain: DomainModel): string {
 
 function stateColor(domain: DomainModel): string {
   if (domain.failures.length > 0) return "#e11d48";
+  if (hasBlockedClaims(domain)) return "#e11d48";
   if (domain.claims.length > 0) return "#d97706";
   if (domain.presence.length > 0) return "#2563eb";
   if (domain.decisions.length > 0) return "#4f46e5";
   return domain.color;
+}
+
+function hasBlockedClaims(domain: DomainModel): boolean {
+  return domain.claims.some((claim) => claim.kind === "blocked_scope");
 }
 
 function agentDomains(agent: PresencePointer, domains: Domain[]): string[] {

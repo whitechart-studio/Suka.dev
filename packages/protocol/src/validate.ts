@@ -7,6 +7,7 @@ import {
 } from "./constants.js";
 import type {
   BriefPointer,
+  ClaimKind,
   ClaimPointer,
   DecisionPointer,
   EventPointer,
@@ -18,6 +19,7 @@ import type {
 } from "./types.js";
 
 type MutableIssueList = ValidationIssue[];
+const CLAIM_KINDS = ["soft_claim", "blocked_scope"] as const satisfies readonly ClaimKind[];
 
 export function validatePointer(value: unknown): ValidationResult<Pointer> {
   const issues: MutableIssueList = [];
@@ -94,7 +96,7 @@ export function validateClaimPointer(value: unknown): ValidationResult<ClaimPoin
   requireString(value, "agent_id", issues);
   requireScope(value, "scope", issues);
   requireString(value, "reason", issues);
-  requireLiteral(value, "kind", "soft_claim", issues);
+  requireEnum(value, "kind", CLAIM_KINDS, issues);
   requireTimestamp(value, "created_at", issues);
   requireTimestamp(value, "expires_at", issues);
 

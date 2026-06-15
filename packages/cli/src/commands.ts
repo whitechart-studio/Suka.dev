@@ -98,13 +98,15 @@ export async function runCli(context: CliContext): Promise<CliResult> {
         return { exitCode: 0 };
       }
 
-      case "claim": {
+      case "claim":
+      case "block": {
         const path = parsed.args[0];
         if (path === undefined) {
-          throw new Error("claim requires a path argument.");
+          throw new Error(`${parsed.command} requires a path argument.`);
         }
 
         const ttlMinutes = readNumberFlag(parsed.flags, "ttl", 45);
+        const kind = parsed.command === "block" || parsed.flags.block === true ? "blocked_scope" : "soft_claim";
         const pointer = {
           type: "claim",
           id: createPointerId("claim", now),
@@ -113,8 +115,8 @@ export async function runCli(context: CliContext): Promise<CliResult> {
           scope: {
             paths: [path]
           },
-          reason: readStringFlag(parsed.flags, "reason") ?? `Claim ${path}`,
-          kind: "soft_claim",
+          reason: readStringFlag(parsed.flags, "reason") ?? (kind === "blocked_scope" ? `Do not touch ${path}` : `Claim ${path}`),
+          kind,
           created_at: now.toISOString(),
           expires_at: new Date(now.getTime() + ttlMinutes * 60_000).toISOString()
         };

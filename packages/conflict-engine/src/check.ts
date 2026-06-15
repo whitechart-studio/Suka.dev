@@ -42,7 +42,7 @@ function checkClaim(subject: ConflictSubject, claim: ClaimPointer): ConflictWarn
 
   if (sameFileMatches.length > 0) {
     warnings.push(
-      warning("high", "same_file", `Active claim touches the same file: ${sameFileMatches[0]}.`, {
+      warning(claimSeverity(claim, "high"), claimReason(claim, "same_file"), claimMessage(claim, `Active claim touches the same file: ${sameFileMatches[0]}.`), {
         paths: sameFileMatches
       }, claim, subject)
     );
@@ -52,7 +52,7 @@ function checkClaim(subject: ConflictSubject, claim: ClaimPointer): ConflictWarn
     );
     if (overlappingPaths.length > 0) {
       warnings.push(
-        warning("medium", "path_overlap", `Active claim overlaps ${overlappingPaths[0]}.`, {
+        warning(claimSeverity(claim, "medium"), claimReason(claim, "path_overlap"), claimMessage(claim, `Active claim overlaps ${overlappingPaths[0]}.`), {
           paths: overlappingPaths
         }, claim, subject)
       );
@@ -121,11 +121,24 @@ function overlapWarnings(
   }
 
   const scopeKey = scopeKeyForReason(reason);
+  const warningReason = claimReason(claim, reason);
   return [
-    warning(severity, reason, `Active claim overlaps ${label}: ${matches[0]}.`, {
+    warning(claimSeverity(claim, severity), warningReason, claimMessage(claim, `Active claim overlaps ${label}: ${matches[0]}.`), {
       [scopeKey]: matches
     }, claim, subject)
   ];
+}
+
+function claimSeverity(claim: ClaimPointer, severity: ConflictSeverity): ConflictSeverity {
+  return claim.kind === "blocked_scope" ? "high" : severity;
+}
+
+function claimReason(claim: ClaimPointer, reason: ConflictReason): ConflictReason {
+  return claim.kind === "blocked_scope" ? "blocked_scope" : reason;
+}
+
+function claimMessage(claim: ClaimPointer, message: string): string {
+  return claim.kind === "blocked_scope" ? `Do-not-touch scope blocked by ${claim.agent_id}: ${claim.reason}.` : message;
 }
 
 function recentOverlapWarnings(
@@ -232,6 +245,7 @@ function scopeKeyForReason(reason: ConflictReason): keyof PointerScope {
     case "recent_env_change":
       return "env";
     case "recent_file_change":
+    case "blocked_scope":
     case "path_overlap":
     case "same_file":
       return "paths";

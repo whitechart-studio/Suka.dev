@@ -17,6 +17,7 @@ export type SukaConfigMode = (typeof SUKA_CONFIG_MODES)[number];
 export type IsoTimestamp = string;
 export type PointerId = string;
 export type AgentId = string;
+export type ClaimKind = "soft_claim" | "blocked_scope";
 
 export interface CoordinationContext {
   workspace_id?: string;
@@ -56,7 +57,7 @@ export interface ClaimPointer extends BasePointer {
   agent_id: AgentId;
   scope: PointerScope;
   reason: string;
-  kind: "soft_claim";
+  kind: ClaimKind;
   created_at: IsoTimestamp;
   expires_at: IsoTimestamp;
 }
