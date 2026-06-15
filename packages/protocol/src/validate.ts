@@ -6,6 +6,7 @@ import {
   PRESENCE_STATUSES
 } from "./constants.js";
 import type {
+  BriefPointer,
   ClaimPointer,
   DecisionPointer,
   EventPointer,
@@ -45,6 +46,8 @@ export function validatePointer(value: unknown): ValidationResult<Pointer> {
       return validateEventPointer(value);
     case "decision":
       return validateDecisionPointer(value);
+    case "brief":
+      return validateBriefPointer(value);
     default:
       return fail([
         {
@@ -148,6 +151,32 @@ export function validateDecisionPointer(value: unknown): ValidationResult<Decisi
   }
 
   return issues.length === 0 ? ok(value as unknown as DecisionPointer) : fail(issues);
+}
+
+export function validateBriefPointer(value: unknown): ValidationResult<BriefPointer> {
+  const issues: MutableIssueList = [];
+  if (!isRecord(value)) {
+    return failObject();
+  }
+
+  requireString(value, "id", issues);
+  optionalContext(value, issues);
+  requireLiteral(value, "type", "brief", issues);
+  requireString(value, "agent_id", issues);
+  requireString(value, "summary", issues);
+  requireStringArray(value, "changed_files", issues);
+  requireStringArray(value, "decisions_made", issues);
+  requireStringArray(value, "assumptions", issues);
+  requireStringArray(value, "skipped_work", issues);
+  requireStringArray(value, "risks", issues);
+  requireStringArray(value, "blockers", issues);
+  requireString(value, "next_action", issues);
+  requireStringArray(value, "related_claims", issues);
+  requireStringArray(value, "related_sessions", issues);
+  optionalString(value, "worktree", issues);
+  requireTimestamp(value, "created_at", issues);
+
+  return issues.length === 0 ? ok(value as unknown as BriefPointer) : fail(issues);
 }
 
 function requireScope(record: Record<string, unknown>, key: string, issues: MutableIssueList): void {

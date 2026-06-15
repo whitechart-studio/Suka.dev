@@ -41,6 +41,7 @@ export function formatState(value: unknown): string {
   lines.push(`claims: ${state.claims?.length ?? 0}`);
   lines.push(`events: ${state.events?.length ?? 0}`);
   lines.push(`decisions: ${state.decisions?.length ?? 0}`);
+  lines.push(`briefs: ${state.briefs?.length ?? 0}`);
 
   for (const presence of state.presence ?? []) {
     lines.push(`- ${presence.agent_id} ${presence.status} ${presence.task ?? ""}`.trim());
@@ -118,7 +119,7 @@ export function formatTeam(value: unknown): string {
 
   for (const workspace of summary.workspaces ?? []) {
     lines.push(
-      `- workspace ${workspace.workspace_id}: ${workspace.active_agents} agents, ${workspace.claims} claims, ${workspace.events} events, ${workspace.decisions} decisions`
+      `- workspace ${workspace.workspace_id}: ${workspace.active_agents} agents, ${workspace.claims} claims, ${workspace.events} events, ${workspace.decisions} decisions, ${workspace.briefs} briefs`
     );
     if (workspace.repo_ids.length > 0) {
       lines.push(`  repos: ${workspace.repo_ids.join(", ")}`);

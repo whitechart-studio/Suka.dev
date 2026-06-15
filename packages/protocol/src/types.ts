@@ -87,11 +87,29 @@ export interface DecisionPointer extends BasePointer {
   updated_at?: IsoTimestamp;
 }
 
+export interface BriefPointer extends BasePointer {
+  type: "brief";
+  agent_id: AgentId;
+  summary: string;
+  changed_files: string[];
+  decisions_made: string[];
+  assumptions: string[];
+  skipped_work: string[];
+  risks: string[];
+  blockers: string[];
+  next_action: string;
+  related_claims: PointerId[];
+  related_sessions: string[];
+  worktree?: string;
+  created_at: IsoTimestamp;
+}
+
 export type Pointer =
   | PresencePointer
   | ClaimPointer
   | EventPointer
-  | DecisionPointer;
+  | DecisionPointer
+  | BriefPointer;
 
 export type ValidationIssueCode =
   | "invalid_type"
@@ -173,6 +191,7 @@ export interface TeamWorkspaceSummary {
   claims: number;
   events: number;
   decisions: number;
+  briefs: number;
 }
 
 export interface TeamConnectionSummary {

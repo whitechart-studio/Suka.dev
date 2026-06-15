@@ -1,4 +1,4 @@
-export const POINTER_TYPES = ["presence", "claim", "event", "decision"] as const;
+export const POINTER_TYPES = ["presence", "claim", "event", "decision", "brief"] as const;
 
 export const PRESENCE_STATUSES = [
   "online",

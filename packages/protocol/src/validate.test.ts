@@ -83,6 +83,7 @@ test("documents the team connection summary contract", () => {
     workspaces: [{
       active_agents: 1,
       claims: 2,
+      briefs: 0,
       decisions: 1,
       events: 3,
       repo_ids: ["repo-a"],
@@ -94,6 +95,57 @@ test("documents the team connection summary contract", () => {
   assert.equal(summary.mode, "scoped");
   assert.equal(summary.workspaces[0]?.workspace_id, "workspace-a");
   assert.equal(summary.members[0]?.agent_id, "codex-trent-01");
+});
+
+test("accepts a valid brief pointer", () => {
+  const result = validatePointer({
+    type: "brief",
+    id: "ptr_brief_01",
+    workspace_id: "workspace-a",
+    repo_id: "repo-a",
+    session_id: "session-a",
+    agent_id: "codex-trent-01",
+    summary: "Dashboard session rooms are selectable and focused.",
+    changed_files: ["apps/dashboard/src/main.tsx"],
+    decisions_made: ["Keep session focus local to the dashboard view."],
+    assumptions: ["Server state remains the source of truth."],
+    skipped_work: ["No hosted persistence changes in this pass."],
+    risks: ["Stale browser state may hide new rooms until reconnect."],
+    blockers: [],
+    next_action: "Add a dashboard Current Truth panel.",
+    related_claims: ["claim_dashboard_focus"],
+    related_sessions: ["session-a"],
+    worktree: "codex/dashboard-session-focus",
+    created_at: "2026-06-12T10:00:00.000Z"
+  });
+
+  assert.equal(result.ok, true);
+});
+
+test("rejects malformed brief pointers", () => {
+  const result = validatePointer({
+    type: "brief",
+    id: "ptr_brief_invalid",
+    agent_id: "codex-trent-01",
+    summary: "",
+    changed_files: "apps/dashboard/src/main.tsx",
+    decisions_made: [],
+    assumptions: [],
+    skipped_work: [],
+    risks: [],
+    blockers: [],
+    related_claims: [],
+    related_sessions: [],
+    created_at: "not-a-date"
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(result.issues.some((issue) => issue.path === "summary" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "changed_files" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "next_action" && issue.code === "missing_field"));
+    assert.ok(result.issues.some((issue) => issue.path === "created_at" && issue.code === "invalid_timestamp"));
+  }
 });
 
 test("rejects claims without scope", () => {

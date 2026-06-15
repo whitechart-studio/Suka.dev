@@ -1,5 +1,6 @@
 import { checkConflicts, type ConflictSubject, type ConflictWarning } from "@suka/conflict-engine";
 import {
+  type BriefPointer,
   type ClaimPointer,
   type DecisionPointer,
   type EventPointer,
@@ -80,6 +81,9 @@ function persistPointer(store: SukaStore, pointer: Pointer): void {
       return;
     case "decision":
       store.upsertDecision(pointer as DecisionPointer);
+      return;
+    case "brief":
+      store.upsertBrief(pointer as BriefPointer);
       return;
   }
 }

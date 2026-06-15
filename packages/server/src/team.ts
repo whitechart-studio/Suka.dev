@@ -36,6 +36,9 @@ export function buildTeamSummary(state: SukaState, now = new Date()): TeamConnec
       case "decision":
         workspace.decisions += 1;
         break;
+      case "brief":
+        workspace.briefs += 1;
+        break;
     }
   }
 
@@ -82,7 +85,8 @@ function allPointers(state: SukaState): Pointer[] {
     ...state.presence,
     ...state.claims,
     ...state.events,
-    ...state.decisions
+    ...state.decisions,
+    ...state.briefs
   ];
 }
 
@@ -99,6 +103,7 @@ function ensureWorkspace(map: Map<string, MutableWorkspaceSummary>, workspaceId:
   const created: MutableWorkspaceSummary = {
     active_agents: 0,
     claims: 0,
+    briefs: 0,
     decisions: 0,
     events: 0,
     repoIds: new Set(),
@@ -113,6 +118,7 @@ function toWorkspaceSummary(workspace: MutableWorkspaceSummary): TeamWorkspaceSu
   return {
     active_agents: workspace.active_agents,
     claims: workspace.claims,
+    briefs: workspace.briefs,
     decisions: workspace.decisions,
     events: workspace.events,
     repo_ids: [...workspace.repoIds].sort(),
@@ -127,6 +133,7 @@ type MutableWorkspaceSummary = CoordinationContext & {
   sessionIds: Set<string>;
   active_agents: number;
   claims: number;
+  briefs: number;
   events: number;
   decisions: number;
 };

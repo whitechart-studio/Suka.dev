@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { ClaimPointer, CoordinationContext, DecisionPointer, EventPointer, PresencePointer } from "@suka/protocol";
+import type { BriefPointer, ClaimPointer, CoordinationContext, DecisionPointer, EventPointer, PresencePointer } from "@suka/protocol";
 import { MemorySukaStore, type SukaStore } from "./memory-store.js";
 import { createEmptyState, type SukaCleanupResult, type SukaState } from "./state.js";
 
@@ -53,6 +53,11 @@ export class FileSukaStore implements SukaStore {
     this.#persist();
   }
 
+  upsertBrief(pointer: BriefPointer): void {
+    this.#store.upsertBrief(pointer);
+    this.#persist();
+  }
+
   expire(now: Date): void {
     const before = this.#store.getState();
     this.#store.expire(now);
@@ -72,7 +77,11 @@ export class FileSukaStore implements SukaStore {
 }
 
 function hasRemovedPointers(result: SukaCleanupResult): boolean {
-  return result.removed.presence > 0 || result.removed.claims > 0 || result.removed.events > 0 || result.removed.decisions > 0;
+  return result.removed.presence > 0 ||
+    result.removed.claims > 0 ||
+    result.removed.events > 0 ||
+    result.removed.decisions > 0 ||
+    result.removed.briefs > 0;
 }
 
 function loadState(path: string): SukaState {
@@ -87,6 +96,7 @@ function loadState(path: string): SukaState {
     presence: Array.isArray(parsed.presence) ? parsed.presence : [],
     claims: Array.isArray(parsed.claims) ? parsed.claims : [],
     events: Array.isArray(parsed.events) ? parsed.events : [],
-    decisions: Array.isArray(parsed.decisions) ? parsed.decisions : []
+    decisions: Array.isArray(parsed.decisions) ? parsed.decisions : [],
+    briefs: Array.isArray(parsed.briefs) ? parsed.briefs : []
   };
 }

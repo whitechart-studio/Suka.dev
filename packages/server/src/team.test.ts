@@ -28,6 +28,25 @@ test("builds local team summary from unscoped presence", () => {
 
 test("builds scoped team summary across workspaces and sessions", () => {
   const summary = buildTeamSummary({
+    briefs: [{
+      agent_id: "codex-a",
+      assumptions: ["Session A owns server API work."],
+      blockers: [],
+      changed_files: ["packages/server/src/http.ts"],
+      created_at: "2026-06-12T10:12:00.000Z",
+      decisions_made: ["Keep brief storage scoped by session."],
+      id: "ptr_brief_a",
+      next_action: "Add CLI brief commands.",
+      related_claims: ["ptr_claim_a"],
+      related_sessions: ["session-a"],
+      repo_id: "repo-a",
+      risks: [],
+      session_id: "session-a",
+      skipped_work: [],
+      summary: "Session A handoff",
+      type: "brief",
+      workspace_id: "workspace-a"
+    }],
     claims: [{
       agent_id: "codex-a",
       created_at: "2026-06-12T10:00:00.000Z",
@@ -92,6 +111,7 @@ test("builds scoped team summary across workspaces and sessions", () => {
   assert.equal(summary.active_agents, 2);
   assert.deepEqual(summary.workspaces.map((workspace) => workspace.workspace_id), ["workspace-a", "workspace-b"]);
   assert.equal(summary.workspaces[0]?.active_agents, 1);
+  assert.equal(summary.workspaces[0]?.briefs, 1);
   assert.equal(summary.workspaces[0]?.claims, 1);
   assert.equal(summary.workspaces[0]?.events, 1);
   assert.deepEqual(summary.workspaces[0]?.repo_ids, ["repo-a"]);
