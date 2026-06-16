@@ -279,6 +279,7 @@ function Dashboard(): React.ReactElement {
   const [teamConnection, setTeamConnection] = useState<TeamConnection>(() => readStoredTeamConnection());
   const [teamSummary, setTeamSummary] = useState<TeamConnectionSummary>(emptyTeamSummary);
   const [activeSessionId, setActiveSessionId] = useState(() => readStoredString("activeSessionId"));
+  const [welcomeDismissed, setWelcomeDismissed] = useState(() => readStoredBoolean("welcomeDismissed", false));
   const viewportRestored = useRef(false);
   const { fitView, setViewport, zoomIn, zoomOut } = useReactFlow();
 
@@ -354,6 +355,8 @@ function Dashboard(): React.ReactElement {
   );
   const riskCount = visibleConflictInsights.length + model.filter((item) => item.failures.length > 0).length;
   const selectedDetails = useMemo(() => resolveSelection(selectedNodeId, model, state), [model, selectedNodeId, state]);
+  const hasLiveState = state.presence.length + state.claims.length + state.events.length + state.decisions.length + state.briefs.length > 0;
+  const showWelcome = !welcomeDismissed && !hasLiveState && status !== "loading";
 
   const releaseClaim = useCallback(async (claimId: string) => {
     setReleasingClaimId(claimId);
@@ -457,6 +460,10 @@ function Dashboard(): React.ReactElement {
   }, [teamConnection]);
 
   useEffect(() => {
+    writeStoredBoolean("welcomeDismissed", welcomeDismissed);
+  }, [welcomeDismissed]);
+
+  useEffect(() => {
     if (viewportRestored.current || nodes.length === 0) return;
     viewportRestored.current = true;
     const viewport = readStoredViewport();
@@ -471,6 +478,23 @@ function Dashboard(): React.ReactElement {
     !rightOpen ? "right-collapsed" : "",
     focusMode ? "focus-mode" : ""
   ].filter(Boolean).join(" ");
+
+  if (showWelcome) {
+    return (
+      <div className="suka-app welcome-mode">
+        <WelcomeSurface
+          connection={teamConnection}
+          repoName={repoMap.root ?? "workspace"}
+          status={status}
+          onDismiss={() => setWelcomeDismissed(true)}
+          onOpenTeam={() => {
+            setWelcomeDismissed(true);
+            setTeamPanelOpen(true);
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="suka-app">
@@ -649,6 +673,108 @@ function Dashboard(): React.ReactElement {
           ) : <CompactRisk count={riskCount} />}
         </aside>
       </main>
+    </div>
+  );
+}
+
+function WelcomeSurface({
+  connection,
+  onDismiss,
+  onOpenTeam,
+  repoName,
+  status
+}: {
+  connection: TeamConnection;
+  onDismiss(): void;
+  onOpenTeam(): void;
+  repoName: string;
+  status: string;
+}): React.ReactElement {
+  const workspaceName = connection.workspaceName.trim() || displayName(repoName);
+
+  return (
+    <section className="welcome-surface" aria-label="Welcome to Suka">
+      <nav className="welcome-nav">
+        <div className="welcome-brand">
+          <span className="brand-mark"><Waypoints size={17} /></span>
+          <div>
+            <strong>Suka.dev</strong>
+            <span>Coordination layer for AI engineering</span>
+          </div>
+        </div>
+        <div className="welcome-nav-actions">
+          <Badge tone={status === "connected" ? "live" : "neutral"} icon={<Wifi size={13} />}>{status}</Badge>
+          <button type="button" onClick={onDismiss}>
+            <Network size={14} />
+            Open canvas
+          </button>
+        </div>
+      </nav>
+      <div className="welcome-panel">
+        <div className="welcome-copy">
+          <Badge tone="info" icon={<RadioTower size={13} />}>local-first mission control</Badge>
+          <h2>Coordinate agents before the mission collides.</h2>
+          <p>
+            Suka gives AI coding agents and humans a shared operations map for presence, ownership,
+            handoffs, decisions, and conflict signals. Your code stays local; the team gets live intent.
+          </p>
+          <div className="welcome-actions">
+            <button type="button" onClick={onDismiss}>
+              <PlayIcon />
+              Start local workspace
+            </button>
+            <button type="button" onClick={onOpenTeam}>
+              <Users size={14} />
+              Connect team
+            </button>
+          </div>
+          <div className="welcome-command">
+            <span>agent launch command</span>
+            <code>node packages/cli/dist/bin.js session start --repo {repoName}</code>
+          </div>
+        </div>
+
+        <div className="welcome-preview" aria-label="Suka operations preview">
+          <div className="preview-top">
+            <div>
+              <strong>{workspaceName}</strong>
+              <span>{repoName} / local-first</span>
+            </div>
+            <Badge tone="live" icon={<Activity size={13} />}>mission ready</Badge>
+          </div>
+          <div className="preview-map">
+            <PreviewNode className="primary" label="Repo Map" meta="domains / routes / tests" />
+            <PreviewNode className="agent one" label="Codex" meta="editing server" />
+            <PreviewNode className="agent two" label="Claude" meta="reviewing UI" />
+            <PreviewNode className="risk" label="Conflict Radar" meta="API touched recently" />
+            <span className="preview-edge edge-a" />
+            <span className="preview-edge edge-b" />
+            <span className="preview-edge edge-c" />
+          </div>
+          <div className="preview-truth">
+            <div><LockKeyhole size={13} /><span>Ownership</span><strong>0 claims</strong></div>
+            <div><FileClock size={13} /><span>Briefs</span><strong>handoff ready</strong></div>
+            <div><CheckCheck size={13} /><span>Decisions</span><strong>shared truth</strong></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PlayIcon(): React.ReactElement {
+  return (
+    <span className="play-icon" aria-hidden="true">
+      <span />
+    </span>
+  );
+}
+
+function PreviewNode({ className, label, meta }: { className: string; label: string; meta: string }): React.ReactElement {
+  return (
+    <div className={`preview-node ${className}`}>
+      <strong>{label}</strong>
+      <span>{meta}</span>
     </div>
   );
 }
