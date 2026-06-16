@@ -9,7 +9,11 @@ export interface RepoMapDomain {
   kind: "app" | "package" | "docs" | "tooling" | "config" | "workspace";
   keys: string[];
   name: string;
+  package_name?: string;
   path: string;
+  route_count: number;
+  routes: string[];
+  test_count: number;
   x: number;
   y: number;
 }
@@ -48,13 +52,17 @@ type DomainCandidate = {
   path: string;
 };
 
+type PackageManifestIndex = Map<string, unknown>;
+
 export async function buildRepoMap(root = process.cwd()): Promise<RepoMap> {
   const workspaceRoot = await findWorkspaceRoot(root);
   const candidates = await discoverDomains(workspaceRoot);
-  const domains = candidates.map((candidate, index) => {
+  const manifests = await packageManifestIndex(workspaceRoot, candidates.map((candidate) => candidate.path));
+  const domains = await Promise.all(candidates.map(async (candidate, index) => {
     const metrics = candidate.metrics;
+    const metadata = await metadataFor(workspaceRoot, candidate.path, manifests.get(candidate.path));
     const position = positionFor(index, candidates.length);
-    return {
+    const domain: RepoMapDomain = {
       color: colorFor(candidate.kind, index),
       directory_count: metrics.directories,
       file_count: metrics.files,
@@ -63,17 +71,61 @@ export async function buildRepoMap(root = process.cwd()): Promise<RepoMap> {
       keys: keysFor(candidate.path, candidate.name, candidate.kind),
       name: candidate.name,
       path: candidate.path,
+      route_count: metadata.routes.length,
+      routes: metadata.routes,
+      test_count: metadata.testCount,
       x: position.x,
       y: position.y
     };
-  });
+    if (metadata.packageName !== undefined) {
+      domain.package_name = metadata.packageName;
+    }
+    return domain;
+  }));
 
   return {
     domains,
-    edges: await edgesFor(workspaceRoot, domains),
+    edges: await edgesFor(workspaceRoot, domains, manifests),
     generated_at: new Date().toISOString(),
     root: basename(workspaceRoot)
   };
+}
+
+async function metadataFor(root: string, domainPath: string, manifest: unknown): Promise<{
+  packageName?: string;
+  routes: string[];
+  testCount: number;
+}> {
+  const packageName = isRecord(manifest) && typeof manifest.name === "string" ? manifest.name : undefined;
+  const files = await sourceFiles(join(root, domainPath));
+  const routes = new Set<string>();
+  let testCount = 0;
+
+  for (const file of files) {
+    if (isTestFile(file)) {
+      testCount += 1;
+      continue;
+    }
+    const text = await readTextFile(file);
+    if (text === undefined) continue;
+    for (const route of routeSpecifiers(text)) {
+      routes.add(route);
+    }
+  }
+
+  return {
+    ...(packageName !== undefined ? { packageName } : {}),
+    routes: [...routes].sort(),
+    testCount
+  };
+}
+
+async function packageManifestIndex(root: string, domainPaths: string[]): Promise<PackageManifestIndex> {
+  const manifests: PackageManifestIndex = new Map();
+  await Promise.all(domainPaths.map(async (domainPath) => {
+    manifests.set(domainPath, await readJsonFile(join(root, domainPath, "package.json")));
+  }));
+  return manifests;
 }
 
 async function findWorkspaceRoot(start: string): Promise<string> {
@@ -164,11 +216,11 @@ async function measureDirectory(directory: string, root: string, depth = 0): Pro
   return { directories, files };
 }
 
-async function edgesFor(root: string, domains: RepoMapDomain[]): Promise<RepoMapEdge[]> {
+async function edgesFor(root: string, domains: RepoMapDomain[], manifests: PackageManifestIndex): Promise<RepoMapEdge[]> {
   const byPath = new Map(domains.map((domain) => [domain.path, domain]));
   const edges: RepoMapEdge[] = [];
 
-  edges.push(...await inferredEdgesFor(root, domains));
+  edges.push(...await inferredEdgesFor(root, domains, manifests));
 
   addEdge(edges, byPath, "apps/dashboard", "apps/server");
   addEdge(edges, byPath, "apps/dashboard", "packages/protocol");
@@ -186,22 +238,22 @@ async function edgesFor(root: string, domains: RepoMapDomain[]): Promise<RepoMap
   return Array.from(new Map(edges.map((item) => [item.id, item])).values());
 }
 
-async function inferredEdgesFor(root: string, domains: RepoMapDomain[]): Promise<RepoMapEdge[]> {
-  const byPackageName = await packageNameIndex(root, domains);
+async function inferredEdgesFor(root: string, domains: RepoMapDomain[], manifests: PackageManifestIndex): Promise<RepoMapEdge[]> {
+  const byPackageName = packageNameIndex(domains, manifests);
   const edges: RepoMapEdge[] = [];
 
   for (const domain of domains) {
-    edges.push(...await packageDependencyEdges(root, domain, byPackageName));
+    edges.push(...packageDependencyEdges(domain, manifests.get(domain.path), byPackageName));
     edges.push(...await sourceImportEdges(root, domain, domains, byPackageName));
   }
 
   return edges;
 }
 
-async function packageNameIndex(root: string, domains: RepoMapDomain[]): Promise<Map<string, RepoMapDomain>> {
+function packageNameIndex(domains: RepoMapDomain[], manifests: PackageManifestIndex): Map<string, RepoMapDomain> {
   const byPackageName = new Map<string, RepoMapDomain>();
   for (const domain of domains) {
-    const manifest = await readJsonFile(join(root, domain.path, "package.json"));
+    const manifest = manifests.get(domain.path);
     if (isRecord(manifest) && typeof manifest.name === "string") {
       byPackageName.set(manifest.name, domain);
     }
@@ -209,12 +261,11 @@ async function packageNameIndex(root: string, domains: RepoMapDomain[]): Promise
   return byPackageName;
 }
 
-async function packageDependencyEdges(
-  root: string,
+function packageDependencyEdges(
   source: RepoMapDomain,
+  manifest: unknown,
   byPackageName: Map<string, RepoMapDomain>
-): Promise<RepoMapEdge[]> {
-  const manifest = await readJsonFile(join(root, source.path, "package.json"));
+): RepoMapEdge[] {
   if (!isRecord(manifest)) return [];
 
   const edges: RepoMapEdge[] = [];
@@ -290,6 +341,25 @@ function importSpecifiers(source: string): string[] {
     if (specifier !== undefined) specifiers.add(specifier);
   }
   return [...specifiers];
+}
+
+function routeSpecifiers(source: string): string[] {
+  const routes = new Set<string>();
+  const patterns = [
+    /\b(?:app|router|server)\.(?:all|get|post|put|patch|delete|options|head)\(\s*["']([^"']+)["']/g,
+    /\burl\.pathname\s*={2,3}\s*["']([^"']+)["']/g,
+    /\burl\.pathname\s*!==\s*["']([^"']+)["']/g
+  ];
+
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(source)) !== null) {
+      const route = match[1];
+      if (route !== undefined && route.startsWith("/")) routes.add(route);
+    }
+  }
+
+  return [...routes];
 }
 
 function resolveImportDomain(
@@ -394,6 +464,10 @@ function titleFor(value: string): string {
 
 function isGeneratedPath(path: string): boolean {
   return path.split(/[\\/]/).some((part) => ignoredNames.has(part));
+}
+
+function isTestFile(path: string): boolean {
+  return /\.(?:spec|test)\.[cm]?[jt]sx?$/.test(path) || /(?:^|[\\/])__tests__[\\/]/.test(path);
 }
 
 function normalizeRepoPath(path: string): string {

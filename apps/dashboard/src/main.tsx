@@ -139,7 +139,11 @@ type Domain = {
   directory_count?: number;
   file_count?: number;
   kind?: string;
+  package_name?: string;
   path?: string;
+  route_count?: number;
+  routes?: string[];
+  test_count?: number;
   x: number;
   y: number;
   keys: string[];
@@ -1107,11 +1111,15 @@ function SelectionInspector({
         <span>state</span><strong>{domainState(domain)}</strong>
         <span>path</span><strong>{domain.path ?? domain.id}</strong>
         <span>kind</span><strong>{domain.kind ?? "domain"}</strong>
+        <span>package</span><strong>{domain.package_name ?? "none"}</strong>
         <span>files</span><strong>{domain.file_count ?? 0}</strong>
+        <span>tests</span><strong>{domain.test_count ?? 0}</strong>
+        <span>routes</span><strong>{domain.route_count ?? 0}</strong>
         <span>agents</span><strong>{domain.presence.length}</strong>
         <span>claims</span><strong>{domain.claims.length}</strong>
         <span>events</span><strong>{domain.events.length}</strong>
       </div>
+      <PathList paths={domain.routes ?? []} />
       <PathList paths={domain.claims.flatMap((claim) => claim.scope?.paths ?? [])} />
       <CreateClaimForm defaultAgentId={defaultAgentId} domain={domain} onCreateClaim={onCreateClaim} />
       <ClaimList claims={domain.claims} onReleaseClaim={onReleaseClaim} releasingClaimId={releasingClaimId} />
@@ -1373,7 +1381,7 @@ function buildFlow(model: DomainModel[], state: SukaState, selectedNodeId: strin
         claims: domain.claims.length,
         color: stateColor(domain),
         label: domain.name,
-        meta: `${domain.file_count ?? 0} files / ${domain.claims.length} claims`,
+        meta: `${domain.file_count ?? 0} files / ${domain.test_count ?? 0} tests / ${domain.route_count ?? 0} routes`,
         state: domainState(domain)
       }
     })),
