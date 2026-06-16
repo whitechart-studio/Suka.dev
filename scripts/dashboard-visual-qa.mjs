@@ -10,7 +10,8 @@ const target = process.env.SUKA_DASHBOARD_URL ?? "http://127.0.0.1:4366/";
 const screenshots = {
   desktop: "/private/tmp/suka-dashboard-desktop.png",
   mobile: "/private/tmp/suka-dashboard-mobile.png",
-  selected: "/private/tmp/suka-dashboard-selected.png"
+  selected: "/private/tmp/suka-dashboard-selected.png",
+  welcome: "/private/tmp/suka-dashboard-welcome.png"
 };
 
 function pageOverflowScript() {
@@ -33,6 +34,14 @@ try {
   });
 
   await page.goto(target, { waitUntil: "networkidle" });
+  const welcomeVisible = await page.locator(".welcome-surface").isVisible();
+  let welcomeText = "";
+  if (welcomeVisible) {
+    welcomeText = await page.locator(".welcome-surface").innerText();
+    await page.screenshot({ fullPage: true, path: screenshots.welcome });
+    await page.locator(".welcome-actions button").filter({ hasText: "Start local workspace" }).click();
+    await page.waitForTimeout(150);
+  }
   await page.waitForSelector(".react-flow__node", { timeout: 10_000 });
   await page.screenshot({ fullPage: true, path: screenshots.desktop });
 
@@ -74,6 +83,10 @@ try {
     viewport: { height: 844, width: 390 }
   });
   await mobile.goto(target, { waitUntil: "networkidle" });
+  if (await mobile.locator(".welcome-surface").isVisible()) {
+    await mobile.locator(".welcome-actions button").filter({ hasText: "Start local workspace" }).click();
+    await mobile.waitForTimeout(150);
+  }
   await mobile.waitForSelector(".react-flow__node", { timeout: 10_000 });
   const mobileOverflow = await mobile.evaluate(pageOverflowScript);
   await mobile.screenshot({ fullPage: true, path: screenshots.mobile });
@@ -92,7 +105,9 @@ try {
     rightStoredAfterCollapse,
     rightStoredAfterRestore,
     screenshots,
-    selectionStored
+    selectionStored,
+    welcomeHasIdentity: welcomeText.includes("Suka.dev") && welcomeText.includes("Coordinate agents"),
+    welcomeVisible
   }, null, 2));
 } finally {
   await browser.close();
