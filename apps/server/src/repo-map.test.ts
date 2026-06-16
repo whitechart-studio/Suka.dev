@@ -43,6 +43,36 @@ test("repo map infers package and source import relationships", async () => {
   }
 });
 
+test("repo map includes domain package, route, and test metadata", async () => {
+  const root = await mkdtemp(join(tmpdir(), "suka-repo-map-"));
+  try {
+    await mkdir(join(root, "apps", "api", "src"), { recursive: true });
+    await mkdir(join(root, "packages", "shared", "src"), { recursive: true });
+
+    await writeJson(join(root, "apps", "api", "package.json"), {
+      name: "@suka/api"
+    });
+    await writeJson(join(root, "packages", "shared", "package.json"), {
+      name: "@suka/shared"
+    });
+    await writeFile(
+      join(root, "apps", "api", "src", "http.ts"),
+      "if (url.pathname === '/api/state') reply();\nrouter.post('/api/briefs', writeBrief);\n"
+    );
+    await writeFile(join(root, "apps", "api", "src", "http.test.ts"), "assert.equal(1, 1);\n");
+
+    const map = await buildRepoMap(root);
+    const api = map.domains.find((domain) => domain.path === "apps/api");
+
+    assert.equal(api?.package_name, "@suka/api");
+    assert.equal(api?.test_count, 1);
+    assert.deepEqual(api?.routes, ["/api/briefs", "/api/state"]);
+    assert.equal(api?.route_count, 2);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
 async function writeJson(path: string, value: unknown): Promise<void> {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
 }
