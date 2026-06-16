@@ -44,6 +44,11 @@ try {
   }
   await page.waitForSelector(".react-flow__node", { timeout: 10_000 });
   await page.screenshot({ fullPage: true, path: screenshots.desktop });
+  await page.locator("button[aria-label=\"Exit to landing page\"]").click();
+  await page.waitForSelector(".welcome-surface", { timeout: 10_000 });
+  const exitReturnsToWelcome = await page.locator(".welcome-surface").isVisible();
+  await page.locator(".welcome-actions button").filter({ hasText: "Start local workspace" }).click();
+  await page.waitForSelector(".react-flow__node", { timeout: 10_000 });
 
   const nodeCount = await page.locator(".react-flow__node").count();
   await page.locator(".react-flow__node").filter({ hasText: "Server" }).first().click();
@@ -93,6 +98,7 @@ try {
 
   console.log(JSON.stringify({
     errors,
+    exitReturnsToWelcome,
     inspectorHasServer: inspectorText.includes("Server") && inspectorText.includes("apps/server"),
     leftRailHiddenAfterCollapse,
     leftStoredAfterCollapse,
