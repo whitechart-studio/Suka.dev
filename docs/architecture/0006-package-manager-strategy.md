@@ -53,4 +53,3 @@ If Suka migrates to pnpm later:
 - verify `npm audit` replacement or equivalent security workflow
 - verify Windows, macOS, Linux, and Docker builds
 - update Dependabot configuration
-
