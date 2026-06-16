@@ -481,7 +481,7 @@ function Dashboard(): React.ReactElement {
 
   if (showWelcome) {
     return (
-      <div className="suka-app welcome-mode">
+      <div className="suka-app">
         <WelcomeSurface
           connection={teamConnection}
           repoName={repoMap.root ?? "workspace"}
