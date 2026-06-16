@@ -283,6 +283,7 @@ No stable release is available yet.
 - [Agent Coordination Workflow](docs/engineering/agent-workflow.md)
 - [PR Gate](docs/engineering/pr-gate.md)
 - [Project Hygiene](docs/engineering/project-hygiene.md)
+- [Package Manager Strategy](docs/architecture/0006-package-manager-strategy.md)
 - [Social Preview](docs/open-source/social-preview.md)
 
 ## Contributing
