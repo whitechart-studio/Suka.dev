@@ -52,12 +52,15 @@ type DomainCandidate = {
   path: string;
 };
 
+type PackageManifestIndex = Map<string, unknown>;
+
 export async function buildRepoMap(root = process.cwd()): Promise<RepoMap> {
   const workspaceRoot = await findWorkspaceRoot(root);
   const candidates = await discoverDomains(workspaceRoot);
+  const manifests = await packageManifestIndex(workspaceRoot, candidates.map((candidate) => candidate.path));
   const domains = await Promise.all(candidates.map(async (candidate, index) => {
     const metrics = candidate.metrics;
-    const metadata = await metadataFor(workspaceRoot, candidate.path);
+    const metadata = await metadataFor(workspaceRoot, candidate.path, manifests.get(candidate.path));
     const position = positionFor(index, candidates.length);
     const domain: RepoMapDomain = {
       color: colorFor(candidate.kind, index),
@@ -82,18 +85,17 @@ export async function buildRepoMap(root = process.cwd()): Promise<RepoMap> {
 
   return {
     domains,
-    edges: await edgesFor(workspaceRoot, domains),
+    edges: await edgesFor(workspaceRoot, domains, manifests),
     generated_at: new Date().toISOString(),
     root: basename(workspaceRoot)
   };
 }
 
-async function metadataFor(root: string, domainPath: string): Promise<{
+async function metadataFor(root: string, domainPath: string, manifest: unknown): Promise<{
   packageName?: string;
   routes: string[];
   testCount: number;
 }> {
-  const manifest = await readJsonFile(join(root, domainPath, "package.json"));
   const packageName = isRecord(manifest) && typeof manifest.name === "string" ? manifest.name : undefined;
   const files = await sourceFiles(join(root, domainPath));
   const routes = new Set<string>();
@@ -116,6 +118,14 @@ async function metadataFor(root: string, domainPath: string): Promise<{
     routes: [...routes].sort(),
     testCount
   };
+}
+
+async function packageManifestIndex(root: string, domainPaths: string[]): Promise<PackageManifestIndex> {
+  const manifests: PackageManifestIndex = new Map();
+  await Promise.all(domainPaths.map(async (domainPath) => {
+    manifests.set(domainPath, await readJsonFile(join(root, domainPath, "package.json")));
+  }));
+  return manifests;
 }
 
 async function findWorkspaceRoot(start: string): Promise<string> {
@@ -206,11 +216,11 @@ async function measureDirectory(directory: string, root: string, depth = 0): Pro
   return { directories, files };
 }
 
-async function edgesFor(root: string, domains: RepoMapDomain[]): Promise<RepoMapEdge[]> {
+async function edgesFor(root: string, domains: RepoMapDomain[], manifests: PackageManifestIndex): Promise<RepoMapEdge[]> {
   const byPath = new Map(domains.map((domain) => [domain.path, domain]));
   const edges: RepoMapEdge[] = [];
 
-  edges.push(...await inferredEdgesFor(root, domains));
+  edges.push(...await inferredEdgesFor(root, domains, manifests));
 
   addEdge(edges, byPath, "apps/dashboard", "apps/server");
   addEdge(edges, byPath, "apps/dashboard", "packages/protocol");
@@ -228,22 +238,22 @@ async function edgesFor(root: string, domains: RepoMapDomain[]): Promise<RepoMap
   return Array.from(new Map(edges.map((item) => [item.id, item])).values());
 }
 
-async function inferredEdgesFor(root: string, domains: RepoMapDomain[]): Promise<RepoMapEdge[]> {
-  const byPackageName = await packageNameIndex(root, domains);
+async function inferredEdgesFor(root: string, domains: RepoMapDomain[], manifests: PackageManifestIndex): Promise<RepoMapEdge[]> {
+  const byPackageName = packageNameIndex(domains, manifests);
   const edges: RepoMapEdge[] = [];
 
   for (const domain of domains) {
-    edges.push(...await packageDependencyEdges(root, domain, byPackageName));
+    edges.push(...packageDependencyEdges(domain, manifests.get(domain.path), byPackageName));
     edges.push(...await sourceImportEdges(root, domain, domains, byPackageName));
   }
 
   return edges;
 }
 
-async function packageNameIndex(root: string, domains: RepoMapDomain[]): Promise<Map<string, RepoMapDomain>> {
+function packageNameIndex(domains: RepoMapDomain[], manifests: PackageManifestIndex): Map<string, RepoMapDomain> {
   const byPackageName = new Map<string, RepoMapDomain>();
   for (const domain of domains) {
-    const manifest = await readJsonFile(join(root, domain.path, "package.json"));
+    const manifest = manifests.get(domain.path);
     if (isRecord(manifest) && typeof manifest.name === "string") {
       byPackageName.set(manifest.name, domain);
     }
@@ -251,12 +261,11 @@ async function packageNameIndex(root: string, domains: RepoMapDomain[]): Promise
   return byPackageName;
 }
 
-async function packageDependencyEdges(
-  root: string,
+function packageDependencyEdges(
   source: RepoMapDomain,
+  manifest: unknown,
   byPackageName: Map<string, RepoMapDomain>
-): Promise<RepoMapEdge[]> {
-  const manifest = await readJsonFile(join(root, source.path, "package.json"));
+): RepoMapEdge[] {
   if (!isRecord(manifest)) return [];
 
   const edges: RepoMapEdge[] = [];
