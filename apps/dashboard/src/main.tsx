@@ -27,6 +27,7 @@ import {
   GitBranch,
   HardDrive,
   Link2,
+  LogOut,
   LockKeyhole,
   Maximize2,
   Minimize2,
@@ -280,6 +281,7 @@ function Dashboard(): React.ReactElement {
   const [teamSummary, setTeamSummary] = useState<TeamConnectionSummary>(emptyTeamSummary);
   const [activeSessionId, setActiveSessionId] = useState(() => readStoredString("activeSessionId"));
   const [welcomeDismissed, setWelcomeDismissed] = useState(() => readStoredBoolean("welcomeDismissed", false));
+  const [landingOpen, setLandingOpen] = useState(false);
   const viewportRestored = useRef(false);
   const { fitView, setViewport, zoomIn, zoomOut } = useReactFlow();
 
@@ -356,7 +358,7 @@ function Dashboard(): React.ReactElement {
   const riskCount = visibleConflictInsights.length + model.filter((item) => item.failures.length > 0).length;
   const selectedDetails = useMemo(() => resolveSelection(selectedNodeId, model, state), [model, selectedNodeId, state]);
   const hasLiveState = state.presence.length + state.claims.length + state.events.length + state.decisions.length + state.briefs.length > 0;
-  const showWelcome = !welcomeDismissed && !hasLiveState && status !== "loading";
+  const showWelcome = (landingOpen || (!welcomeDismissed && !hasLiveState)) && status !== "loading";
 
   const releaseClaim = useCallback(async (claimId: string) => {
     setReleasingClaimId(claimId);
@@ -430,6 +432,17 @@ function Dashboard(): React.ReactElement {
     });
   }, [repoMap.root, teamConnection.inviteToken.length]);
 
+  const enterWorkspace = useCallback(() => {
+    setWelcomeDismissed(true);
+    setLandingOpen(false);
+  }, []);
+
+  const exitToLanding = useCallback(() => {
+    setTeamPanelOpen(false);
+    setFocusMode(false);
+    setLandingOpen(true);
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => fitView({ duration: 180, padding: focusMode ? 0.18 : 0.12 }), 80);
     return () => window.clearTimeout(timer);
@@ -486,9 +499,9 @@ function Dashboard(): React.ReactElement {
           connection={teamConnection}
           repoName={repoMap.root ?? "workspace"}
           status={status}
-          onDismiss={() => setWelcomeDismissed(true)}
+          onDismiss={enterWorkspace}
           onOpenTeam={() => {
-            setWelcomeDismissed(true);
+            enterWorkspace();
             setTeamPanelOpen(true);
           }}
         />
@@ -518,6 +531,10 @@ function Dashboard(): React.ReactElement {
           <button type="button" onClick={toggleTeamPanel}>
             <Link2 size={14} />
             Team
+          </button>
+          <button aria-label="Exit to landing page" type="button" onClick={exitToLanding}>
+            <LogOut size={14} />
+            Exit
           </button>
           <button type="button" onClick={() => setFocusMode((value) => !value)}>
             {focusMode ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
