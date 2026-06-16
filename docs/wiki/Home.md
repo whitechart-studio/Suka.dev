@@ -33,14 +33,16 @@ It helps a team answer the operational questions that matter during agentic deve
 
 ## Current Status
 
-Suka is in early foundation stage. The repository includes:
+Suka is in active pre-release foundation stage. The repository includes:
 
 - TypeScript monorepo structure.
 - Protocol validation package.
 - Conflict engine package.
 - Local HTTP server.
 - CLI package.
-- React dashboard with repo map and inspector.
+- React dashboard with operations canvas, repo map, Current Truth, team connection, and inspector panels.
+- Session briefs, decision memory, recent events, claims, blocked scopes, and stale-context conflict signals.
+- Repo intelligence for package relationships, imports, route hints, and test counts.
 - Docker self-hosting path.
-- Project guidance in architecture docs and wiki pages.
+- Project guidance in architecture docs, engineering docs, and wiki pages.
 - Visual QA script for the dashboard.
