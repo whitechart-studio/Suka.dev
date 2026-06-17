@@ -138,24 +138,61 @@ function readProcessRows(warnings: string[]): ProcessRow[] {
 export function parseProcessList(output: string): ProcessRow[] {
   return output
     .split("\n")
-    .map((line) => line.trim())
+    .map((line) => line.trimStart())
     .filter((line) => line.length > 0)
-    .map((line) => {
-      const match = /^(?<pid>\d+)\s+(?<command>\S+)\s*(?<args>.*)$/.exec(line);
-      if (match?.groups === undefined) {
-        return undefined;
-      }
-      const pid = match.groups.pid;
-      if (pid === undefined) {
-        return undefined;
-      }
-      return {
-        args: match.groups.args ?? "",
-        command: match.groups.command ?? "",
-        pid: Number.parseInt(pid, 10)
-      };
-    })
+    .map(parseProcessLine)
     .filter((row): row is ProcessRow => row !== undefined && Number.isInteger(row.pid));
+}
+
+function parseProcessLine(line: string): ProcessRow | undefined {
+  const pidEnd = findWhitespaceIndex(line, 0);
+  if (pidEnd <= 0) return undefined;
+
+  const pidText = line.slice(0, pidEnd);
+  if (!isDigits(pidText)) return undefined;
+
+  const commandStart = findNonWhitespaceIndex(line, pidEnd);
+  if (commandStart === -1) return undefined;
+
+  const commandEnd = findWhitespaceIndex(line, commandStart);
+  const command = commandEnd === -1 ? line.slice(commandStart) : line.slice(commandStart, commandEnd);
+  const argsStart = commandEnd === -1 ? -1 : findNonWhitespaceIndex(line, commandEnd);
+
+  return {
+    args: argsStart === -1 ? "" : line.slice(argsStart),
+    command,
+    pid: Number.parseInt(pidText, 10)
+  };
+}
+
+function findWhitespaceIndex(value: string, start: number): number {
+  for (let index = start; index < value.length; index += 1) {
+    if (isWhitespace(value.charCodeAt(index))) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function findNonWhitespaceIndex(value: string, start: number): number {
+  for (let index = start; index < value.length; index += 1) {
+    if (!isWhitespace(value.charCodeAt(index))) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function isDigits(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code < 48 || code > 57) return false;
+  }
+  return value.length > 0;
+}
+
+function isWhitespace(code: number): boolean {
+  return code === 9 || code === 10 || code === 11 || code === 12 || code === 13 || code === 32;
 }
 
 function readProcessCwd(pid: number, warnings: string[]): string | undefined {

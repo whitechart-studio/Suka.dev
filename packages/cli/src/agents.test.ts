@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { resolve } from "node:path";
 import { detectLocalAgents, parseProcessList, type ProcessRow } from "./agents.js";
 
-const repoRoot = "/Users/getitrent/Documents/WC Tech Room/suka";
+const repoRoot = resolve("fixtures", "suka repo");
 
 test("parseProcessList extracts pid command and args", () => {
   const rows = parseProcessList(`
@@ -58,7 +59,7 @@ test("detectLocalAgents returns Codex and Claude processes in the current repo",
 
 test("detectLocalAgents ignores matching tools outside the current repo", () => {
   const report = detectLocalAgents({
-    cwdForPid: () => "/Users/getitrent/Documents/other",
+    cwdForPid: () => resolve("fixtures", "other repo"),
     processRows: [{
       args: `/Volumes/Codex Installer/Codex.app/Contents/Resources/codex sandbox --working-dir ${repoRoot}`,
       command: "codex",
