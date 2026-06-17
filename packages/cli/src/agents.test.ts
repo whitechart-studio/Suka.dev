@@ -24,8 +24,8 @@ test("parseProcessList extracts pid command and args", () => {
 test("detectLocalAgents returns Codex and Claude processes in the current repo", () => {
   const processRows: ProcessRow[] = [
     {
-      args: `/Volumes/Codex Installer/Codex.app/Contents/Resources/codex sandbox --working-dir ${repoRoot}`,
-      command: "codex",
+      args: `--working-dir ${repoRoot}`,
+      command: "/opt/homebrew/bin/codex",
       pid: 84942
     },
     {

@@ -240,7 +240,7 @@ function agentsCommand(
 
   const report = detectLocalAgents({ now });
   context.io.stdout.write(flags.json === true ? formatJson(report) : formatLocalAgentDetection(report));
-  return { exitCode: report.warnings.length > 0 && report.agents.length === 0 ? 1 : 0 };
+  return { exitCode: 0 };
 }
 
 function formatLocalAgentDetection(report: LocalAgentDetectionReport): string {

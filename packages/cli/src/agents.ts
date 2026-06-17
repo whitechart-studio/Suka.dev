@@ -97,13 +97,26 @@ function toAgentCandidate(
 
 function detectTool(row: ProcessRow): DetectedAgentTool | undefined {
   const raw = `${row.command} ${row.args}`.toLowerCase();
+  const commandBase = pathBaseName(row.command);
   if (raw.includes("claude-code") || raw.includes("/claude.app/") || raw.includes("/claude.app ")) {
     return "claude-code";
   }
-  if (raw.includes("codex sandbox") || raw.includes("/codex.app/") || raw.includes("/resources/codex ")) {
+  if (
+    commandBase === "codex" ||
+    raw.startsWith("codex ") ||
+    raw.includes(" codex ") ||
+    raw.includes("codex sandbox") ||
+    raw.includes("/codex.app/") ||
+    raw.includes("/resources/codex ")
+  ) {
     return "codex";
   }
   return undefined;
+}
+
+function pathBaseName(value: string): string {
+  const normalized = value.toLowerCase().replaceAll("\\", "/");
+  return normalized.split("/").at(-1) ?? normalized;
 }
 
 function dedupeAgents(agents: DetectedLocalAgent[]): DetectedLocalAgent[] {
