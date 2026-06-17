@@ -527,8 +527,8 @@ function Dashboard(): React.ReactElement {
           {activeSession !== undefined ? (
             <Badge tone="info" icon={<RadioTower size={13} />}>{activeSession.session_id}</Badge>
           ) : null}
-          <Badge tone={status === "connected" ? "live" : status === "error" ? "fail" : "neutral"} icon={<Wifi size={13} />}>{status}</Badge>
-          <button type="button" onClick={toggleTeamPanel}>
+          <Badge tone={status === "connected" ? "live" : status === "error" ? "fail" : "neutral"} icon={<i className={`status-dot ${status === "connected" ? "live" : status === "error" ? "error" : "neutral"}`} />}>{status}</Badge>
+          <button aria-label="Open team connection panel" type="button" onClick={toggleTeamPanel}>
             <Link2 size={14} />
             Team
           </button>
@@ -536,11 +536,11 @@ function Dashboard(): React.ReactElement {
             <LogOut size={14} />
             Exit
           </button>
-          <button type="button" onClick={() => setFocusMode((value) => !value)}>
+          <button aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"} type="button" onClick={() => setFocusMode((value) => !value)}>
             {focusMode ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
             {focusMode ? "Exit focus" : "Focus"}
           </button>
-          <button type="button" onClick={() => void loadState()}>
+          <button aria-label="Refresh state" type="button" onClick={() => void loadState()}>
             <RefreshCw size={14} />
             Refresh
           </button>
