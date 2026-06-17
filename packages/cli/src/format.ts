@@ -199,6 +199,7 @@ Usage:
   suka session end [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
   suka status [--server http://127.0.0.1:4366] [--json]
   suka team [--server http://127.0.0.1:4366] [--json]
+  suka agents detect [--json]
   suka remind [--changed] [--path PATH] [--workspace ID] [--repo-id ID] [--session ID] [--server URL] [--json]
   suka claim <path> [--block] [--agent AGENT] [--reason TEXT] [--ttl 45] [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
   suka block <path> [--agent AGENT] [--reason TEXT] [--ttl 45] [--workspace ID] [--repo-id ID] [--session ID] [--server URL]

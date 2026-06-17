@@ -99,6 +99,22 @@ test("team supports json output", async () => {
   assert.match(output.join(""), /"active_agents": 0/);
 });
 
+test("agents detect exits successfully with a local report", async () => {
+  const output: string[] = [];
+  const result = await runCli({
+    argv: ["agents", "detect", "--json"],
+    env: {},
+    fetch: fakeFetch({}),
+    io: {
+      stdout: { write: (value: string) => output.push(value) },
+      stderr: { write: () => undefined }
+    }
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(typeof JSON.parse(output.join("")).repo_root, "string");
+});
+
 test("doctor reports config warnings and reachable APIs", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "suka-cli-doctor-"));
   const originalCwd = process.cwd();
