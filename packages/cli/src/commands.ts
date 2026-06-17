@@ -12,6 +12,7 @@ import {
 } from "@suka/protocol";
 import { findConfigPath, initProject, loadConfig, resolveProjectPath } from "./config.js";
 import { createPointerId } from "./ids.js";
+import { detectLocalAgents, type LocalAgentDetectionReport } from "./agents.js";
 import { SukaApiClient } from "./client.js";
 import {
   formatDoctor,
@@ -100,6 +101,9 @@ export async function runCli(context: CliContext): Promise<CliResult> {
         context.io.stdout.write(parsed.flags.json === true ? formatJson(team) : formatTeam(team));
         return { exitCode: 0 };
       }
+
+      case "agents":
+        return agentsCommand(context, parsed.args, parsed.flags, now);
 
       case "remind":
         return await remindCommand(context, client, parsed.flags, config, now);
@@ -221,6 +225,49 @@ export async function runCli(context: CliContext): Promise<CliResult> {
     context.io.stderr.write(`${error instanceof Error ? error.message : "Unexpected CLI error."}\n`);
     return { exitCode: 1 };
   }
+}
+
+function agentsCommand(
+  context: CliContext,
+  args: string[],
+  flags: Parameters<typeof readStringFlag>[0],
+  now: Date
+): CliResult {
+  const action = args[0];
+  if (action !== "detect") {
+    throw new Error("agents requires a supported action: detect.");
+  }
+
+  const report = detectLocalAgents({ now });
+  context.io.stdout.write(flags.json === true ? formatJson(report) : formatLocalAgentDetection(report));
+  return { exitCode: report.warnings.length > 0 && report.agents.length === 0 ? 1 : 0 };
+}
+
+function formatLocalAgentDetection(report: LocalAgentDetectionReport): string {
+  const lines = [
+    "Suka local agents",
+    `repo: ${report.repo_root}`,
+    `branch: ${report.branch ?? "unknown"}`,
+    `changed files: ${report.changed_files.length}`
+  ];
+
+  if (report.agents.length === 0) {
+    lines.push("agents: none detected");
+  } else {
+    lines.push(`agents: ${report.agents.length}`);
+    for (const agent of report.agents) {
+      lines.push(`- ${agent.agent_id} ${agent.tool} pid=${agent.pid} cwd=${agent.cwd}`);
+      if (agent.current_files.length > 0) {
+        lines.push(`  files: ${agent.current_files.join(", ")}`);
+      }
+    }
+  }
+
+  for (const warning of report.warnings) {
+    lines.push(`warn: ${warning}`);
+  }
+
+  return `${lines.join("\n")}\n`;
 }
 
 async function briefCommand(
