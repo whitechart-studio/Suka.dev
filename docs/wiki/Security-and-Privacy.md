@@ -62,6 +62,15 @@ Platform behavior:
 
 If the operating system denies cwd access, Suka emits an actionable warning and continues with command-line cwd fallback. Normal use should not require administrator or root permissions.
 
+## Local Bridge Boundary
+
+Future hosted or desktop project tracking still requires a user-approved local
+bridge. A hosted web page cannot directly inspect local folders or processes.
+The bridge should publish metadata only, bind local control surfaces to
+`127.0.0.1` by default, and never require source contents, prompts, terminal
+output, raw environment values, or secrets. See
+[ADR 0007: Native Folder Picker and Local Bridge](../architecture/0007-native-folder-picker-local-bridge.md).
+
 ## Future Hosted Requirements
 
 - Workspace auth.
