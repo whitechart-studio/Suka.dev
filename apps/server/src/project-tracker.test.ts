@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { LocalAgentDetectionReport } from "@suka/local-agents";
+import type { ValidationResult } from "@suka/protocol";
 import { createSukaService, ProjectTrackingWorker } from "./index.js";
+import type { SukaService } from "./service.js";
 
 test("project tracker publishes detected presence for the active project", () => {
   const service = createSukaService();
@@ -75,6 +77,47 @@ test("project tracker stop removes scoped tracked presence", () => {
 
   assert.equal(status.running, false);
   assert.equal(service.getState().presence.length, 0);
+});
+
+test("project tracker clears running state when detection fails on start", () => {
+  const service = createSukaService();
+  const project = service.registerProject({
+    now: new Date("2026-06-18T10:00:00.000Z"),
+    path: process.cwd()
+  });
+  service.activateProject(project.id);
+  const worker = new ProjectTrackingWorker(service, {
+    detectLocalAgents: () => {
+      throw new Error("detector unavailable");
+    }
+  });
+
+  assert.throws(() => worker.start(), /detector unavailable/);
+  assert.equal(worker.status().running, false);
+  assert.equal(worker.status().active_project_id, undefined);
+});
+
+test("project tracker does not count failed presence publishes", () => {
+  const baseService = createSukaService();
+  const project = baseService.registerProject({
+    now: new Date("2026-06-18T10:00:00.000Z"),
+    path: process.cwd()
+  });
+  baseService.activateProject(project.id);
+  const service: SukaService = {
+    ...baseService,
+    publish: () => ({
+      issues: [],
+      ok: false
+    } as ValidationResult<never>)
+  };
+  const worker = new ProjectTrackingWorker(service, {
+    detectLocalAgents: () => detectionReport(project.repo_root)
+  });
+
+  assert.throws(() => worker.start(), /Failed to publish tracked presence/);
+  assert.equal(worker.status().published_presence, 0);
+  assert.equal(worker.status().running, false);
 });
 
 test("project tracker keeps detection warnings visible in status", () => {

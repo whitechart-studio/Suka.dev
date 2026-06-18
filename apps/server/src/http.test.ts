@@ -276,6 +276,36 @@ test("project tracking API reports detector warnings", async () => {
   }
 });
 
+test("project tracking worker stops when the HTTP server closes", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-project-tracking-"));
+  try {
+    const projectDir = join(tempDir, "project");
+    mkdirSync(projectDir);
+    const service = createSukaService();
+    const project = service.registerProject({
+      path: projectDir
+    });
+    service.activateProject(project.id);
+    const tracker = new ProjectTrackingWorker(service, {
+      detectLocalAgents: () => trackingDetectionReport(project.repo_root),
+      now: () => new Date("2026-06-18T10:05:00.000Z")
+    });
+    const running = await listen({ port: 0 }, createSukaHttpServer({
+      projectTracker: tracker,
+      service
+    }));
+
+    await postJson(`${running.url}/api/projects/tracking/start`, {});
+    assert.equal(tracker.status().running, true);
+
+    await running.close();
+    assert.equal(tracker.status().running, false);
+    assert.equal(service.getState().presence.length, 0);
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
 test("GET /api/repo-map returns repository domains", async () => {
   const running = await listen({ port: 0 }, createSukaHttpServer());
   try {

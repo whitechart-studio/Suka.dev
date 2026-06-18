@@ -67,6 +67,9 @@ export function createSukaHttpServer(options: HttpServerOptions = {}): Server {
     }
   });
   realtime.attach(server);
+  server.once("close", () => {
+    projectTracker.stop();
+  });
   return server;
 }
 

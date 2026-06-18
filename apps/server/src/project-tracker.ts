@@ -60,7 +60,12 @@ export class ProjectTrackingWorker {
     this.stop();
     this.#activeProjectId = project.id;
     this.#abortController = new AbortController();
-    this.runOnce();
+    try {
+      this.runOnce();
+    } catch (error) {
+      this.stop();
+      throw error;
+    }
     this.#runPromise = this.#runLoop(project.id, this.#abortController.signal);
     return this.status();
   }
@@ -113,7 +118,10 @@ export class ProjectTrackingWorker {
     this.#lastReport = report;
     this.#publishedPresence = 0;
     for (const agent of report.agents) {
-      this.#service.publish(buildTrackedPresence(project, agent, now, this.#ttlSeconds));
+      const result = this.#service.publish(buildTrackedPresence(project, agent, now, this.#ttlSeconds));
+      if (!result.ok) {
+        throw new Error("Failed to publish tracked presence.");
+      }
       this.#publishedPresence += 1;
     }
     return this.status();
@@ -123,7 +131,12 @@ export class ProjectTrackingWorker {
     while (!signal.aborted && this.#activeProjectId === projectId) {
       await this.#sleep(this.#intervalSeconds * 1000, signal);
       if (!signal.aborted && this.#activeProjectId === projectId) {
-        this.runOnce();
+        try {
+          this.runOnce();
+        } catch {
+          this.stop();
+          return;
+        }
       }
     }
   }
@@ -180,10 +193,20 @@ function createTrackedPresenceId(project: LocalProject, agent: DetectedLocalAgen
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    signal?.addEventListener("abort", () => {
-      clearTimeout(timer);
+    if (signal?.aborted) {
       resolve();
-    }, { once: true });
+      return;
+    }
+
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
   });
 }

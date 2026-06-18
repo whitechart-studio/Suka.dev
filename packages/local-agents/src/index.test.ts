@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolve } from "node:path";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { detectLocalAgents, parseProcessList, parseWindowsProcessList, type ProcessRow } from "./index.js";
 
 const repoRoot = resolve("fixtures", "suka repo");
@@ -86,6 +89,38 @@ test("detectLocalAgents returns Codex and Claude processes in the current repo",
   assert.deepEqual(report.agents.map((agent) => agent.tool), ["claude-code", "codex"]);
   assert.deepEqual(report.agents.map((agent) => agent.agent_id), ["claude-code-pid-83019", "codex-pid-84942"]);
   assert.equal(report.agents[0]?.detection_source, "process-cwd");
+});
+
+test("detectLocalAgents reads git metadata from the selected repo root", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-local-agents-"));
+  try {
+    const activeRepo = join(tempDir, "active");
+    const otherRepo = join(tempDir, "other");
+    mkdirSync(activeRepo);
+    mkdirSync(otherRepo);
+    execFileSync("git", ["init"], { cwd: activeRepo, stdio: "ignore" });
+    execFileSync("git", ["checkout", "-b", "active-branch"], { cwd: activeRepo, stdio: "ignore" });
+    execFileSync("git", ["init"], { cwd: otherRepo, stdio: "ignore" });
+    execFileSync("git", ["checkout", "-b", "other-branch"], { cwd: otherRepo, stdio: "ignore" });
+    writeFileSync(join(activeRepo, "tracked.ts"), "active\n", "utf8");
+    writeFileSync(join(otherRepo, "ignored.ts"), "other\n", "utf8");
+
+    const report = detectLocalAgents({
+      cwdForPid: () => activeRepo,
+      processRows: [{
+        args: `--working-dir ${activeRepo}`,
+        command: "codex",
+        pid: 101
+      }],
+      repoRoot: activeRepo
+    });
+
+    assert.equal(report.branch, "active-branch");
+    assert.deepEqual(report.changed_files, ["tracked.ts"]);
+    assert.equal(report.agents[0]?.cwd, activeRepo);
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
+  }
 });
 
 test("detectLocalAgents ignores matching tools outside the current repo", () => {

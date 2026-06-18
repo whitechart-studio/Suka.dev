@@ -51,8 +51,8 @@ interface ProcessDiscoveryAdapter {
 
 export function detectLocalAgents(options: DetectLocalAgentsOptions = {}): LocalAgentDetectionReport {
   const repoRoot = resolve(options.repoRoot ?? gitOutput(["rev-parse", "--show-toplevel"]) ?? process.cwd());
-  const branch = options.branch ?? gitOutput(["branch", "--show-current"]);
-  const changedFiles = options.changedFiles ?? detectChangedFiles();
+  const branch = options.branch ?? gitOutput(["branch", "--show-current"], repoRoot);
+  const changedFiles = options.changedFiles ?? detectChangedFiles(repoRoot);
   const warnings: string[] = [];
   const processRows = options.processRows ?? readProcessRows(warnings, options.platform ?? platform());
   const cwdForPid = options.cwdForPid ?? ((pid: number) => readProcessCwd(pid, warnings, options.platform ?? platform()));
@@ -366,8 +366,8 @@ function readPsProcessRows(warnings: string[]): ProcessRow[] {
   }
 }
 
-function detectChangedFiles(): string[] {
-  const output = gitOutput(["status", "--short"]);
+function detectChangedFiles(repoRoot: string): string[] {
+  const output = gitOutput(["status", "--short"], repoRoot);
   if (output === undefined) return [];
   return output
     .split("\n")
@@ -376,9 +376,10 @@ function detectChangedFiles(): string[] {
     .slice(0, 20);
 }
 
-function gitOutput(args: string[]): string | undefined {
+function gitOutput(args: string[], cwd?: string): string | undefined {
   try {
     const output = execFileSync("git", args, {
+      ...(cwd === undefined ? {} : { cwd }),
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"]
     }).trim();
