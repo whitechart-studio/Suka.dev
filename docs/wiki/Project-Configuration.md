@@ -90,3 +90,10 @@ Examples:
 - Keep generated/vendor files out of coordination state.
 - Make privacy behavior explicit.
 - Support local, hosted, and self-hosted modes.
+
+## Project Selection
+
+The current dashboard and API can register a local path as a project and mark it
+active. This path-input flow is the stable compatibility layer for a future
+native folder picker. The recommended local bridge design is documented in
+[ADR 0007: Native Folder Picker and Local Bridge](../architecture/0007-native-folder-picker-local-bridge.md).

@@ -40,6 +40,8 @@ Dashboard
 
 - Agent presence publishing.
 - Project config through `.suka/config.json`.
+- Project registration through the local Project API, with a future native picker
+  and local bridge described in [ADR 0007](../architecture/0007-native-folder-picker-local-bridge.md).
 - More intelligent repo relationship parsing.
 - Hosted/team workspace model.
 
