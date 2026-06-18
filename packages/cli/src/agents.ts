@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { readlinkSync } from "node:fs";
 import { platform } from "node:os";
 import { resolve } from "node:path";
 
@@ -29,11 +30,13 @@ export interface LocalAgentDetectionReport {
 export interface ProcessRow {
   args: string;
   command: string;
+  cwd?: string;
   pid: number;
 }
 
 export interface DetectLocalAgentsOptions {
   now?: Date;
+  platform?: NodeJS.Platform;
   repoRoot?: string;
   branch?: string;
   changedFiles?: string[];
@@ -41,13 +44,18 @@ export interface DetectLocalAgentsOptions {
   cwdForPid?: (pid: number) => string | undefined;
 }
 
+interface ProcessDiscoveryAdapter {
+  name: string;
+  readProcessRows: (warnings: string[]) => ProcessRow[];
+}
+
 export function detectLocalAgents(options: DetectLocalAgentsOptions = {}): LocalAgentDetectionReport {
   const repoRoot = resolve(options.repoRoot ?? gitOutput(["rev-parse", "--show-toplevel"]) ?? process.cwd());
   const branch = options.branch ?? gitOutput(["branch", "--show-current"]);
   const changedFiles = options.changedFiles ?? detectChangedFiles();
   const warnings: string[] = [];
-  const processRows = options.processRows ?? readProcessRows(warnings);
-  const cwdForPid = options.cwdForPid ?? ((pid: number) => readProcessCwd(pid, warnings));
+  const processRows = options.processRows ?? readProcessRows(warnings, options.platform ?? platform());
+  const cwdForPid = options.cwdForPid ?? ((pid: number) => readProcessCwd(pid, warnings, options.platform ?? platform()));
 
   const agents = processRows
     .map((row) => toAgentCandidate(row, repoRoot, branch, changedFiles, cwdForPid))
@@ -76,7 +84,7 @@ function toAgentCandidate(
     return undefined;
   }
 
-  const cwd = cwdForPid(row.pid);
+  const cwd = row.cwd ?? cwdForPid(row.pid) ?? inferCwdFromArgs(row.args);
   if (cwd === undefined || resolve(cwd) !== repoRoot) {
     return undefined;
   }
@@ -98,11 +106,18 @@ function toAgentCandidate(
 function detectTool(row: ProcessRow): DetectedAgentTool | undefined {
   const raw = `${row.command} ${row.args}`.toLowerCase();
   const commandBase = pathBaseName(row.command);
-  if (raw.includes("claude-code") || raw.includes("/claude.app/") || raw.includes("/claude.app ")) {
+  if (
+    commandBase === "claude-code" ||
+    commandBase === "claude-code.exe" ||
+    raw.includes("claude-code") ||
+    raw.includes("/claude.app/") ||
+    raw.includes("/claude.app ")
+  ) {
     return "claude-code";
   }
   if (
     commandBase === "codex" ||
+    commandBase === "codex.exe" ||
     raw.startsWith("codex ") ||
     raw.includes(" codex ") ||
     raw.includes("codex sandbox") ||
@@ -131,21 +146,27 @@ function dedupeAgents(agents: DetectedLocalAgent[]): DetectedLocalAgent[] {
   return [...byToolAndCwd.values()].sort((left, right) => left.tool.localeCompare(right.tool));
 }
 
-function readProcessRows(warnings: string[]): ProcessRow[] {
-  if (platform() === "win32") {
-    warnings.push("Local agent process detection is not implemented for Windows yet.");
-    return [];
-  }
+function readProcessRows(warnings: string[], currentPlatform: NodeJS.Platform): ProcessRow[] {
+  return adapterForPlatform(currentPlatform).readProcessRows(warnings);
+}
 
-  try {
-    return parseProcessList(execFileSync("ps", ["-axo", "pid=,comm=,args="], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"]
-    }));
-  } catch (error) {
-    warnings.push(`Could not inspect local processes: ${error instanceof Error ? error.message : "unknown error"}.`);
-    return [];
+function adapterForPlatform(currentPlatform: NodeJS.Platform): ProcessDiscoveryAdapter {
+  if (currentPlatform === "win32") {
+    return windowsAdapter;
   }
+  if (currentPlatform === "linux") {
+    return linuxAdapter;
+  }
+  if (currentPlatform === "darwin") {
+    return macosAdapter;
+  }
+  return {
+    name: currentPlatform,
+    readProcessRows: (warnings) => {
+      warnings.push(`Local agent process detection is not implemented for ${currentPlatform}.`);
+      return [];
+    }
+  };
 }
 
 export function parseProcessList(output: string): ProcessRow[] {
@@ -178,6 +199,57 @@ function parseProcessLine(line: string): ProcessRow | undefined {
   };
 }
 
+export function parseWindowsProcessList(output: string): ProcessRow[] {
+  const trimmed = output.trim();
+  if (trimmed.length === 0) {
+    return [];
+  }
+  const parsed = JSON.parse(trimmed) as unknown;
+  const rows = Array.isArray(parsed) ? parsed : [parsed];
+  return rows
+    .map(parseWindowsProcess)
+    .filter((row): row is ProcessRow => row !== undefined);
+}
+
+function parseWindowsProcess(value: unknown): ProcessRow | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const pid = Number(record.ProcessId ?? record.processId ?? record.pid);
+  if (!Number.isInteger(pid)) {
+    return undefined;
+  }
+  const commandLine = stringValue(record.CommandLine ?? record.commandLine) ?? "";
+  const executablePath = stringValue(record.ExecutablePath ?? record.executablePath);
+  const command = executablePath ?? firstCommandToken(commandLine);
+  if (command === undefined) {
+    return undefined;
+  }
+  return {
+    args: commandLine,
+    command,
+    pid
+  };
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function firstCommandToken(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  if (trimmed.startsWith("\"")) {
+    const end = trimmed.indexOf("\"", 1);
+    return end === -1 ? trimmed.slice(1) : trimmed.slice(1, end);
+  }
+  const end = findWhitespaceIndex(trimmed, 0);
+  return end === -1 ? trimmed : trimmed.slice(0, end);
+}
+
 function findWhitespaceIndex(value: string, start: number): number {
   for (let index = start; index < value.length; index += 1) {
     if (isWhitespace(value.charCodeAt(index))) {
@@ -208,7 +280,19 @@ function isWhitespace(code: number): boolean {
   return code === 9 || code === 10 || code === 11 || code === 12 || code === 13 || code === 32;
 }
 
-function readProcessCwd(pid: number, warnings: string[]): string | undefined {
+function readProcessCwd(pid: number, warnings: string[], currentPlatform: NodeJS.Platform): string | undefined {
+  if (currentPlatform === "linux") {
+    try {
+      return readlinkSync(`/proc/${pid}/cwd`);
+    } catch {
+      warnings.push(`Could not read cwd for process ${pid}; continuing with command-line cwd fallback.`);
+      return undefined;
+    }
+  }
+  if (currentPlatform === "win32") {
+    warnings.push(`Windows does not expose cwd for process ${pid} without elevated inspection; continuing with command-line cwd fallback.`);
+    return undefined;
+  }
   try {
     const output = execFileSync("lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"], {
       encoding: "utf8",
@@ -219,8 +303,66 @@ function readProcessCwd(pid: number, warnings: string[]): string | undefined {
       .find((line) => line.startsWith("n"))
       ?.slice(1);
   } catch {
-    warnings.push(`Could not read cwd for process ${pid}.`);
+    warnings.push(`Could not read cwd for process ${pid}; continuing with command-line cwd fallback.`);
     return undefined;
+  }
+}
+
+function inferCwdFromArgs(args: string): string | undefined {
+  const patterns = [
+    /(?:^|\s)--working-dir(?:=|\s+)(?:"([^"]+)"|'([^']+)'|([^\s]+))/u,
+    /(?:^|\s)--cwd(?:=|\s+)(?:"([^"]+)"|'([^']+)'|([^\s]+))/u,
+    /(?:^|\s)-C(?:=|\s+)(?:"([^"]+)"|'([^']+)'|([^\s]+))/u
+  ];
+  for (const pattern of patterns) {
+    const match = pattern.exec(args);
+    const value = match?.[1] ?? match?.[2] ?? match?.[3];
+    if (value !== undefined && value.length > 0) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+const macosAdapter: ProcessDiscoveryAdapter = {
+  name: "darwin",
+  readProcessRows: (warnings) => readPsProcessRows(warnings)
+};
+
+const linuxAdapter: ProcessDiscoveryAdapter = {
+  name: "linux",
+  readProcessRows: (warnings) => readPsProcessRows(warnings)
+};
+
+const windowsAdapter: ProcessDiscoveryAdapter = {
+  name: "win32",
+  readProcessRows: (warnings) => {
+    try {
+      const output = execFileSync("powershell.exe", [
+        "-NoProfile",
+        "-Command",
+        "Get-CimInstance Win32_Process | Select-Object ProcessId,ExecutablePath,CommandLine | ConvertTo-Json -Compress"
+      ], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"]
+      });
+      return parseWindowsProcessList(output);
+    } catch (error) {
+      warnings.push(`Could not inspect Windows processes: ${error instanceof Error ? error.message : "unknown error"}.`);
+      return [];
+    }
+  }
+};
+
+function readPsProcessRows(warnings: string[]): ProcessRow[] {
+  try {
+    return parseProcessList(execFileSync("ps", ["-axo", "pid=,comm=,args="], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }));
+  } catch (error) {
+    warnings.push(`Could not inspect local processes: ${error instanceof Error ? error.message : "unknown error"}.`);
+    return [];
   }
 }
 
