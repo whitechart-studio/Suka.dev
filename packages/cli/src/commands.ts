@@ -336,6 +336,13 @@ function buildDetectedAgentPresencePointer(options: {
     ...coordinationContext(options.flags, options.config, options.env),
     agent_id: options.agent.agent_id,
     tool: options.agent.tool,
+    source: {
+      kind: "detected",
+      detector: options.agent.detection_source,
+      pid: options.agent.pid,
+      cwd: options.agent.cwd,
+      detected_at: options.now.toISOString()
+    },
     repo: readStringFlag(options.flags, "repo") ?? options.config?.repo ?? detectGitRepoName(),
     branch: options.agent.branch,
     task: readStringFlag(options.flags, "task") ?? "Detected local agent process",

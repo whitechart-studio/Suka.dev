@@ -44,6 +44,10 @@ test("team prints connected workspace summary", async () => {
             agent_id: "codex-01",
             current_files: ["packages/cli/src/commands.ts"],
             last_seen: "2026-06-12T10:00:00.000Z",
+            source: {
+              kind: "detected",
+              detector: "process-cwd"
+            },
             status: "editing",
             task: "Build team CLI",
             tool: "codex",
@@ -74,6 +78,7 @@ test("team prints connected workspace summary", async () => {
   assert.match(output.join(""), /Suka team/);
   assert.match(output.join(""), /workspace-demo/);
   assert.match(output.join(""), /codex-01 codex editing Build team CLI/);
+  assert.match(output.join(""), /source: detected via process-cwd/);
   assert.match(output.join(""), /packages\/cli\/src\/commands.ts/);
 });
 
@@ -181,6 +186,13 @@ test("agents detect publishes detected presence when requested", async () => {
     last_seen: string;
     repo_id: string;
     session_id: string;
+    source: {
+      cwd: string;
+      detected_at: string;
+      detector: string;
+      kind: string;
+      pid: number;
+    };
     status: string;
     task: string;
     tool: string;
@@ -190,6 +202,13 @@ test("agents detect publishes detected presence when requested", async () => {
   assert.equal(body.type, "presence");
   assert.equal(body.agent_id, "codex-pid-101");
   assert.equal(body.tool, "codex");
+  assert.deepEqual(body.source, {
+    cwd: "/repo/suka",
+    detected_at: "2026-06-18T06:00:00.000Z",
+    detector: "process-cwd",
+    kind: "detected",
+    pid: 101
+  });
   assert.equal(body.branch, "RS/agents-watch");
   assert.equal(body.status, "online");
   assert.equal(body.task, "Detected local agent process");

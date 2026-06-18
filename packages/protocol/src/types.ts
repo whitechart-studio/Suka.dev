@@ -18,6 +18,15 @@ export type IsoTimestamp = string;
 export type PointerId = string;
 export type AgentId = string;
 export type ClaimKind = "soft_claim" | "blocked_scope";
+export type PresenceSourceKind = "manual" | "detected";
+
+export interface PresenceSource {
+  kind: PresenceSourceKind;
+  detector?: string;
+  pid?: number;
+  cwd?: string;
+  detected_at?: IsoTimestamp;
+}
 
 export interface CoordinationContext {
   workspace_id?: string;
@@ -43,6 +52,7 @@ export interface PresencePointer extends BasePointer {
   agent_id: AgentId;
   user_id?: string;
   tool: string;
+  source?: PresenceSource;
   repo: string;
   branch?: string;
   task?: string;
@@ -177,6 +187,7 @@ export interface TeamMemberSummary extends CoordinationContext {
   agent_id: AgentId;
   user_id?: string;
   tool: string;
+  source?: PresenceSource;
   status: PresenceStatus;
   branch?: string;
   task?: string;
