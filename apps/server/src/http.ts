@@ -8,6 +8,7 @@ import type { SukaLogger } from "./logger.js";
 import { RealtimeHub } from "./realtime.js";
 import { buildRepoMap } from "./repo-map.js";
 import { createSukaService, type SukaService } from "./service.js";
+import type { LocalProject } from "./state.js";
 
 const require = createRequire(import.meta.url);
 const cytoscapeBundlePath = require.resolve("cytoscape/dist/cytoscape.min.js");
@@ -167,6 +168,28 @@ async function routeRequest(
   if (method === "GET" && url.pathname === "/api/briefs") {
     writeJson(response, 200, {
       data: service.getState().briefs
+    });
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/api/projects") {
+    writeJson(response, 200, {
+      data: service.listProjects()
+    });
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/api/projects/active") {
+    writeJson(response, 200, {
+      data: service.getActiveProject() ?? null
+    });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/projects") {
+    const project = registerProject(service, await readJson(request));
+    writeJson(response, 201, {
+      data: project
     });
     return;
   }
@@ -352,6 +375,26 @@ async function routeRequest(
     return;
   }
 
+  const projectActivateMatch = /^\/api\/projects\/([^/]+)\/activate$/.exec(url.pathname);
+  if (method === "POST" && projectActivateMatch?.[1] !== undefined) {
+    const id = decodeURIComponent(projectActivateMatch[1]);
+    const project = service.activateProject(id);
+    if (project === undefined) {
+      writeJson(response, 404, {
+        error: {
+          code: "project_not_found",
+          message: "Project was not found."
+        }
+      });
+      return;
+    }
+
+    writeJson(response, 200, {
+      data: project
+    });
+    return;
+  }
+
   if (method === "GET" && await tryServeDashboardAsset(url.pathname, response)) {
     return;
   }
@@ -484,6 +527,26 @@ function parseNow(body: unknown): Date {
   }
 
   return parsed;
+}
+
+function registerProject(service: SukaService, body: unknown): LocalProject {
+  if (!isRecord(body)) {
+    throw new HttpInputError("invalid_body", "Project registration body must be an object.");
+  }
+  if (typeof body.path !== "string" || body.path.trim().length === 0) {
+    throw new HttpInputError("invalid_body", "Project registration requires a non-empty path.");
+  }
+
+  try {
+    return service.registerProject({
+      path: body.path
+    });
+  } catch (error) {
+    throw new HttpInputError(
+      "invalid_project_path",
+      error instanceof Error ? error.message : "Project path must be an existing directory."
+    );
+  }
 }
 
 function writeJson(response: ServerResponse, statusCode: number, payload: unknown): void {

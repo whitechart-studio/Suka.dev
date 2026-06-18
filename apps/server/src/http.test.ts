@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import WebSocket from "ws";
-import { createSukaHttpServer, isAllowedRealtimeOrigin, listen } from "./index.js";
+import { createSukaHttpServer, createSukaService, FileSukaStore, isAllowedRealtimeOrigin, listen } from "./index.js";
 
 test("GET /api/state returns the current state", async () => {
   const running = await listen({ port: 0 }, createSukaHttpServer());
@@ -49,6 +52,132 @@ test("GET /api/team returns the current team summary", async () => {
     assert.equal(body.data.workspaces[0]?.workspace_id, "workspace-a");
     assert.deepEqual(body.data.workspaces[0]?.repo_ids, ["repo-a"]);
     assert.deepEqual(body.data.workspaces[0]?.session_ids, ["session-a"]);
+  } finally {
+    await running.close();
+  }
+});
+
+test("project API registers, lists, and activates local folders", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-project-api-"));
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  try {
+    const projectDir = join(tempDir, "project");
+    mkdirSync(projectDir);
+    const normalizedProjectDir = realpathSync(projectDir);
+
+    const createResponse = await postJson(`${running.url}/api/projects`, {
+      path: projectDir
+    });
+    const createBody = await createResponse.json() as {
+      data: {
+        id: string;
+        name: string;
+        path: string;
+        repo_root: string;
+      };
+    };
+
+    assert.equal(createResponse.status, 201);
+    assert.equal(createBody.data.name, "project");
+    assert.equal(createBody.data.path, normalizedProjectDir);
+    assert.equal(createBody.data.repo_root, normalizedProjectDir);
+
+    const listResponse = await fetch(`${running.url}/api/projects`);
+    const listBody = await listResponse.json() as { data: Array<{ id: string }> };
+    assert.equal(listResponse.status, 200);
+    assert.deepEqual(listBody.data.map((project) => project.id), [createBody.data.id]);
+
+    const activateResponse = await postJson(`${running.url}/api/projects/${encodeURIComponent(createBody.data.id)}/activate`, {});
+    const activateBody = await activateResponse.json() as { data: { id: string } };
+    assert.equal(activateResponse.status, 200);
+    assert.equal(activateBody.data.id, createBody.data.id);
+
+    const activeResponse = await fetch(`${running.url}/api/projects/active`);
+    const activeBody = await activeResponse.json() as { data: { id: string } | null };
+    assert.equal(activeResponse.status, 200);
+    assert.equal(activeBody.data?.id, createBody.data.id);
+  } finally {
+    await running.close();
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
+test("project API persists active project with file-backed state", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-project-api-"));
+  try {
+    const dataFile = join(tempDir, "state.json");
+    const projectDir = join(tempDir, "project");
+    mkdirSync(projectDir);
+
+    const first = await listen({ port: 0 }, createSukaHttpServer({
+      service: createSukaService(new FileSukaStore(dataFile))
+    }));
+    let projectId = "";
+    try {
+      const createResponse = await postJson(`${first.url}/api/projects`, {
+        path: projectDir
+      });
+      const createBody = await createResponse.json() as { data: { id: string } };
+      projectId = createBody.data.id;
+
+      const activateResponse = await postJson(`${first.url}/api/projects/${encodeURIComponent(projectId)}/activate`, {});
+      assert.equal(createResponse.status, 201);
+      assert.equal(activateResponse.status, 200);
+    } finally {
+      await first.close();
+    }
+
+    const second = await listen({ port: 0 }, createSukaHttpServer({
+      service: createSukaService(new FileSukaStore(dataFile))
+    }));
+    try {
+      const response = await fetch(`${second.url}/api/projects/active`);
+      const body = await response.json() as { data: { id: string } | null };
+
+      assert.equal(response.status, 200);
+      assert.equal(body.data?.id, projectId);
+    } finally {
+      await second.close();
+    }
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
+test("project API returns client errors for invalid project paths", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-project-api-"));
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  try {
+    const missingPathResponse = await postJson(`${running.url}/api/projects`, {});
+    const missingPathBody = await missingPathResponse.json() as { error: { code: string; message: string } };
+    assert.equal(missingPathResponse.status, 400);
+    assert.equal(missingPathBody.error.code, "invalid_body");
+    assert.match(missingPathBody.error.message, /non-empty path/);
+
+    const filePath = join(tempDir, "not-a-directory.txt");
+    writeFileSync(filePath, "not a directory\n", "utf8");
+    const fileResponse = await postJson(`${running.url}/api/projects`, {
+      path: filePath
+    });
+    const fileBody = await fileResponse.json() as { error: { code: string; message: string } };
+    assert.equal(fileResponse.status, 400);
+    assert.equal(fileBody.error.code, "invalid_project_path");
+    assert.match(fileBody.error.message, /directory/);
+  } finally {
+    await running.close();
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
+test("project API returns not found when activating a missing project", async () => {
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  try {
+    const response = await postJson(`${running.url}/api/projects/missing/activate`, {});
+    const body = await response.json() as { error: { code: string; message: string } };
+
+    assert.equal(response.status, 404);
+    assert.equal(body.error.code, "project_not_found");
+    assert.match(body.error.message, /not found/);
   } finally {
     await running.close();
   }
