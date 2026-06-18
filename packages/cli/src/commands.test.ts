@@ -115,6 +115,175 @@ test("agents detect exits successfully with a local report", async () => {
   assert.equal(typeof JSON.parse(output.join("")).repo_root, "string");
 });
 
+test("agents detect publishes detected presence when requested", async () => {
+  const requests: Array<{ init?: RequestInit; url: string }> = [];
+  const output: string[] = [];
+  const result = await runCli({
+    argv: [
+      "agents",
+      "detect",
+      "--publish",
+      "--server",
+      "http://suka.test",
+      "--workspace",
+      "workspace-local",
+      "--repo-id",
+      "repo-local",
+      "--session",
+      "session-local",
+      "--ttl",
+      "60",
+      "--json"
+    ],
+    detectLocalAgents: () => ({
+      agents: [{
+        agent_id: "codex-pid-101",
+        branch: "RS/agents-watch",
+        command: "/opt/homebrew/bin/codex",
+        confidence: "high",
+        current_files: ["packages/cli/src/commands.ts"],
+        cwd: "/repo/suka",
+        detection_source: "process-cwd",
+        pid: 101,
+        status: "detected",
+        tool: "codex"
+      }],
+      branch: "RS/agents-watch",
+      changed_files: ["packages/cli/src/commands.ts"],
+      generated_at: "2026-06-18T06:00:00.000Z",
+      repo_root: "/repo/suka",
+      warnings: []
+    }),
+    env: {},
+    fetch: async (url, init) => {
+      const request: { init?: RequestInit; url: string } = { url: String(url) };
+      if (init !== undefined) {
+        request.init = init;
+      }
+      requests.push(request);
+      return jsonResponse(201, JSON.parse(String(init?.body)) as unknown);
+    },
+    io: {
+      stdout: { write: (value: string) => output.push(value) },
+      stderr: { write: () => undefined }
+    },
+    now: new Date("2026-06-18T06:00:00.000Z")
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0]?.url, "http://suka.test/api/pointers");
+  const body = JSON.parse(String(requests[0]?.init?.body)) as {
+    agent_id: string;
+    branch: string;
+    current_files: string[];
+    expires_at: string;
+    last_seen: string;
+    repo_id: string;
+    session_id: string;
+    status: string;
+    task: string;
+    tool: string;
+    type: string;
+    workspace_id: string;
+  };
+  assert.equal(body.type, "presence");
+  assert.equal(body.agent_id, "codex-pid-101");
+  assert.equal(body.tool, "codex");
+  assert.equal(body.branch, "RS/agents-watch");
+  assert.equal(body.status, "online");
+  assert.equal(body.task, "Detected local agent process");
+  assert.deepEqual(body.current_files, ["packages/cli/src/commands.ts"]);
+  assert.equal(body.workspace_id, "workspace-local");
+  assert.equal(body.repo_id, "repo-local");
+  assert.equal(body.session_id, "session-local");
+  assert.equal(body.last_seen, "2026-06-18T06:00:00.000Z");
+  assert.equal(body.expires_at, "2026-06-18T06:01:00.000Z");
+  assert.equal(JSON.parse(output.join("")).published_presence, 1);
+});
+
+test("agents watch republishes detected presence until aborted", async () => {
+  const controller = new AbortController();
+  const requests: Array<{ init?: RequestInit }> = [];
+  const output: string[] = [];
+  const result = await runCli({
+    argv: ["agents", "watch", "--server", "http://suka.test", "--interval", "15", "--ttl", "45"],
+    detectLocalAgents: () => ({
+      agents: [{
+        agent_id: "claude-code-pid-202",
+        branch: "main",
+        command: "claude",
+        confidence: "high",
+        current_files: [],
+        cwd: "/repo/suka",
+        detection_source: "process-cwd",
+        pid: 202,
+        status: "detected",
+        tool: "claude-code"
+      }],
+      branch: "main",
+      changed_files: [],
+      generated_at: "2026-06-18T06:00:00.000Z",
+      repo_root: "/repo/suka",
+      warnings: []
+    }),
+    env: {},
+    fetch: async (_url, init) => {
+      const request: { init?: RequestInit } = {};
+      if (init !== undefined) {
+        request.init = init;
+      }
+      requests.push(request);
+      if (requests.length === 2) {
+        controller.abort();
+      }
+      return jsonResponse(201, JSON.parse(String(init?.body)) as unknown);
+    },
+    io: {
+      stdout: { write: (value: string) => output.push(value) },
+      stderr: { write: () => undefined }
+    },
+    now: new Date("2026-06-18T06:00:00.000Z"),
+    signal: controller.signal,
+    sleep: async () => undefined
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(requests.length, 2);
+  assert.match(output.join(""), /Watching local agents every 15s/);
+  assert.match(output.join(""), /Agent watch stopped/);
+});
+
+test("agents detect reports unavailable detector states without publishing", async () => {
+  const requests: unknown[] = [];
+  const output: string[] = [];
+  const result = await runCli({
+    argv: ["agents", "detect", "--publish", "--server", "http://suka.test"],
+    detectLocalAgents: () => ({
+      agents: [],
+      changed_files: [],
+      generated_at: "2026-06-18T06:00:00.000Z",
+      repo_root: "/repo/suka",
+      warnings: ["Local agent process detection is not implemented for Windows yet."]
+    }),
+    env: {},
+    fetch: async (url, init) => {
+      requests.push({ init, url });
+      return jsonResponse(201, {});
+    },
+    io: {
+      stdout: { write: (value: string) => output.push(value) },
+      stderr: { write: () => undefined }
+    },
+    now: new Date("2026-06-18T06:00:00.000Z")
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(requests.length, 0);
+  assert.match(output.join(""), /none detected/);
+  assert.match(output.join(""), /not implemented for Windows/);
+});
+
 test("doctor reports config warnings and reachable APIs", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "suka-cli-doctor-"));
   const originalCwd = process.cwd();

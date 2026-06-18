@@ -1,3 +1,5 @@
+import type { DetectLocalAgentsOptions, LocalAgentDetectionReport } from "./agents.js";
+
 export interface CliIo {
   stdout: WritableText;
   stderr: WritableText;
@@ -15,6 +17,7 @@ export interface CliContext {
   fetch?: typeof fetch;
   signal?: AbortSignal;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  detectLocalAgents?: (options?: DetectLocalAgentsOptions) => LocalAgentDetectionReport;
 }
 
 export interface CliResult {
