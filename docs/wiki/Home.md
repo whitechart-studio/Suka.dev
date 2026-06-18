@@ -13,6 +13,7 @@ It helps a team answer the operational questions that matter during agentic deve
 ## Core Concepts
 
 - **Agent presence**: a live signal showing an agent, tool, task, branch, and active files.
+- **Local detection**: a same-machine helper for seeing Codex and Claude Code sessions running in the current repository.
 - **Claims**: temporary work ownership over paths, APIs, tables, env keys, or domains.
 - **Briefs**: structured handoffs that capture changed files, decisions, assumptions, risks, and next action.
 - **Conflict radar**: warnings when planned work overlaps with existing claims or risky areas.

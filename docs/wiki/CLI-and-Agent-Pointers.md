@@ -50,6 +50,42 @@ Stop a heartbeat publisher with `Ctrl+C` or `SIGTERM`; the CLI exits cleanly aft
 
 If `--repo`, `--branch`, or `--file` are omitted, the CLI attempts to detect them from the local Git repository. Repeated `--file` flags and comma-separated file lists are both supported.
 
+## Same-Machine Agent Detection
+
+Use `agents detect` when Codex and Claude Code are running on the same machine and you want Suka to discover local sessions from process metadata:
+
+```bash
+node packages/cli/dist/bin.js agents detect \
+  --server http://127.0.0.1:4366 \
+  --publish
+```
+
+Use `agents watch` when you want Suka to keep publishing detected presence while the tools continue working:
+
+```bash
+node packages/cli/dist/bin.js agents watch \
+  --server http://127.0.0.1:4366 \
+  --workspace local-whitechart-studio-suka-dev \
+  --repo-id whitechart-studio-suka-dev \
+  --session session-20260614102030 \
+  --interval 15 \
+  --ttl 45
+```
+
+Detection currently answers "which supported tool appears to be running in this repository?" It does not know what prompt was sent, what terminal output was produced, or which file an agent intends to edit next. When exact ownership matters, pair detected presence with explicit claims:
+
+```bash
+node packages/cli/dist/bin.js claim "apps/dashboard/**" \
+  --agent codex-local \
+  --reason "Own dashboard activity panel polish"
+
+node packages/cli/dist/bin.js block "packages/protocol/**" \
+  --agent claude-code-local \
+  --reason "Do not edit protocol types during validation review"
+```
+
+File attribution is inferred unless the agent publishes explicit `--file` values, claims, or briefs. A detected agent may share the repository working directory with another tool, so use claims and handoff briefs for the human-readable truth.
+
 ## Team Context
 
 Pointers can be scoped to a workspace, repo, and session so multiple agents land
@@ -161,6 +197,17 @@ SUKA_AGENT_TOOL=cursor \
 node packages/cli/dist/bin.js presence \
   --status editing \
   --task "Implement current task" \
+  --watch
+```
+
+Claude Code:
+
+```bash
+SUKA_AGENT_ID="claude-code-${USER:-local}" \
+SUKA_AGENT_TOOL=claude-code \
+node packages/cli/dist/bin.js presence \
+  --status editing \
+  --task "Review current implementation" \
   --watch
 ```
 
