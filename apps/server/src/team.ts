@@ -70,6 +70,7 @@ function toMemberSummary(presence: PresencePointer): TeamConnectionSummary["memb
     ...optional("branch", presence.branch),
     ...optional("repo_id", presence.repo_id),
     ...optional("session_id", presence.session_id),
+    ...(presence.source === undefined ? {} : { source: presence.source }),
     ...optional("task", presence.task),
     ...optional("user_id", presence.user_id),
     ...optional("workspace_id", presence.workspace_id)

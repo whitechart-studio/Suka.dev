@@ -86,6 +86,8 @@ node packages/cli/dist/bin.js block "packages/protocol/**" \
 
 File attribution is inferred unless the agent publishes explicit `--file` values, claims, or briefs. A detected agent may share the repository working directory with another tool, so use claims and handoff briefs for the human-readable truth.
 
+When `agents detect --publish` or `agents watch` publishes presence, Suka marks it with `source.kind: detected`. The source metadata may include the detector name, process ID, repository cwd, and detection timestamp so dashboards and CLI summaries can distinguish detected presence from manually published presence.
+
 ## Team Context
 
 Pointers can be scoped to a workspace, repo, and session so multiple agents land

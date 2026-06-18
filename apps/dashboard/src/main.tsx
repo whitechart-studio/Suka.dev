@@ -68,6 +68,13 @@ type PresencePointer = {
   agent_id: string;
   user_id?: string;
   tool: string;
+  source?: {
+    kind: "manual" | "detected";
+    detector?: string;
+    pid?: number;
+    cwd?: string;
+    detected_at?: string;
+  };
   status: string;
   branch?: string;
   task?: string;
@@ -1037,13 +1044,14 @@ function RailHeader(props: {
 function AgentCard({ agent }: { agent: PresencePointer }): React.ReactElement {
   const identity = agentIdentity(agent);
   const Icon = identity.icon;
+  const source = agentSourceLabel(agent);
   return (
     <article className="agent-card">
       <div className="agent-top">
         <span className="agent-avatar" style={{ background: agentColor(agent.agent_id) }}><Icon size={14} /></span>
         <div>
           <h3>{agent.agent_id}</h3>
-          <p>{identity.label} / {agent.branch ?? "none"}</p>
+          <p>{identity.label} / {source} / {agent.branch ?? "none"}</p>
         </div>
         <Badge tone="live" icon={<Activity size={13} />}>{agent.status}</Badge>
       </div>
@@ -1237,6 +1245,7 @@ function SelectionInspector({
         <h2><Icon size={14} /> {selection.agent.agent_id}</h2>
         <div className="inspector-grid">
           <span>tool</span><strong>{identity.label}</strong>
+          <span>source</span><strong>{agentSourceLabel(selection.agent)}</strong>
           <span>status</span><strong>{selection.agent.status}</strong>
           <span>branch</span><strong>{selection.agent.branch ?? "none"}</strong>
         </div>
@@ -1694,6 +1703,10 @@ function agentIdentity(agent: PresencePointer): { icon: React.ElementType; label
   if (raw.includes("copilot") || raw.includes("github")) return { icon: GitBranch, label: "GitHub Copilot", symbol: "Gh" };
   if (raw.includes("terminal") || raw.includes("cli") || raw.includes("shell")) return { icon: Terminal, label: "Terminal", symbol: "Sh" };
   return { icon: Code2, label: agent.tool, symbol: initials(agent.agent_id).slice(0, 2) };
+}
+
+function agentSourceLabel(agent: PresencePointer): string {
+  return agent.source?.kind === "detected" ? "detected" : "manual";
 }
 
 function agentColor(agentId: string): string {

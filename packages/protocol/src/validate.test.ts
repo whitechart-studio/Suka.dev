@@ -22,6 +22,56 @@ test("accepts a valid presence pointer", () => {
   assert.equal(result.ok, true);
 });
 
+test("accepts detected presence source metadata", () => {
+  const result = validatePointer({
+    type: "presence",
+    id: "ptr_detected_presence_01",
+    agent_id: "codex-pid-101",
+    tool: "codex",
+    source: {
+      kind: "detected",
+      detector: "process-cwd",
+      pid: 101,
+      cwd: "/repo/suka",
+      detected_at: "2026-06-18T06:00:00.000Z"
+    },
+    repo: "whitechart-studio/Suka.dev",
+    branch: "main",
+    status: "online",
+    current_files: ["packages/cli/src/commands.ts"],
+    last_seen: "2026-06-18T06:00:00.000Z",
+    expires_at: "2026-06-18T06:01:00.000Z"
+  });
+
+  assert.equal(result.ok, true);
+});
+
+test("rejects invalid detected presence source metadata", () => {
+  const result = validatePointer({
+    type: "presence",
+    id: "ptr_detected_presence_invalid",
+    agent_id: "codex-pid-101",
+    tool: "codex",
+    source: {
+      kind: "detected",
+      pid: "101",
+      detected_at: "not-a-date"
+    },
+    repo: "whitechart-studio/Suka.dev",
+    status: "online",
+    current_files: [],
+    last_seen: "2026-06-18T06:00:00.000Z",
+    expires_at: "2026-06-18T06:01:00.000Z"
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(result.issues.some((issue) => issue.path === "source.detector" && issue.code === "missing_field"));
+    assert.ok(result.issues.some((issue) => issue.path === "source.pid" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "source.detected_at" && issue.code === "invalid_timestamp"));
+  }
+});
+
 test("accepts optional coordination context on pointers", () => {
   const result = validatePointer({
     type: "claim",
@@ -114,6 +164,10 @@ test("documents the team connection summary contract", () => {
       session_id: "session-a",
       status: "editing",
       tool: "codex",
+      source: {
+        kind: "detected",
+        detector: "process-cwd"
+      },
       workspace_id: "workspace-a"
     }],
     mode: "scoped",

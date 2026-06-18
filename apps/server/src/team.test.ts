@@ -12,6 +12,13 @@ test("builds local team summary from unscoped presence", () => {
       id: "ptr_presence_local",
       last_seen: "2026-06-12T10:00:00.000Z",
       repo: "whitechart-studio/Suka.dev",
+      source: {
+        kind: "detected",
+        detector: "process-cwd",
+        pid: 101,
+        cwd: "/repo/suka",
+        detected_at: "2026-06-18T06:00:00.000Z"
+      },
       status: "editing",
       tool: "codex",
       type: "presence"
@@ -24,6 +31,13 @@ test("builds local team summary from unscoped presence", () => {
   assert.deepEqual(summary.workspaces[0]?.repo_ids, ["whitechart-studio/Suka.dev"]);
   assert.deepEqual(summary.workspaces[0]?.session_ids, ["local-session"]);
   assert.equal(summary.members[0]?.agent_id, "codex-local-01");
+  assert.deepEqual(summary.members[0]?.source, {
+    kind: "detected",
+    detector: "process-cwd",
+    pid: 101,
+    cwd: "/repo/suka",
+    detected_at: "2026-06-18T06:00:00.000Z"
+  });
 });
 
 test("builds scoped team summary across workspaces and sessions", () => {

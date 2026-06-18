@@ -13,6 +13,7 @@ import type {
   EventPointer,
   Pointer,
   PointerScope,
+  PresenceSourceKind,
   PresencePointer,
   ValidationIssue,
   ValidationResult
@@ -20,6 +21,7 @@ import type {
 
 type MutableIssueList = ValidationIssue[];
 const CLAIM_KINDS = ["soft_claim", "blocked_scope"] as const satisfies readonly ClaimKind[];
+const PRESENCE_SOURCE_KINDS = ["manual", "detected"] as const satisfies readonly PresenceSourceKind[];
 
 export function validatePointer(value: unknown): ValidationResult<Pointer> {
   const issues: MutableIssueList = [];
@@ -73,6 +75,7 @@ export function validatePresencePointer(value: unknown): ValidationResult<Presen
   requireString(value, "agent_id", issues);
   optionalString(value, "user_id", issues);
   requireString(value, "tool", issues);
+  optionalPresenceSource(value, issues);
   requireString(value, "repo", issues);
   optionalString(value, "branch", issues);
   optionalString(value, "task", issues);
@@ -181,6 +184,35 @@ export function validateBriefPointer(value: unknown): ValidationResult<BriefPoin
   return issues.length === 0 ? ok(value as unknown as BriefPointer) : fail(issues);
 }
 
+function optionalPresenceSource(record: Record<string, unknown>, issues: MutableIssueList): void {
+  const value = record.source;
+  if (value === undefined) {
+    return;
+  }
+  if (!isRecord(value)) {
+    issues.push({
+      code: "invalid_type",
+      path: "source",
+      message: "source must be an object when provided."
+    });
+    return;
+  }
+
+  requireEnum(value, "kind", PRESENCE_SOURCE_KINDS, issues);
+  optionalNonEmptyString(value, "detector", issues, "source.detector");
+  optionalPositiveInteger(value, "pid", issues, "source.pid");
+  optionalNonEmptyString(value, "cwd", issues, "source.cwd");
+  optionalTimestamp(value, "detected_at", issues, "source.detected_at");
+
+  if (value.kind === "detected" && value.detector === undefined) {
+    issues.push({
+      code: "missing_field",
+      path: "source.detector",
+      message: "source.detector is required for detected presence."
+    });
+  }
+}
+
 function requireScope(record: Record<string, unknown>, key: string, issues: MutableIssueList): void {
   const value = record[key];
   if (!isRecord(value)) {
@@ -243,12 +275,22 @@ function optionalString(record: Record<string, unknown>, key: string, issues: Mu
   }
 }
 
-function optionalNonEmptyString(record: Record<string, unknown>, key: string, issues: MutableIssueList): void {
+function optionalNonEmptyString(record: Record<string, unknown>, key: string, issues: MutableIssueList, path = key): void {
   if (record[key] !== undefined && (typeof record[key] !== "string" || record[key].length === 0)) {
     issues.push({
       code: "invalid_type",
-      path: key,
-      message: `${key} must be a non-empty string when provided.`
+      path,
+      message: `${path} must be a non-empty string when provided.`
+    });
+  }
+}
+
+function optionalPositiveInteger(record: Record<string, unknown>, key: string, issues: MutableIssueList, path = key): void {
+  if (record[key] !== undefined && (!Number.isInteger(record[key]) || Number(record[key]) <= 0)) {
+    issues.push({
+      code: "invalid_type",
+      path,
+      message: `${path} must be a positive integer when provided.`
     });
   }
 }
@@ -304,13 +346,23 @@ function requireTimestamp(record: Record<string, unknown>, key: string, issues: 
   }
 }
 
-function optionalTimestamp(record: Record<string, unknown>, key: string, issues: MutableIssueList): void {
-  optionalString(record, key, issues);
-  if (typeof record[key] === "string" && Number.isNaN(Date.parse(record[key]))) {
+function optionalTimestamp(record: Record<string, unknown>, key: string, issues: MutableIssueList, path = key): void {
+  if (record[key] === undefined) {
+    return;
+  }
+  if (typeof record[key] !== "string") {
+    issues.push({
+      code: "invalid_type",
+      path,
+      message: `${path} must be a string when provided.`
+    });
+    return;
+  }
+  if (Number.isNaN(Date.parse(record[key]))) {
     issues.push({
       code: "invalid_timestamp",
-      path: key,
-      message: `${key} must be a valid ISO timestamp when provided.`
+      path,
+      message: `${path} must be a valid ISO timestamp when provided.`
     });
   }
 }

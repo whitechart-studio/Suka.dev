@@ -41,6 +41,14 @@ The detector is intentionally metadata-only:
 - It does not read prompts, terminal output, source file contents, environment values, shell history, browser history, or secret values.
 - It only reports agents whose working directory, or explicit command-line cwd flag, matches the current repository.
 
+Published detected presence stores this metadata under `presence.source`:
+
+- `kind: detected`
+- detector name, such as `process-cwd`
+- process ID
+- repository working directory
+- detection timestamp
+
 Detected presence is best-effort. Suka can tell that a supported tool appears to be running inside a repository, but it cannot prove which prompt is active or which file the agent intends to edit next. Use explicit presence, claims, blocked scopes, events, and briefs when the team needs authoritative coordination state.
 
 Platform behavior:
