@@ -12,7 +12,7 @@ import {
 } from "@suka/protocol";
 import { findConfigPath, initProject, loadConfig, resolveProjectPath } from "./config.js";
 import { createPointerId } from "./ids.js";
-import { detectLocalAgents, type LocalAgentDetectionReport } from "./agents.js";
+import { detectLocalAgents, type DetectedLocalAgent, type LocalAgentDetectionReport } from "./agents.js";
 import { SukaApiClient } from "./client.js";
 import {
   formatDoctor,
@@ -103,7 +103,7 @@ export async function runCli(context: CliContext): Promise<CliResult> {
       }
 
       case "agents":
-        return agentsCommand(context, parsed.args, parsed.flags, now);
+        return await agentsCommand(context, client, parsed.args, parsed.flags, config, now);
 
       case "remind":
         return await remindCommand(context, client, parsed.flags, config, now);
@@ -227,28 +227,132 @@ export async function runCli(context: CliContext): Promise<CliResult> {
   }
 }
 
-function agentsCommand(
+async function agentsCommand(
   context: CliContext,
+  client: SukaApiClient,
   args: string[],
   flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>,
   now: Date
-): CliResult {
+): Promise<CliResult> {
   const action = args[0];
-  if (action !== "detect") {
-    throw new Error("agents requires a supported action: detect.");
+  if (action !== "detect" && action !== "watch") {
+    throw new Error("agents requires a supported action: detect or watch.");
   }
 
-  const report = detectLocalAgents({ now });
-  context.io.stdout.write(flags.json === true ? formatJson(report) : formatLocalAgentDetection(report));
+  const intervalSeconds = readNumberFlag(flags, "interval", DEFAULT_PRESENCE_HEARTBEAT_SECONDS);
+  if (intervalSeconds < 1) {
+    throw new Error("--interval must be at least 1 second.");
+  }
+  const ttlSeconds = readNumberFlag(flags, "ttl", DEFAULT_PRESENCE_TTL_SECONDS);
+  if (ttlSeconds < 1) {
+    throw new Error("--ttl must be at least 1 second.");
+  }
+
+  const publish = action === "watch" || flags.publish === true;
+  const detect = context.detectLocalAgents ?? detectLocalAgents;
+  const runOnce = async (timestamp: Date): Promise<LocalAgentWorkflowReport> => {
+    const report = detect({ now: timestamp });
+    const publishedPresence = publish
+      ? await publishDetectedAgentPresence({
+          agents: report.agents,
+          client,
+          config,
+          env: context.env,
+          flags,
+          now: timestamp,
+          ttlSeconds
+        })
+      : 0;
+    return {
+      ...report,
+      published_presence: publishedPresence
+    };
+  };
+
+  const firstReport = await runOnce(now);
+  context.io.stdout.write(flags.json === true ? formatJson(firstReport) : formatLocalAgentDetection(firstReport));
+  if (action === "detect") {
+    return { exitCode: 0 };
+  }
+
+  if (flags.json !== true) {
+    context.io.stdout.write(`Watching local agents every ${intervalSeconds}s. Press Ctrl+C to stop.\n`);
+  }
+  while (!isAborted(context.signal)) {
+    await (context.sleep ?? sleep)(intervalSeconds * 1000, context.signal);
+    if (isAborted(context.signal)) {
+      break;
+    }
+    const report = await runOnce(new Date());
+    context.io.stdout.write(flags.json === true ? formatJson(report) : formatLocalAgentDetection(report));
+  }
+  if (flags.json !== true) {
+    context.io.stdout.write("Agent watch stopped.\n");
+  }
   return { exitCode: 0 };
 }
 
-function formatLocalAgentDetection(report: LocalAgentDetectionReport): string {
+interface LocalAgentWorkflowReport extends LocalAgentDetectionReport {
+  published_presence: number;
+}
+
+async function publishDetectedAgentPresence(options: {
+  agents: DetectedLocalAgent[];
+  client: SukaApiClient;
+  config: ReturnType<typeof loadConfig>;
+  env: NodeJS.ProcessEnv;
+  flags: Parameters<typeof readStringFlag>[0];
+  now: Date;
+  ttlSeconds: number;
+}): Promise<number> {
+  let published = 0;
+  for (const agent of options.agents) {
+    const pointer = buildDetectedAgentPresencePointer({
+      agent,
+      config: options.config,
+      env: options.env,
+      flags: options.flags,
+      now: options.now,
+      ttlSeconds: options.ttlSeconds
+    });
+    await options.client.publishPointer(pointer);
+    published += 1;
+  }
+  return published;
+}
+
+function buildDetectedAgentPresencePointer(options: {
+  agent: DetectedLocalAgent;
+  config: ReturnType<typeof loadConfig>;
+  env: NodeJS.ProcessEnv;
+  flags: Parameters<typeof readStringFlag>[0];
+  now: Date;
+  ttlSeconds: number;
+}): Record<string, unknown> {
+  return {
+    type: "presence",
+    id: createPointerId("presence", options.now),
+    ...coordinationContext(options.flags, options.config, options.env),
+    agent_id: options.agent.agent_id,
+    tool: options.agent.tool,
+    repo: readStringFlag(options.flags, "repo") ?? options.config?.repo ?? detectGitRepoName(),
+    branch: options.agent.branch,
+    task: readStringFlag(options.flags, "task") ?? "Detected local agent process",
+    status: (readStringFlag(options.flags, "status") ?? "online") as PresenceStatus,
+    current_files: options.agent.current_files,
+    last_seen: options.now.toISOString(),
+    expires_at: new Date(options.now.getTime() + options.ttlSeconds * 1000).toISOString()
+  };
+}
+
+function formatLocalAgentDetection(report: LocalAgentWorkflowReport): string {
   const lines = [
     "Suka local agents",
     `repo: ${report.repo_root}`,
     `branch: ${report.branch ?? "unknown"}`,
-    `changed files: ${report.changed_files.length}`
+    `changed files: ${report.changed_files.length}`,
+    `published presence: ${report.published_presence}`
   ];
 
   if (report.agents.length === 0) {
@@ -965,11 +1069,15 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     return Promise.resolve();
   }
   return new Promise((resolve) => {
-    const timeout = setTimeout(resolve, ms);
-    signal?.addEventListener("abort", () => {
+    const onAbort = () => {
       clearTimeout(timeout);
       resolve();
-    }, { once: true });
+    };
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
 
