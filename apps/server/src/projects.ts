@@ -40,6 +40,14 @@ export function inspectLocalProject(input: LocalProjectInput): LocalProjectMetad
 
 export function buildLocalProject(input: LocalProjectInput, existing?: LocalProject): LocalProject {
   const metadata = inspectLocalProject(input);
+  return buildLocalProjectFromMetadata(metadata, input, existing);
+}
+
+export function buildLocalProjectFromMetadata(
+  metadata: LocalProjectMetadata,
+  input: LocalProjectInput,
+  existing?: LocalProject
+): LocalProject {
   const timestamp = (input.now ?? new Date()).toISOString();
   const id = existing?.id ?? `project_${hashId(metadata.repo_root)}`;
 

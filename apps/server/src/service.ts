@@ -11,7 +11,7 @@ import {
   validatePointer
 } from "@suka/protocol";
 import { MemorySukaStore, type SukaStore } from "./memory-store.js";
-import { buildLocalProject, type LocalProjectInput } from "./projects.js";
+import { buildLocalProjectFromMetadata, inspectLocalProject, type LocalProjectInput } from "./projects.js";
 import type { LocalProject, SukaState } from "./state.js";
 import { buildTeamSummary } from "./team.js";
 
@@ -50,9 +50,9 @@ export function createSukaService(store: SukaStore = new MemorySukaStore()): Suk
 
     registerProject(input: LocalProjectInput) {
       const state = store.getState();
-      const draft = buildLocalProject(input);
-      const existing = state.projects.find((project) => project.path === draft.path || project.repo_root === draft.repo_root);
-      const project = buildLocalProject(input, existing);
+      const metadata = inspectLocalProject(input);
+      const existing = state.projects.find((project) => project.path === metadata.path || project.repo_root === metadata.repo_root);
+      const project = buildLocalProjectFromMetadata(metadata, input, existing);
       store.upsertProject(project);
       return project;
     },
@@ -70,7 +70,10 @@ export function createSukaService(store: SukaStore = new MemorySukaStore()): Suk
         updated_at: timestamp
       };
       store.upsertProject(updated);
-      store.setActiveProject(id);
+      const changed = store.setActiveProject(id);
+      if (!changed && store.getState().active_project_id !== id) {
+        return undefined;
+      }
       return updated;
     },
 

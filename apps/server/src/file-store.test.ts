@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
@@ -51,6 +51,20 @@ test("file store persists registered projects and active project", () => {
     const second = createSukaService(new FileSukaStore(dataFile));
     assert.equal(second.listProjects().length, 1);
     assert.equal(second.getActiveProject()?.id, project.id);
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
+test("file store ignores active project ids that do not exist", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-store-"));
+  try {
+    const dataFile = join(tempDir, "state.json");
+    writeFileSync(dataFile, `${JSON.stringify({ active_project_id: "missing", projects: [] })}\n`, "utf8");
+
+    const service = createSukaService(new FileSukaStore(dataFile));
+    assert.equal(service.getState().active_project_id, undefined);
+    assert.equal(service.getActiveProject(), undefined);
   } finally {
     rmSync(tempDir, { force: true, recursive: true });
   }

@@ -98,12 +98,13 @@ export class MemorySukaStore implements SukaStore {
     if (id !== undefined && !this.#state.projects.some((project) => project.id === id)) {
       return false;
     }
+    const previous = this.#state.active_project_id;
     if (id === undefined) {
       delete this.#state.active_project_id;
     } else {
       this.#state.active_project_id = id;
     }
-    return true;
+    return this.#state.active_project_id !== previous;
   }
 
   expire(now: Date): void {

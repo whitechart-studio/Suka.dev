@@ -105,13 +105,18 @@ function loadState(path: string): SukaState {
   const raw = readFileSync(path, "utf8");
   const parsed = JSON.parse(raw) as Partial<SukaState>;
 
-  return {
+  const state: SukaState = {
     presence: Array.isArray(parsed.presence) ? parsed.presence : [],
     claims: Array.isArray(parsed.claims) ? parsed.claims : [],
     events: Array.isArray(parsed.events) ? parsed.events : [],
     decisions: Array.isArray(parsed.decisions) ? parsed.decisions : [],
     briefs: Array.isArray(parsed.briefs) ? parsed.briefs : [],
-    projects: Array.isArray(parsed.projects) ? parsed.projects : [],
-    ...(typeof parsed.active_project_id === "string" ? { active_project_id: parsed.active_project_id } : {})
+    projects: Array.isArray(parsed.projects) ? parsed.projects : []
   };
+
+  if (typeof parsed.active_project_id === "string" && state.projects.some((project) => project.id === parsed.active_project_id)) {
+    state.active_project_id = parsed.active_project_id;
+  }
+
+  return state;
 }
