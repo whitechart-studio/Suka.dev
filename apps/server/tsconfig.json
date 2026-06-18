@@ -12,6 +12,9 @@
       "path": "../../packages/protocol"
     },
     {
+      "path": "../../packages/local-agents"
+    },
+    {
       "path": "../../packages/conflict-engine"
     }
   ]

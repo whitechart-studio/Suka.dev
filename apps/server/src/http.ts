@@ -5,6 +5,7 @@ import { extname, join, resolve } from "node:path";
 import { URL } from "node:url";
 import { dashboardHtml } from "./dashboard.js";
 import type { SukaLogger } from "./logger.js";
+import { ProjectTrackingError, ProjectTrackingWorker } from "./project-tracker.js";
 import { RealtimeHub } from "./realtime.js";
 import { buildRepoMap } from "./repo-map.js";
 import { createSukaService, type SukaService } from "./service.js";
@@ -17,6 +18,7 @@ const dashboardDistPath = resolve(process.cwd(), "apps/dashboard/dist");
 
 export interface HttpServerOptions {
   logger?: SukaLogger;
+  projectTracker?: ProjectTrackingWorker;
   service?: SukaService;
 }
 
@@ -34,11 +36,12 @@ export interface RunningHttpServer {
 export function createSukaHttpServer(options: HttpServerOptions = {}): Server {
   const service = options.service ?? createSukaService();
   const realtime = new RealtimeHub({ service });
+  const projectTracker = options.projectTracker ?? new ProjectTrackingWorker(service);
   const logger = options.logger;
 
   const server = createServer(async (request, response) => {
     try {
-      await routeRequest(service, realtime, request, response);
+      await routeRequest(service, realtime, projectTracker, request, response);
     } catch (error) {
       logger?.log("error", "request failed", {
         error_code: error instanceof HttpInputError ? error.code : "internal_error",
@@ -102,6 +105,7 @@ export async function listen(options: ListenOptions, server = createSukaHttpServ
 async function routeRequest(
   service: SukaService,
   realtime: RealtimeHub,
+  projectTracker: ProjectTrackingWorker,
   request: IncomingMessage,
   response: ServerResponse
 ): Promise<void> {
@@ -182,6 +186,29 @@ async function routeRequest(
   if (method === "GET" && url.pathname === "/api/projects/active") {
     writeJson(response, 200, {
       data: service.getActiveProject() ?? null
+    });
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/api/projects/tracking") {
+    writeJson(response, 200, {
+      data: projectTracker.status()
+    });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/projects/tracking/start") {
+    const body = await readJson(request);
+    const status = startProjectTracking(projectTracker, body);
+    writeJson(response, 200, {
+      data: status
+    });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/projects/tracking/stop") {
+    writeJson(response, 200, {
+      data: projectTracker.stop()
     });
     return;
   }
@@ -546,6 +573,24 @@ function registerProject(service: SukaService, body: unknown): LocalProject {
       "invalid_project_path",
       error instanceof Error ? error.message : "Project path must be an existing directory."
     );
+  }
+}
+
+function startProjectTracking(projectTracker: ProjectTrackingWorker, body: unknown): ReturnType<ProjectTrackingWorker["status"]> {
+  if (!isRecord(body)) {
+    throw new HttpInputError("invalid_body", "Project tracking body must be an object.");
+  }
+  if (body.project_id !== undefined && typeof body.project_id !== "string") {
+    throw new HttpInputError("invalid_body", "project_id must be a string when provided.");
+  }
+
+  try {
+    return projectTracker.start(body.project_id);
+  } catch (error) {
+    if (error instanceof ProjectTrackingError) {
+      throw new HttpInputError(error.code, error.message);
+    }
+    throw error;
   }
 }
 
