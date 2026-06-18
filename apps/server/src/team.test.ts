@@ -3,27 +3,26 @@ import assert from "node:assert/strict";
 import { buildTeamSummary, createEmptyState } from "./index.js";
 
 test("builds local team summary from unscoped presence", () => {
-  const summary = buildTeamSummary({
-    ...createEmptyState(),
-    presence: [{
-      agent_id: "codex-local-01",
-      current_files: ["apps/server/src/http.ts"],
-      expires_at: "2099-06-12T11:00:00.000Z",
-      id: "ptr_presence_local",
-      last_seen: "2026-06-12T10:00:00.000Z",
-      repo: "whitechart-studio/Suka.dev",
-      source: {
-        kind: "detected",
-        detector: "process-cwd",
-        pid: 101,
-        cwd: "/repo/suka",
-        detected_at: "2026-06-18T06:00:00.000Z"
-      },
-      status: "editing",
-      tool: "codex",
-      type: "presence"
-    }]
-  }, new Date("2026-06-12T10:00:00.000Z"));
+  const state = createEmptyState();
+  state.presence = [{
+    agent_id: "codex-local-01",
+    current_files: ["apps/server/src/http.ts"],
+    expires_at: "2099-06-12T11:00:00.000Z",
+    id: "ptr_presence_local",
+    last_seen: "2026-06-12T10:00:00.000Z",
+    repo: "whitechart-studio/Suka.dev",
+    source: {
+      kind: "detected",
+      detector: "process-cwd",
+      pid: 101,
+      cwd: "/repo/suka",
+      detected_at: "2026-06-18T06:00:00.000Z"
+    },
+    status: "editing",
+    tool: "codex",
+    type: "presence"
+  }];
+  const summary = buildTeamSummary(state, new Date("2026-06-12T10:00:00.000Z"));
 
   assert.equal(summary.mode, "local");
   assert.equal(summary.active_agents, 1);
@@ -38,6 +37,10 @@ test("builds local team summary from unscoped presence", () => {
     cwd: "/repo/suka",
     detected_at: "2026-06-18T06:00:00.000Z"
   });
+  if (summary.members[0]?.source !== undefined) {
+    summary.members[0].source.detector = "mutated";
+  }
+  assert.equal(state.presence[0]?.source?.detector, "process-cwd");
 });
 
 test("builds scoped team summary across workspaces and sessions", () => {

@@ -198,7 +198,7 @@ function optionalPresenceSource(record: Record<string, unknown>, issues: Mutable
     return;
   }
 
-  requireEnum(value, "kind", PRESENCE_SOURCE_KINDS, issues);
+  requireEnum(value, "kind", PRESENCE_SOURCE_KINDS, issues, "source.kind");
   optionalNonEmptyString(value, "detector", issues, "source.detector");
   optionalPositiveInteger(value, "pid", issues, "source.pid");
   optionalNonEmptyString(value, "cwd", issues, "source.cwd");
@@ -309,13 +309,14 @@ function requireEnum<T extends readonly string[]>(
   record: Record<string, unknown>,
   key: string,
   allowed: T,
-  issues: MutableIssueList
+  issues: MutableIssueList,
+  issuePath = key
 ): void {
   if (typeof record[key] !== "string" || !allowed.includes(record[key])) {
     issues.push({
       code: record[key] === undefined ? "missing_field" : "invalid_value",
-      path: key,
-      message: `${key} must be one of: ${allowed.join(", ")}.`
+      path: issuePath,
+      message: `${issuePath} must be one of: ${allowed.join(", ")}.`
     });
   }
 }

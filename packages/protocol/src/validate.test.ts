@@ -72,6 +72,29 @@ test("rejects invalid detected presence source metadata", () => {
   }
 });
 
+test("reports nested source kind validation path", () => {
+  const result = validatePointer({
+    type: "presence",
+    id: "ptr_detected_presence_invalid_kind",
+    agent_id: "codex-pid-101",
+    tool: "codex",
+    source: {
+      kind: "automatic",
+      detector: "process-cwd"
+    },
+    repo: "whitechart-studio/Suka.dev",
+    status: "online",
+    current_files: [],
+    last_seen: "2026-06-18T06:00:00.000Z",
+    expires_at: "2026-06-18T06:01:00.000Z"
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(result.issues.some((issue) => issue.path === "source.kind" && issue.code === "invalid_value"));
+  }
+});
+
 test("accepts optional coordination context on pointers", () => {
   const result = validatePointer({
     type: "claim",
