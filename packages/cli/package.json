@@ -20,8 +20,8 @@
     "test": "node --test dist"
   },
   "dependencies": {
+    "@suka/local-agents": "0.0.0",
     "@suka/protocol": "0.0.0",
     "@suka/server": "0.0.0"
   }
 }
-

@@ -6,16 +6,5 @@
     "rootDir": "src",
     "tsBuildInfoFile": "tsconfig.tsbuildinfo"
   },
-  "include": ["src/**/*.ts"],
-  "references": [
-    {
-      "path": "../protocol"
-    },
-    {
-      "path": "../local-agents"
-    },
-    {
-      "path": "../../apps/server"
-    }
-  ]
+  "include": ["src/**/*.ts"]
 }

@@ -4,7 +4,8 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import WebSocket from "ws";
-import { createSukaHttpServer, createSukaService, FileSukaStore, isAllowedRealtimeOrigin, listen } from "./index.js";
+import type { LocalAgentDetectionReport } from "@suka/local-agents";
+import { createSukaHttpServer, createSukaService, FileSukaStore, isAllowedRealtimeOrigin, listen, ProjectTrackingWorker } from "./index.js";
 
 test("GET /api/state returns the current state", async () => {
   const running = await listen({ port: 0 }, createSukaHttpServer());
@@ -180,6 +181,128 @@ test("project API returns not found when activating a missing project", async ()
     assert.match(body.error.message, /not found/);
   } finally {
     await running.close();
+  }
+});
+
+test("project tracking API starts, reports, and stops active project tracking", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-project-tracking-"));
+  try {
+    const projectDir = join(tempDir, "project");
+    mkdirSync(projectDir);
+    const service = createSukaService();
+    const project = service.registerProject({
+      path: projectDir
+    });
+    service.activateProject(project.id);
+    let detections = 0;
+    const tracker = new ProjectTrackingWorker(service, {
+      detectLocalAgents: () => {
+        detections += 1;
+        return trackingDetectionReport(project.repo_root);
+      },
+      now: () => new Date("2026-06-18T10:05:00.000Z")
+    });
+    const running = await listen({ port: 0 }, createSukaHttpServer({
+      projectTracker: tracker,
+      service
+    }));
+    try {
+      const startResponse = await postJson(`${running.url}/api/projects/tracking/start`, {});
+      const startBody = await startResponse.json() as { data: { active_project_id: string; detected_agents: number; running: boolean } };
+      assert.equal(startResponse.status, 200);
+      assert.equal(startBody.data.running, true);
+      assert.equal(startBody.data.active_project_id, project.id);
+      assert.equal(startBody.data.detected_agents, 1);
+
+      const secondStartResponse = await postJson(`${running.url}/api/projects/tracking/start`, {});
+      assert.equal(secondStartResponse.status, 200);
+      assert.equal(detections, 1);
+
+      const statusResponse = await fetch(`${running.url}/api/projects/tracking`);
+      const statusBody = await statusResponse.json() as { data: { published_presence: number; running: boolean } };
+      assert.equal(statusResponse.status, 200);
+      assert.equal(statusBody.data.running, true);
+      assert.equal(statusBody.data.published_presence, 1);
+      assert.equal(service.getState().presence[0]?.repo_id, project.repo_id);
+
+      const stopResponse = await postJson(`${running.url}/api/projects/tracking/stop`, {});
+      const stopBody = await stopResponse.json() as { data: { running: boolean } };
+      assert.equal(stopResponse.status, 200);
+      assert.equal(stopBody.data.running, false);
+      assert.equal(service.getState().presence.length, 0);
+    } finally {
+      await running.close();
+    }
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
+test("project tracking API reports detector warnings", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-project-tracking-"));
+  try {
+    const projectDir = join(tempDir, "project");
+    mkdirSync(projectDir);
+    const service = createSukaService();
+    const project = service.registerProject({
+      path: projectDir
+    });
+    service.activateProject(project.id);
+    const tracker = new ProjectTrackingWorker(service, {
+      detectLocalAgents: () => ({
+        agents: [],
+        changed_files: [],
+        generated_at: "2026-06-18T10:05:00.000Z",
+        repo_root: project.repo_root,
+        warnings: ["Could not inspect local processes: unavailable."]
+      })
+    });
+    const running = await listen({ port: 0 }, createSukaHttpServer({
+      projectTracker: tracker,
+      service
+    }));
+    try {
+      const response = await postJson(`${running.url}/api/projects/tracking/start`, {});
+      const body = await response.json() as { data: { warnings: string[] } };
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(body.data.warnings, ["Could not inspect local processes: unavailable."]);
+    } finally {
+      tracker.stop();
+      await running.close();
+    }
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
+test("project tracking worker stops when the HTTP server closes", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-project-tracking-"));
+  try {
+    const projectDir = join(tempDir, "project");
+    mkdirSync(projectDir);
+    const service = createSukaService();
+    const project = service.registerProject({
+      path: projectDir
+    });
+    service.activateProject(project.id);
+    const tracker = new ProjectTrackingWorker(service, {
+      detectLocalAgents: () => trackingDetectionReport(project.repo_root),
+      now: () => new Date("2026-06-18T10:05:00.000Z")
+    });
+    const running = await listen({ port: 0 }, createSukaHttpServer({
+      projectTracker: tracker,
+      service
+    }));
+
+    await postJson(`${running.url}/api/projects/tracking/start`, {});
+    assert.equal(tracker.status().running, true);
+
+    await running.close();
+    assert.equal(tracker.status().running, false);
+    assert.equal(service.getState().presence.length, 0);
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
   }
 });
 
@@ -882,4 +1005,26 @@ async function nextJsonMessages(socket: WebSocket, count: number): Promise<unkno
     socket.on("message", onMessage);
     socket.once("error", onError);
   });
+}
+
+function trackingDetectionReport(repoRoot: string): LocalAgentDetectionReport {
+  return {
+    agents: [{
+      agent_id: "codex-pid-101",
+      branch: "main",
+      command: "codex",
+      confidence: "high",
+      current_files: ["apps/server/src/project-tracker.ts"],
+      cwd: repoRoot,
+      detection_source: "process-cwd",
+      pid: 101,
+      status: "detected",
+      tool: "codex"
+    }],
+    branch: "main",
+    changed_files: ["apps/server/src/project-tracker.ts"],
+    generated_at: "2026-06-18T10:05:00.000Z",
+    repo_root: repoRoot,
+    warnings: []
+  };
 }

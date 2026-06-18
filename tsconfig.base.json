@@ -18,7 +18,8 @@
     "baseUrl": ".",
     "paths": {
       "@suka/protocol": ["packages/protocol/src/index.ts"],
-      "@suka/conflict-engine": ["packages/conflict-engine/src/index.ts"]
+      "@suka/conflict-engine": ["packages/conflict-engine/src/index.ts"],
+      "@suka/local-agents": ["packages/local-agents/src/index.ts"]
     },
     "resolveJsonModule": true,
     "rootDir": "src",

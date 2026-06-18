@@ -1,13 +1,10 @@
 {
-  "name": "@suka/server",
+  "name": "@suka/local-agents",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "bin": {
-    "suka-server": "./dist/bin.js"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -18,13 +15,5 @@
     "build": "tsc -b",
     "clean": "node ../../scripts/clean-package.mjs",
     "test": "node --test dist"
-  },
-  "dependencies": {
-    "@suka/conflict-engine": "0.0.0",
-    "@suka/local-agents": "0.0.0",
-    "@suka/protocol": "0.0.0",
-    "cytoscape": "^3.34.0",
-    "lucide": "^1.18.0",
-    "ws": "^8.21.0"
   }
 }
