@@ -1,5 +1,5 @@
 import type { BriefPointer, ClaimPointer, CoordinationContext, DecisionPointer, EventPointer, PresencePointer } from "@suka/protocol";
-import { createEmptyState, type SukaCleanupResult, type SukaState } from "./state.js";
+import { createEmptyState, type LocalProject, type SukaCleanupResult, type SukaState } from "./state.js";
 
 export interface SukaStore {
   getState(): SukaState;
@@ -10,6 +10,8 @@ export interface SukaStore {
   appendEvent(pointer: EventPointer): void;
   upsertDecision(pointer: DecisionPointer): void;
   upsertBrief(pointer: BriefPointer): void;
+  upsertProject(project: LocalProject): void;
+  setActiveProject(id: string | undefined): boolean;
   expire(now: Date): void;
 }
 
@@ -22,7 +24,9 @@ export class MemorySukaStore implements SukaStore {
       claims: [...initialState.claims],
       events: [...initialState.events],
       decisions: [...initialState.decisions],
-      briefs: [...initialState.briefs]
+      briefs: [...initialState.briefs],
+      projects: [...initialState.projects],
+      ...(initialState.active_project_id === undefined ? {} : { active_project_id: initialState.active_project_id })
     };
   }
 
@@ -32,7 +36,9 @@ export class MemorySukaStore implements SukaStore {
       claims: [...this.#state.claims],
       events: [...this.#state.events],
       decisions: [...this.#state.decisions],
-      briefs: [...this.#state.briefs]
+      briefs: [...this.#state.briefs],
+      projects: [...this.#state.projects],
+      ...(this.#state.active_project_id === undefined ? {} : { active_project_id: this.#state.active_project_id })
     };
   }
 
@@ -82,6 +88,22 @@ export class MemorySukaStore implements SukaStore {
 
   upsertBrief(pointer: BriefPointer): void {
     this.#state.briefs = upsertById(this.#state.briefs, pointer);
+  }
+
+  upsertProject(project: LocalProject): void {
+    this.#state.projects = upsertById(this.#state.projects, project);
+  }
+
+  setActiveProject(id: string | undefined): boolean {
+    if (id !== undefined && !this.#state.projects.some((project) => project.id === id)) {
+      return false;
+    }
+    if (id === undefined) {
+      delete this.#state.active_project_id;
+    } else {
+      this.#state.active_project_id = id;
+    }
+    return true;
   }
 
   expire(now: Date): void {

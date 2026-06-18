@@ -1,11 +1,27 @@
 import type { BriefPointer, ClaimPointer, CoordinationContext, DecisionPointer, EventPointer, PresencePointer } from "@suka/protocol";
 
+export interface LocalProject {
+  id: string;
+  name: string;
+  path: string;
+  repo_root: string;
+  repo: string;
+  branch?: string;
+  workspace_id: string;
+  repo_id: string;
+  created_at: string;
+  updated_at: string;
+  last_opened_at?: string;
+}
+
 export interface SukaState {
   presence: PresencePointer[];
   claims: ClaimPointer[];
   events: EventPointer[];
   decisions: DecisionPointer[];
   briefs: BriefPointer[];
+  projects: LocalProject[];
+  active_project_id?: string;
 }
 
 export type SukaCleanupContext = CoordinationContext;
@@ -28,6 +44,7 @@ export function createEmptyState(): SukaState {
     claims: [],
     events: [],
     decisions: [],
-    briefs: []
+    briefs: [],
+    projects: []
   };
 }

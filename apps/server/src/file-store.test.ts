@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
@@ -34,6 +34,28 @@ test("file store persists state across service instances", () => {
   }
 });
 
+test("file store persists registered projects and active project", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-store-"));
+  try {
+    const dataFile = join(tempDir, "state.json");
+    const projectDir = join(tempDir, "project");
+    mkdirSync(projectDir);
+    const first = createSukaService(new FileSukaStore(dataFile));
+
+    const project = first.registerProject({
+      now: new Date("2026-06-18T10:00:00.000Z"),
+      path: projectDir
+    });
+    assert.equal(first.activateProject(project.id)?.id, project.id);
+
+    const second = createSukaService(new FileSukaStore(dataFile));
+    assert.equal(second.listProjects().length, 1);
+    assert.equal(second.getActiveProject()?.id, project.id);
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
 test("file store persists expiration changes", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "suka-store-"));
   try {
@@ -59,4 +81,3 @@ test("file store persists expiration changes", () => {
     rmSync(tempDir, { force: true, recursive: true });
   }
 });
-

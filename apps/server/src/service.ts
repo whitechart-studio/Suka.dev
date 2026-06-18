@@ -11,12 +11,17 @@ import {
   validatePointer
 } from "@suka/protocol";
 import { MemorySukaStore, type SukaStore } from "./memory-store.js";
-import type { SukaState } from "./state.js";
+import { buildLocalProject, type LocalProjectInput } from "./projects.js";
+import type { LocalProject, SukaState } from "./state.js";
 import { buildTeamSummary } from "./team.js";
 
 export interface SukaService {
   getState(): SukaState;
   getTeamSummary(): ReturnType<typeof buildTeamSummary>;
+  listProjects(): LocalProject[];
+  getActiveProject(): LocalProject | undefined;
+  registerProject(input: LocalProjectInput): LocalProject;
+  activateProject(id: string): LocalProject | undefined;
   publish(pointer: unknown): ValidationResult<Pointer>;
   checkConflicts(subject: ConflictSubject): ConflictWarning[];
   releaseClaim(id: string): boolean;
@@ -32,6 +37,41 @@ export function createSukaService(store: SukaStore = new MemorySukaStore()): Suk
 
     getTeamSummary() {
       return buildTeamSummary(store.getState());
+    },
+
+    listProjects() {
+      return store.getState().projects;
+    },
+
+    getActiveProject() {
+      const state = store.getState();
+      return state.projects.find((project) => project.id === state.active_project_id);
+    },
+
+    registerProject(input: LocalProjectInput) {
+      const state = store.getState();
+      const draft = buildLocalProject(input);
+      const existing = state.projects.find((project) => project.path === draft.path || project.repo_root === draft.repo_root);
+      const project = buildLocalProject(input, existing);
+      store.upsertProject(project);
+      return project;
+    },
+
+    activateProject(id: string) {
+      const state = store.getState();
+      const project = state.projects.find((item) => item.id === id);
+      if (project === undefined) {
+        return undefined;
+      }
+      const timestamp = new Date().toISOString();
+      const updated = {
+        ...project,
+        last_opened_at: timestamp,
+        updated_at: timestamp
+      };
+      store.upsertProject(updated);
+      store.setActiveProject(id);
+      return updated;
     },
 
     publish(pointer: unknown) {
