@@ -1069,15 +1069,25 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     return Promise.resolve();
   }
   return new Promise((resolve) => {
-    const onAbort = () => {
-      clearTimeout(timeout);
+    let settled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timeout !== undefined) {
+        clearTimeout(timeout);
+      }
+      signal?.removeEventListener("abort", finish);
       resolve();
     };
-    const timeout = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
-    signal?.addEventListener("abort", onAbort, { once: true });
+    signal?.addEventListener("abort", finish, { once: true });
+    if (isAborted(signal)) {
+      finish();
+      return;
+    }
+    timeout = setTimeout(finish, ms);
   });
 }
 
