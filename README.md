@@ -130,6 +130,28 @@ node packages/cli/dist/bin.js session end \
 
 ## CLI Examples
 
+Detect Codex and Claude Code sessions running in the same local repo:
+
+```bash
+node packages/cli/dist/bin.js agents detect \
+  --server http://127.0.0.1:4366 \
+  --publish
+```
+
+Keep detected local agents visible while both tools are working:
+
+```bash
+node packages/cli/dist/bin.js agents watch \
+  --server http://127.0.0.1:4366 \
+  --workspace local-whitechart-studio-suka-dev \
+  --repo-id whitechart-studio-suka-dev \
+  --session session-20260614102030 \
+  --interval 15 \
+  --ttl 45
+```
+
+Detection is a convenience layer. Suka can infer that Codex or Claude Code is running from the repository working directory, but file ownership and intent are strongest when agents also publish explicit presence, claims, events, and briefs.
+
 Publish live presence:
 
 ```bash

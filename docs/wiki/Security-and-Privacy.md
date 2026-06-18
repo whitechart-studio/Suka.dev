@@ -30,6 +30,20 @@ Do not publish:
 - Private customer data.
 - Full source contents unless a future integration explicitly supports and secures it.
 
+## Local Process Detection
+
+`suka agents detect` and `suka agents watch` inspect local process metadata to find supported tools such as Codex and Claude Code sessions working in the current repository.
+
+The detector is intentionally metadata-only:
+
+- It reads process IDs, command names, command-line arguments, and working directories where the operating system allows it.
+- It reports detected agent tool, process ID, branch, current changed-file list, and repository working directory.
+- It does not read prompts, terminal output, source file contents, environment values, shell history, browser history, or secret values.
+
+Detected presence is best-effort. Suka can tell that a supported tool appears to be running inside a repository, but it cannot prove which prompt is active or which file the agent intends to edit next. Use explicit presence, claims, blocked scopes, events, and briefs when the team needs authoritative coordination state.
+
+If the operating system denies process or cwd inspection, Suka should emit a warning and continue without requiring administrator or root access. Windows support may require platform-specific fallback behavior because another process working directory is not exposed in the same way as Unix-like systems.
+
 ## Future Hosted Requirements
 
 - Workspace auth.

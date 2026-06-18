@@ -25,6 +25,20 @@ Load the printed or written environment in every participating shell. The import
 - `SUKA_AGENT_ID`
 - `SUKA_SERVER_URL`
 
+For a same-machine Codex and Claude Code run, source the same `.suka/session.env` file in both shells. Give each tool a distinct agent ID so Suka can separate their presence:
+
+```bash
+# Codex shell
+. .suka/session.env
+export SUKA_AGENT_ID=codex-local
+export SUKA_AGENT_TOOL=codex
+
+# Claude Code shell
+. .suka/session.env
+export SUKA_AGENT_ID=claude-code-local
+export SUKA_AGENT_TOOL=claude-code
+```
+
 Join the session with the current task and files:
 
 ```bash
@@ -32,6 +46,20 @@ node packages/cli/dist/bin.js session join \
   --task "Implement brief reminders" \
   --file packages/cli/src/commands.ts
 ```
+
+If an agent cannot be wrapped cleanly, run local detection from a third terminal:
+
+```bash
+node packages/cli/dist/bin.js agents watch \
+  --server http://127.0.0.1:4366 \
+  --workspace "$SUKA_WORKSPACE_ID" \
+  --repo-id "$SUKA_REPO_ID" \
+  --session "$SUKA_SESSION_ID" \
+  --interval 15 \
+  --ttl 45
+```
+
+Detected presence is useful for visibility, but it is not the same as intent. The detector can infer supported tools from local process metadata and repository working directories; it cannot infer private prompts, terminal output, planned edits, or exact ownership boundaries.
 
 ## Before Work
 
@@ -64,6 +92,8 @@ Use a normal claim when an agent owns a focused work area:
 node packages/cli/dist/bin.js claim "apps/server/**" \
   --reason "Refactor scoped cleanup and realtime broadcasts"
 ```
+
+For same-machine work, keep claims small. A good boundary is a feature folder, API route family, schema file, or dashboard panel. Avoid broad repository-wide claims unless the task truly needs the whole repo.
 
 Use a blocked scope when other agents should not touch an area until the work is handed off:
 
