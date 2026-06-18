@@ -116,6 +116,9 @@ export function formatSessionStatus(report: SessionStatusReport): string {
   for (const member of report.members) {
     const details = [member.tool, member.status, member.task].filter((item) => item !== undefined && item.length > 0);
     lines.push(`- ${member.agent_id} ${details.join(" ")}`.trim());
+    if (member.source?.kind === "detected") {
+      lines.push(`  source: detected${member.source.detector === undefined ? "" : ` via ${member.source.detector}`}`);
+    }
     if (member.current_files.length > 0) {
       lines.push(`  files: ${member.current_files.join(", ")}`);
     }
@@ -151,6 +154,9 @@ export function formatTeam(value: unknown): string {
   for (const member of summary.members ?? []) {
     const details = [member.tool, member.status, member.task].filter((item) => item !== undefined && item.length > 0);
     lines.push(`- ${member.agent_id} ${details.join(" ")}`.trim());
+    if (member.source?.kind === "detected") {
+      lines.push(`  source: detected${member.source.detector === undefined ? "" : ` via ${member.source.detector}`}`);
+    }
     if (member.current_files.length > 0) {
       lines.push(`  files: ${member.current_files.join(", ")}`);
     }

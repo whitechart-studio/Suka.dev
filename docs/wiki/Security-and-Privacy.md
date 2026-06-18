@@ -37,9 +37,20 @@ Do not publish:
 The detector is intentionally metadata-only:
 
 - It reads process IDs, command names, command-line arguments, and working directories where the operating system allows it.
-- It reports detected agent tool, process ID, branch, current changed-file list, and repository working directory.
+- It reports detected agent tool, process ID, branch, and repository working directory.
+- File-path context belongs in the broader presence payload, not `presence.source`.
 - It does not read prompts, terminal output, source file contents, environment values, shell history, browser history, or secret values.
 - It only reports agents whose working directory, or explicit command-line cwd flag, matches the current repository.
+
+Published detected presence stores provenance metadata under `presence.source`:
+
+- `kind: detected`
+- detector name, such as `process-cwd`
+- process ID
+- repository working directory
+- detection timestamp
+
+Other presence fields, such as current file paths or branch, are part of the presence pointer itself and are not provenance metadata.
 
 Detected presence is best-effort. Suka can tell that a supported tool appears to be running inside a repository, but it cannot prove which prompt is active or which file the agent intends to edit next. Use explicit presence, claims, blocked scopes, events, and briefs when the team needs authoritative coordination state.
 
