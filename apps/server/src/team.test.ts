@@ -121,7 +121,8 @@ test("builds scoped team summary across workspaces and sessions", () => {
       tool: "claude-code",
       type: "presence",
       workspace_id: "workspace-b"
-    }]
+    }],
+    projects: []
   }, new Date("2026-06-12T10:15:00.000Z"));
 
   assert.equal(summary.mode, "scoped");

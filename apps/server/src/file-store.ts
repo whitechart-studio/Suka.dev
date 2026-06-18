@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname } from "node:path";
 import type { BriefPointer, ClaimPointer, CoordinationContext, DecisionPointer, EventPointer, PresencePointer } from "@suka/protocol";
 import { MemorySukaStore, type SukaStore } from "./memory-store.js";
-import { createEmptyState, type SukaCleanupResult, type SukaState } from "./state.js";
+import { createEmptyState, type LocalProject, type SukaCleanupResult, type SukaState } from "./state.js";
 
 export class FileSukaStore implements SukaStore {
   readonly #path: string;
@@ -58,6 +58,19 @@ export class FileSukaStore implements SukaStore {
     this.#persist();
   }
 
+  upsertProject(project: LocalProject): void {
+    this.#store.upsertProject(project);
+    this.#persist();
+  }
+
+  setActiveProject(id: string | undefined): boolean {
+    const changed = this.#store.setActiveProject(id);
+    if (changed) {
+      this.#persist();
+    }
+    return changed;
+  }
+
   expire(now: Date): void {
     const before = this.#store.getState();
     this.#store.expire(now);
@@ -92,11 +105,18 @@ function loadState(path: string): SukaState {
   const raw = readFileSync(path, "utf8");
   const parsed = JSON.parse(raw) as Partial<SukaState>;
 
-  return {
+  const state: SukaState = {
     presence: Array.isArray(parsed.presence) ? parsed.presence : [],
     claims: Array.isArray(parsed.claims) ? parsed.claims : [],
     events: Array.isArray(parsed.events) ? parsed.events : [],
     decisions: Array.isArray(parsed.decisions) ? parsed.decisions : [],
-    briefs: Array.isArray(parsed.briefs) ? parsed.briefs : []
+    briefs: Array.isArray(parsed.briefs) ? parsed.briefs : [],
+    projects: Array.isArray(parsed.projects) ? parsed.projects : []
   };
+
+  if (typeof parsed.active_project_id === "string" && state.projects.some((project) => project.id === parsed.active_project_id)) {
+    state.active_project_id = parsed.active_project_id;
+  }
+
+  return state;
 }

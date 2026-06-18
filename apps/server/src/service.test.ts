@@ -1,6 +1,62 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { createSukaService } from "./index.js";
+
+test("registers local projects from folder metadata", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-project-"));
+  try {
+    const repoDir = join(tempDir, "Suka Project");
+    mkdirSync(repoDir);
+    execFileSync("git", ["init"], { cwd: repoDir, stdio: "ignore" });
+    execFileSync("git", ["remote", "add", "origin", "git@github.com:whitechart-studio/Suka.dev.git"], { cwd: repoDir });
+
+    const service = createSukaService();
+    const project = service.registerProject({
+      now: new Date("2026-06-18T10:00:00.000Z"),
+      path: repoDir
+    });
+
+    assert.equal(project.name, "Suka Project");
+    assert.equal(project.repo, "whitechart-studio/Suka.dev");
+    assert.equal(project.repo_id, "whitechart-studio-suka-dev");
+    assert.equal(project.workspace_id, "local-whitechart-studio-suka-dev");
+    assert.equal(project.created_at, "2026-06-18T10:00:00.000Z");
+    assert.equal(service.listProjects().length, 1);
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
+test("deduplicates registered projects by normalized repo root", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-project-"));
+  try {
+    const repoDir = join(tempDir, "repo");
+    const nestedDir = join(repoDir, "apps", "server");
+    mkdirSync(nestedDir, { recursive: true });
+    execFileSync("git", ["init"], { cwd: repoDir, stdio: "ignore" });
+
+    const service = createSukaService();
+    const first = service.registerProject({
+      now: new Date("2026-06-18T10:00:00.000Z"),
+      path: repoDir
+    });
+    const second = service.registerProject({
+      now: new Date("2026-06-18T10:05:00.000Z"),
+      path: nestedDir
+    });
+
+    assert.equal(first.id, second.id);
+    assert.equal(service.listProjects().length, 1);
+    assert.equal(service.listProjects()[0]?.created_at, "2026-06-18T10:00:00.000Z");
+    assert.equal(service.listProjects()[0]?.updated_at, "2026-06-18T10:05:00.000Z");
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
 
 test("publishes valid claims and checks conflicts", () => {
   const service = createSukaService();
