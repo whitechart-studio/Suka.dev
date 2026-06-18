@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
-import { detectLocalAgents, parseProcessList, type ProcessRow } from "./agents.js";
+import { detectLocalAgents, parseProcessList, parseWindowsProcessList, type ProcessRow } from "./agents.js";
 
 const repoRoot = resolve("fixtures", "suka repo");
 
@@ -19,6 +19,37 @@ test("parseProcessList extracts pid command and args", () => {
   });
   assert.equal(rows[1]?.pid, 83019);
   assert.equal(rows[1]?.command, "claude");
+});
+
+test("parseProcessList handles Linux ps samples", () => {
+  const rows = parseProcessList(`
+      1021 /usr/bin/codex codex --working-dir ${repoRoot} sandbox
+      2048 /usr/bin/node node /opt/claude-code/claude --cwd ${repoRoot}
+  `);
+
+  assert.deepEqual(rows.map((row) => row.pid), [1021, 2048]);
+  assert.equal(rows[0]?.command, "/usr/bin/codex");
+  assert.equal(rows[1]?.args, `node /opt/claude-code/claude --cwd ${repoRoot}`);
+});
+
+test("parseWindowsProcessList handles PowerShell JSON samples", () => {
+  const rows = parseWindowsProcessList(JSON.stringify([{
+    CommandLine: `"C:\\Program Files\\Codex\\codex.exe" --working-dir "${repoRoot}"`,
+    ExecutablePath: "C:\\Program Files\\Codex\\codex.exe",
+    ProcessId: 3200
+  }, {
+    CommandLine: "claude-code --cwd C:\\work\\other",
+    ExecutablePath: null,
+    ProcessId: 3300
+  }]));
+
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows[0], {
+    args: `"C:\\Program Files\\Codex\\codex.exe" --working-dir "${repoRoot}"`,
+    command: "C:\\Program Files\\Codex\\codex.exe",
+    pid: 3200
+  });
+  assert.equal(rows[1]?.command, "claude-code");
 });
 
 test("detectLocalAgents returns Codex and Claude processes in the current repo", () => {
@@ -69,4 +100,33 @@ test("detectLocalAgents ignores matching tools outside the current repo", () => 
   });
 
   assert.deepEqual(report.agents, []);
+});
+
+test("detectLocalAgents falls back to command-line cwd when platform cwd is unavailable", () => {
+  const report = detectLocalAgents({
+    branch: "main",
+    changedFiles: [],
+    cwdForPid: () => undefined,
+    platform: "win32",
+    processRows: [{
+      args: `"C:\\Program Files\\Codex\\codex.exe" --working-dir "${repoRoot}"`,
+      command: "C:\\Program Files\\Codex\\codex.exe",
+      pid: 3200
+    }],
+    repoRoot
+  });
+
+  assert.equal(report.agents.length, 1);
+  assert.equal(report.agents[0]?.tool, "codex");
+  assert.equal(report.agents[0]?.cwd, repoRoot);
+});
+
+test("detectLocalAgents reports unsupported platform states without throwing", () => {
+  const report = detectLocalAgents({
+    platform: "freebsd",
+    repoRoot
+  });
+
+  assert.deepEqual(report.agents, []);
+  assert.match(report.warnings.join("\n"), /not implemented for freebsd/);
 });

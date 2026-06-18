@@ -39,10 +39,17 @@ The detector is intentionally metadata-only:
 - It reads process IDs, command names, command-line arguments, and working directories where the operating system allows it.
 - It reports detected agent tool, process ID, branch, current changed-file list, and repository working directory.
 - It does not read prompts, terminal output, source file contents, environment values, shell history, browser history, or secret values.
+- It only reports agents whose working directory, or explicit command-line cwd flag, matches the current repository.
 
 Detected presence is best-effort. Suka can tell that a supported tool appears to be running inside a repository, but it cannot prove which prompt is active or which file the agent intends to edit next. Use explicit presence, claims, blocked scopes, events, and briefs when the team needs authoritative coordination state.
 
-If the operating system denies process or cwd inspection, Suka should emit a warning and continue without requiring administrator or root access. Windows support may require platform-specific fallback behavior because another process working directory is not exposed in the same way as Unix-like systems.
+Platform behavior:
+
+- macOS uses `ps` for process discovery and `lsof` for process working directories.
+- Linux uses `ps` for process discovery and `/proc/<pid>/cwd` for working directories.
+- Windows uses PowerShell/CIM process metadata and falls back to explicit cwd flags such as `--working-dir` or `--cwd`, because Windows does not expose another process working directory without elevated inspection.
+
+If the operating system denies cwd access, Suka emits an actionable warning and continues with command-line cwd fallback. Normal use should not require administrator or root permissions.
 
 ## Future Hosted Requirements
 
