@@ -3607,12 +3607,14 @@ body.is-resizing-rail .rail-resize-handle::after {
   display: inline-flex;
   gap: 3px;
   opacity: 0;
+  pointer-events: none;
   transition: opacity var(--dur-fast);
 }
 
 .mission-zone-node.custom:hover .mission-zone-actions,
 .mission-zone-node.custom:focus-within .mission-zone-actions {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .mission-zone-actions button {

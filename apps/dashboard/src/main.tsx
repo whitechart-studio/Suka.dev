@@ -2300,13 +2300,13 @@ function MissionZoneNode({ data }: any): React.ReactElement {
         <span>{data.custom ? "custom zone" : "mission zone"}</span>
         {data.custom ? (
           <div className="mission-zone-actions">
-            <button aria-label={`Rename ${data.label}`} title="Rename zone" type="button" onClick={(event) => { event.stopPropagation(); data.onRename?.(); }}>
+            <button aria-label={`Rename ${data.label}`} className="nodrag nopan" title="Rename zone" type="button" onClick={(event) => { event.stopPropagation(); data.onRename?.(); }}>
               <Pencil size={11} />
             </button>
-            <button aria-label={`Resize ${data.label}`} title="Cycle zone size" type="button" onClick={(event) => { event.stopPropagation(); data.onResize?.(); }}>
+            <button aria-label={`Resize ${data.label}`} className="nodrag nopan" title="Cycle zone size" type="button" onClick={(event) => { event.stopPropagation(); data.onResize?.(); }}>
               <Maximize2 size={11} />
             </button>
-            <button aria-label={`Delete ${data.label}`} title="Delete zone" type="button" onClick={(event) => { event.stopPropagation(); data.onDelete?.(); }}>
+            <button aria-label={`Delete ${data.label}`} className="nodrag nopan" title="Delete zone" type="button" onClick={(event) => { event.stopPropagation(); data.onDelete?.(); }}>
               <Trash2 size={11} />
             </button>
           </div>
