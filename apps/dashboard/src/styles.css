@@ -566,6 +566,44 @@ input::placeholder { color: var(--muted); }
   padding: 4px 10px;
 }
 
+.panel-dock-presets {
+  align-items: center;
+  background: rgba(255,255,255,0.035);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+}
+
+.panel-dock-presets button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  box-shadow: none;
+  color: var(--ink-3);
+  display: inline-flex;
+  height: 26px;
+  justify-content: center;
+  min-height: 26px;
+  padding: 0;
+  width: 28px;
+}
+
+.panel-dock-presets button:hover {
+  background: rgba(255,255,255,0.055);
+  border-color: var(--line);
+  color: var(--ink-2);
+  transform: none;
+}
+
+.panel-dock-presets button.active {
+  background: rgba(99,102,241,0.16);
+  border-color: rgba(99,102,241,0.3);
+  color: #c7d2fe;
+}
+
 .tracking-control {
   position: relative;
 }
@@ -3841,6 +3879,8 @@ body.is-resizing-rail .rail-resize-handle::after {
   }
 
   .top-actions { gap: 4px; min-width: 0; }
+
+  .panel-dock-presets { display: none; }
 
   .tracking-control {
     background: transparent;

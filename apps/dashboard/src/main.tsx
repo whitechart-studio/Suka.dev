@@ -304,6 +304,7 @@ type AppSettings = {
 };
 
 type RightRailView = "truth" | "inspect" | "risk" | "activity";
+type PanelDockPreset = "context" | "agents" | "radar" | "canvas" | "focus";
 
 const defaultSettings: AppSettings = {
   theme: "dark",
@@ -898,6 +899,27 @@ function Dashboard(): React.ReactElement {
     window.setTimeout(() => fitView({ duration: 220, padding: 0.18 }), 0);
   }, [fitView, layoutScope]);
 
+  const applyPanelDockPreset = useCallback((preset: PanelDockPreset) => {
+    setFocusMode(preset === "focus");
+    setLeftOpen(preset === "context" || preset === "agents");
+    setRightOpen(preset === "context" || preset === "radar");
+    if (preset === "context") {
+      setLeftRailWidth(DEFAULT_LEFT_RAIL_WIDTH);
+      setRightRailWidth(DEFAULT_RIGHT_RAIL_WIDTH);
+    }
+    window.setTimeout(() => fitView({ duration: 180, padding: preset === "focus" || preset === "canvas" ? 0.18 : 0.12 }), 0);
+  }, [fitView]);
+
+  const activePanelDockPreset: PanelDockPreset = focusMode
+    ? "focus"
+    : !leftOpen && !rightOpen
+      ? "canvas"
+      : leftOpen && !rightOpen
+        ? "agents"
+        : !leftOpen && rightOpen
+          ? "radar"
+          : "context";
+
   const shellClass = [
     "app-shell",
     !leftOpen ? "left-collapsed" : "",
@@ -975,6 +997,10 @@ function Dashboard(): React.ReactElement {
             onSelectFolder={() => void selectProjectFolder()}
             onStart={() => void startProjectTracking()}
             onStop={() => void stopProjectTracking()}
+          />
+          <PanelDockPresets
+            active={activePanelDockPreset}
+            onSelect={applyPanelDockPreset}
           />
           <button aria-label="Open team connection panel" type="button" onClick={toggleTeamPanel}>
             <Link2 size={14} />
@@ -1226,6 +1252,40 @@ function Dashboard(): React.ReactElement {
           ) : <CompactRisk count={riskCount} />}
         </aside>
       </main>
+    </div>
+  );
+}
+
+function PanelDockPresets({
+  active,
+  onSelect
+}: {
+  active: PanelDockPreset;
+  onSelect(preset: PanelDockPreset): void;
+}): React.ReactElement {
+  const presets: Array<{ icon: React.ReactNode; label: string; preset: PanelDockPreset }> = [
+    { icon: <Waypoints size={13} />, label: "Context panels", preset: "context" },
+    { icon: <PanelLeftOpen size={13} />, label: "Agents panel", preset: "agents" },
+    { icon: <PanelRightOpen size={13} />, label: "Radar panel", preset: "radar" },
+    { icon: <Maximize2 size={13} />, label: "Canvas only", preset: "canvas" },
+    { icon: <Minimize2 size={13} />, label: "Focus canvas", preset: "focus" }
+  ];
+
+  return (
+    <div className="panel-dock-presets" aria-label="Workspace panel dock presets" role="group">
+      {presets.map((item) => (
+        <button
+          aria-label={item.label}
+          aria-pressed={active === item.preset}
+          className={active === item.preset ? "active" : ""}
+          key={item.preset}
+          title={item.label}
+          type="button"
+          onClick={() => onSelect(item.preset)}
+        >
+          {item.icon}
+        </button>
+      ))}
     </div>
   );
 }
