@@ -42,6 +42,7 @@ import {
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
+  Pencil,
   Plus,
   RadioTower,
   RefreshCw,
@@ -52,6 +53,7 @@ import {
   Sun,
   Terminal,
   Timer,
+  Trash2,
   TriangleAlert,
   UnlockKeyhole,
   Users,
@@ -533,6 +535,41 @@ function Dashboard(): React.ReactElement {
     writeStoredString("rightRailView", rightRailView);
   }, [rightRailView]);
 
+  const updateCustomZones = useCallback((updater: (zones: CustomCanvasZone[]) => CustomCanvasZone[]) => {
+    setCustomZones((current) => {
+      const next = updater(current);
+      writeStoredLayoutCustomZones(layoutScope, next);
+      return next;
+    });
+  }, [layoutScope]);
+
+  const renameCustomZone = useCallback((zoneId: string) => {
+    const zone = customZones.find((item) => item.id === zoneId);
+    if (zone === undefined) return;
+    const nextLabel = window.prompt("Name this canvas zone", zone.label)?.trim();
+    if (nextLabel === undefined || nextLabel.length === 0) return;
+    updateCustomZones((current) => current.map((item) => item.id === zoneId
+      ? { ...item, label: nextLabel.slice(0, 48) }
+      : item));
+  }, [customZones, updateCustomZones]);
+
+  const cycleCustomZoneSize = useCallback((zoneId: string) => {
+    updateCustomZones((current) => current.map((zone) => {
+      if (zone.id !== zoneId) return zone;
+      const compact = zone.width <= 300;
+      const wide = zone.width >= 520;
+      if (compact) return { ...zone, height: 220, width: 420 };
+      if (!wide) return { ...zone, height: 280, width: 560 };
+      return { ...zone, height: 180, width: 300 };
+    }));
+  }, [updateCustomZones]);
+
+  const deleteCustomZone = useCallback((zoneId: string) => {
+    const zone = customZones.find((item) => item.id === zoneId);
+    if (zone !== undefined && !window.confirm(`Delete "${zone.label}" from this canvas?`)) return;
+    updateCustomZones((current) => current.filter((zone) => zone.id !== zoneId));
+  }, [customZones, updateCustomZones]);
+
   const domainCatalog = repoMap.domains.length > 0 ? repoMap.domains : fallbackDomains;
   const model = useMemo(() => buildDomainModel(state, domainCatalog), [domainCatalog, state]);
   const sessionRooms = useMemo(
@@ -541,8 +578,12 @@ function Dashboard(): React.ReactElement {
   );
   const activeSession = sessionRooms.find((room) => room.id === activeSessionId);
   const { edges, nodes } = useMemo(
-    () => buildFlow(model, state, selectedNodeId, repoMap.edges, nodePositions, customZones),
-    [customZones, model, nodePositions, repoMap.edges, selectedNodeId, state]
+    () => buildFlow(model, state, selectedNodeId, repoMap.edges, nodePositions, customZones, {
+      onDelete: deleteCustomZone,
+      onRename: renameCustomZone,
+      onResize: cycleCustomZoneSize
+    }),
+    [customZones, cycleCustomZoneSize, deleteCustomZone, model, nodePositions, renameCustomZone, repoMap.edges, selectedNodeId, state]
   );
   const conflictInsights = useMemo(() => buildConflictInsights(state), [state]);
   const visibleConflictInsights = useMemo(
@@ -2255,9 +2296,24 @@ function AgentNode({ data }: any): React.ReactElement {
 function MissionZoneNode({ data }: any): React.ReactElement {
   return (
     <div className={`mission-zone-node ${data.tone} ${data.custom ? "custom" : ""}`}>
-      <span>{data.custom ? "custom zone" : "mission zone"}</span>
+      <div className="mission-zone-title">
+        <span>{data.custom ? "custom zone" : "mission zone"}</span>
+        {data.custom ? (
+          <div className="mission-zone-actions">
+            <button aria-label={`Rename ${data.label}`} title="Rename zone" type="button" onClick={(event) => { event.stopPropagation(); data.onRename?.(); }}>
+              <Pencil size={11} />
+            </button>
+            <button aria-label={`Resize ${data.label}`} title="Cycle zone size" type="button" onClick={(event) => { event.stopPropagation(); data.onResize?.(); }}>
+              <Maximize2 size={11} />
+            </button>
+            <button aria-label={`Delete ${data.label}`} title="Delete zone" type="button" onClick={(event) => { event.stopPropagation(); data.onDelete?.(); }}>
+              <Trash2 size={11} />
+            </button>
+          </div>
+        ) : null}
+      </div>
       <strong>{data.label}</strong>
-      <small>{data.count} areas</small>
+      <small>{data.custom ? "Drag to organize work" : `${data.count} areas`}</small>
     </div>
   );
 }
@@ -3047,7 +3103,12 @@ function buildFlow(
   selectedNodeId: string,
   repoEdges: RepoMapEdge[],
   nodePositions: NodePositionMap,
-  customZones: CustomCanvasZone[]
+  customZones: CustomCanvasZone[],
+  zoneActions: {
+    onDelete(zoneId: string): void;
+    onRename(zoneId: string): void;
+    onResize(zoneId: string): void;
+  }
 ): { edges: Edge[]; nodes: Node[] } {
   const domainPositions = new Map(model.map((domain) => [
     domain.id,
@@ -3060,6 +3121,9 @@ function buildFlow(
         count: 0,
         custom: true,
         label: zone.label,
+        onDelete: () => zoneActions.onDelete(zone.id),
+        onRename: () => zoneActions.onRename(zone.id),
+        onResize: () => zoneActions.onResize(zone.id),
         tone: zone.tone
       },
       id: `custom-zone:${zone.id}`,

@@ -3563,7 +3563,18 @@ body.is-resizing-rail .rail-resize-handle::after {
   border-radius: 14px;
   content: "";
   inset: 7px;
+  pointer-events: none;
   position: absolute;
+}
+
+.mission-zone-title {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .mission-zone-node span {
@@ -3579,12 +3590,51 @@ body.is-resizing-rail .rail-resize-handle::after {
   font-size: 13px;
   font-weight: 800;
   line-height: 1.1;
+  position: relative;
+  z-index: 1;
 }
 
 .mission-zone-node small {
   color: var(--muted);
   font-size: 10.5px;
   font-weight: 650;
+  position: relative;
+  z-index: 1;
+}
+
+.mission-zone-actions {
+  align-items: center;
+  display: inline-flex;
+  gap: 3px;
+  opacity: 0;
+  transition: opacity var(--dur-fast);
+}
+
+.mission-zone-node.custom:hover .mission-zone-actions,
+.mission-zone-node.custom:focus-within .mission-zone-actions {
+  opacity: 1;
+}
+
+.mission-zone-actions button {
+  align-items: center;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 5px;
+  box-shadow: none;
+  color: var(--ink-3);
+  display: inline-flex;
+  height: 22px;
+  justify-content: center;
+  min-height: 22px;
+  padding: 0;
+  width: 22px;
+}
+
+.mission-zone-actions button:hover {
+  background: rgba(99,102,241,0.18);
+  border-color: rgba(199,210,254,0.24);
+  color: var(--ink);
+  transform: none;
 }
 
 .mission-zone-node.custom {
