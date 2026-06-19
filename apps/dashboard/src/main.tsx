@@ -244,7 +244,6 @@ type ProjectTrackingStatus = {
 };
 
 type WorkspaceLayout = {
-  focusMode: boolean;
   leftOpen: boolean;
   leftRailWidth: number;
   rightOpen: boolean;
@@ -315,7 +314,6 @@ const layoutStoragePrefix = `${storagePrefix}layout.`;
 const layoutStorageKeys = [
   "leftOpen",
   "rightOpen",
-  "focusMode",
   "leftRailWidth",
   "rightRailWidth",
   "selectedNodeId",
@@ -765,11 +763,12 @@ function Dashboard(): React.ReactElement {
 
   useEffect(() => {
     const layout = readStoredLayout(layoutScope);
+    removeLayoutStorageValue(layoutScope, "focusMode");
     setHydratedLayoutScope(layoutScope);
     viewportRestored.current = false;
     setLeftOpen(layout.leftOpen);
     setRightOpen(layout.rightOpen);
-    setFocusMode(layout.focusMode);
+    setFocusMode(false);
     setLeftRailWidth(layout.leftRailWidth);
     setRightRailWidth(layout.rightRailWidth);
     setSelectedNodeId(layout.selectedNodeId);
@@ -782,8 +781,7 @@ function Dashboard(): React.ReactElement {
     if (hydratedLayoutScope !== layoutScope) return;
     writeStoredLayoutBoolean(layoutScope, "leftOpen", leftOpen);
     writeStoredLayoutBoolean(layoutScope, "rightOpen", rightOpen);
-    writeStoredLayoutBoolean(layoutScope, "focusMode", focusMode);
-  }, [focusMode, hydratedLayoutScope, layoutScope, leftOpen, rightOpen]);
+  }, [hydratedLayoutScope, layoutScope, leftOpen, rightOpen]);
 
   useEffect(() => {
     if (hydratedLayoutScope !== layoutScope) return;
@@ -1925,7 +1923,7 @@ function SettingsPanel({
         <div className="settings-row">
           <div className="settings-label">
             <span>Workspace layout</span>
-            <p>{layoutScopeLabel} keeps panel sizes, focus mode, selection, and canvas position separate.</p>
+            <p>{layoutScopeLabel} keeps panel sizes, selection, and canvas position separate.</p>
           </div>
           <button className="settings-reset-btn" type="button" onClick={onResetLayout}>
             <RefreshCw size={12} />
@@ -3005,7 +3003,6 @@ function writeStoredSettings(value: AppSettings): void {
 
 function readStoredLayout(scope: string): WorkspaceLayout {
   return {
-    focusMode: readStoredLayoutBoolean(scope, "focusMode", false),
     leftOpen: readStoredLayoutBoolean(scope, "leftOpen", true),
     leftRailWidth: readStoredLayoutNumber(scope, "leftRailWidth", DEFAULT_LEFT_RAIL_WIDTH, LEFT_RAIL_MIN_WIDTH, LEFT_RAIL_MAX_WIDTH),
     rightOpen: readStoredLayoutBoolean(scope, "rightOpen", true),
