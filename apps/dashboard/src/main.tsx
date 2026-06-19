@@ -1136,7 +1136,7 @@ function Dashboard(): React.ReactElement {
               fitView
               minZoom={0.35}
               maxZoom={1.8}
-              nodeTypes={{ agent: AgentNode, domain: DomainNode }}
+              nodeTypes={{ agent: AgentNode, domain: DomainNode, zone: MissionZoneNode }}
               nodes={nodes}
               onMoveEnd={(_, viewport) => writeStoredLayoutViewport(layoutScope, viewport)}
               onNodeDragStop={(_, node) => storeNodePosition(node.id, node.position)}
@@ -2206,6 +2206,16 @@ function AgentNode({ data }: any): React.ReactElement {
   );
 }
 
+function MissionZoneNode({ data }: any): React.ReactElement {
+  return (
+    <div className={`mission-zone-node ${data.tone}`}>
+      <span>mission zone</span>
+      <strong>{data.label}</strong>
+      <small>{data.count} areas</small>
+    </div>
+  );
+}
+
 function Badge({ children, icon, tone }: { children: React.ReactNode; icon: React.ReactNode; tone: string }): React.ReactElement {
   return <span className={`badge ${tone}`}>{icon}{children}</span>;
 }
@@ -2992,12 +3002,35 @@ function buildFlow(
   repoEdges: RepoMapEdge[],
   nodePositions: NodePositionMap
 ): { edges: Edge[]; nodes: Node[] } {
+  const domainPositions = new Map(model.map((domain) => [
+    domain.id,
+    readNodePosition(nodePositions, domain.id, { x: domain.x, y: domain.y })
+  ]));
+  const missionZones = buildMissionZones(model, domainPositions);
   const nodes: Node[] = [
+    ...missionZones.map((zone) => ({
+      data: {
+        count: zone.count,
+        label: zone.label,
+        tone: zone.tone
+      },
+      draggable: false,
+      id: zone.id,
+      position: zone.position,
+      selectable: false,
+      style: {
+        height: zone.height,
+        width: zone.width
+      },
+      type: "zone",
+      zIndex: 0
+    })),
     ...model.map((domain) => ({
       id: domain.id,
       type: "domain",
-      position: readNodePosition(nodePositions, domain.id, { x: domain.x, y: domain.y }),
+      position: domainPositions.get(domain.id) ?? { x: domain.x, y: domain.y },
       selected: selectedNodeId === domain.id,
+      zIndex: 2,
       data: {
         agents: domain.presence.length,
         claims: domain.claims.length,
@@ -3010,12 +3043,14 @@ function buildFlow(
     ...state.presence.map((agent, index) => {
       const identity = agentIdentity(agent);
       const domain = model.find((item) => touchesDomain(item, [...(agent.current_files ?? []), agent.task ?? "", agent.branch ?? ""]));
-      const base = domain ? { x: domain.x + 122, y: domain.y - 22 } : { x: 420 + index * 48, y: 230 };
+      const domainPosition = domain ? domainPositions.get(domain.id) : undefined;
+      const base = domainPosition ? { x: domainPosition.x + 122, y: domainPosition.y - 22 } : { x: 420 + index * 48, y: 230 };
       return {
         id: `agent:${agent.agent_id}`,
         type: "agent",
         position: readNodePosition(nodePositions, `agent:${agent.agent_id}`, { x: base.x + index * 26, y: base.y + index * 8 }),
         selected: selectedNodeId === `agent:${agent.agent_id}`,
+        zIndex: 3,
         data: {
           color: agentColor(agent.agent_id),
           state: "agent",
@@ -3058,6 +3093,72 @@ function buildFlow(
   ];
 
   return { edges, nodes };
+}
+
+function buildMissionZones(model: DomainModel[], domainPositions: Map<string, { x: number; y: number }>): Array<{
+  count: number;
+  height: number;
+  id: string;
+  label: string;
+  position: { x: number; y: number };
+  tone: string;
+  width: number;
+}> {
+  const groups = new Map<string, DomainModel[]>();
+  for (const domain of model) {
+    const key = missionZoneKey(domain);
+    groups.set(key, [...(groups.get(key) ?? []), domain]);
+  }
+
+  return [...groups.entries()].map(([key, domains], index) => {
+    const bounds = zoneBounds(domains, domainPositions);
+    return {
+      count: domains.length,
+      height: bounds.height,
+      id: `zone:${key}`,
+      label: missionZoneLabel(key),
+      position: bounds.position,
+      tone: missionZoneTone(index),
+      width: bounds.width
+    };
+  }).sort((left, right) => left.label.localeCompare(right.label));
+}
+
+function zoneBounds(domains: DomainModel[], domainPositions: Map<string, { x: number; y: number }>): {
+  height: number;
+  position: { x: number; y: number };
+  width: number;
+} {
+  const marginX = 42;
+  const marginTop = 48;
+  const marginBottom = 34;
+  const nodeWidth = 136;
+  const nodeHeight = 82;
+  const positions = domains.map((domain) => domainPositions.get(domain.id) ?? { x: domain.x, y: domain.y });
+  const minX = Math.min(...positions.map((position) => position.x));
+  const minY = Math.min(...positions.map((position) => position.y));
+  const maxX = Math.max(...positions.map((position) => position.x + nodeWidth));
+  const maxY = Math.max(...positions.map((position) => position.y + nodeHeight));
+  return {
+    height: Math.max(138, maxY - minY + marginTop + marginBottom),
+    position: { x: minX - marginX, y: minY - marginTop },
+    width: Math.max(220, maxX - minX + marginX * 2)
+  };
+}
+
+function missionZoneKey(domain: Domain): string {
+  if (domain.kind && domain.kind.length > 0) return domain.kind;
+  const path = domain.path ?? domain.id;
+  return path.split(/[\\/]/).filter(Boolean)[0] ?? "workspace";
+}
+
+function missionZoneLabel(key: string): string {
+  return key.split(/[-_\s]/).filter(Boolean).map((part) => part[0]?.toUpperCase() + part.slice(1)).join(" ") || "Workspace";
+}
+
+function missionZoneTone(index: number): string {
+  const tones = ["blue", "teal", "violet", "amber", "slate"];
+  return tones[index % tones.length] ?? "blue";
 }
 
 function readNodePosition(nodePositions: NodePositionMap, nodeId: string, fallback: { x: number; y: number }): { x: number; y: number } {
