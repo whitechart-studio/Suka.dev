@@ -2708,16 +2708,82 @@ body.is-resizing-rail .rail-resize-handle::after {
 /* ── Right stack ────────────────────────────── */
 .right-stack {
   display: grid;
-  gap: 7px;
-  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  grid-template-rows: auto auto minmax(0, 1fr);
   height: 100%;
   min-height: 0;
+  padding: 8px;
+}
+
+.radar-summary {
+  background:
+    linear-gradient(135deg, rgba(99,102,241,0.13), rgba(14,165,233,0.06)),
+    rgba(255,255,255,0.025);
+  border: 1px solid rgba(99,102,241,0.18);
+  border-radius: 9px;
+  box-shadow: var(--shadow-xs), inset 0 1px 0 rgba(255,255,255,0.04);
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.radar-summary.attention {
+  background:
+    linear-gradient(135deg, rgba(245,158,11,0.14), rgba(244,63,94,0.07)),
+    rgba(255,255,255,0.025);
+  border-color: rgba(245,158,11,0.22);
+}
+
+.radar-summary-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.radar-summary-main span {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 800;
+  gap: 5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.radar-summary-main strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.radar-summary-metrics {
+  display: grid;
+  gap: 5px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.radar-summary-metrics span {
+  align-items: center;
+  background: rgba(255,255,255,0.055);
+  border: 1px solid rgba(255,255,255,0.075);
+  border-radius: 7px;
+  color: var(--ink-3);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 800;
+  gap: 5px;
+  justify-content: center;
+  min-height: 26px;
+  min-width: 0;
 }
 
 .right-tabs {
-  background: rgba(255,255,255,0.03);
+  background: rgba(255,255,255,0.025);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 9px;
   display: grid;
   gap: 4px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2728,7 +2794,7 @@ body.is-resizing-rail .rail-resize-handle::after {
   align-items: center;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 7px;
   color: var(--ink-3);
   cursor: pointer;
   display: inline-flex;
@@ -2742,10 +2808,29 @@ body.is-resizing-rail .rail-resize-handle::after {
   transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
 }
 
+.right-tabs button i {
+  align-items: center;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 6px;
+  color: currentColor;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 22px;
+  justify-content: center;
+  width: 22px;
+}
+
 .right-tabs button.active {
   background: rgba(99,102,241,0.16);
   border-color: rgba(99,102,241,0.28);
   color: var(--ink);
+}
+
+.right-tabs button.active i {
+  background: rgba(99,102,241,0.2);
+  border-color: rgba(99,102,241,0.25);
+  color: #c7d2fe;
 }
 
 .right-tabs button:hover:not(.active) {
@@ -2804,7 +2889,7 @@ body.is-resizing-rail .rail-resize-handle::after {
   background: rgba(255,255,255,0.025);
   border-bottom: 0;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 9px;
   height: 100%;
   padding: 10px;
 }
@@ -2933,6 +3018,55 @@ body.is-resizing-rail .rail-resize-handle::after {
 
 /* ── Inspector ──────────────────────────────── */
 .inspector-section { border-bottom: 1px solid var(--line); }
+
+.inspector-hero {
+  align-items: center;
+  background: rgba(255,255,255,0.035);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: var(--shadow-xs);
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.inspector-hero > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.inspector-hero strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 750;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspector-hero p {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.domain-inspector-mark {
+  align-items: center;
+  background: rgba(255,255,255,0.04);
+  border: 1.5px solid currentColor;
+  border-radius: 8px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 30px;
+  justify-content: center;
+  width: 30px;
+}
 
 .inspector-grid {
   display: grid;

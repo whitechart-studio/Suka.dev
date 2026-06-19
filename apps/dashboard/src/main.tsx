@@ -1145,6 +1145,12 @@ function Dashboard(): React.ReactElement {
           />
           {rightOpen ? (
             <div className="right-stack">
+              <RadarSummary
+                activeAgents={state.presence.length}
+                activityCount={state.events.length + state.presence.length}
+                riskCount={riskCount}
+                truthCount={state.claims.length + state.briefs.length + state.decisions.length}
+              />
               <RightRailTabs
                 activityCount={state.events.length + state.presence.length}
                 riskCount={riskCount}
@@ -2302,6 +2308,33 @@ function CompactRisk({ count }: { count: number }): React.ReactElement {
   return <div className="compact-risk"><TriangleAlert size={18} /><span>{count}</span></div>;
 }
 
+function RadarSummary({
+  activeAgents,
+  activityCount,
+  riskCount,
+  truthCount
+}: {
+  activeAgents: number;
+  activityCount: number;
+  riskCount: number;
+  truthCount: number;
+}): React.ReactElement {
+  const mode = riskCount > 0 ? "attention" : activeAgents > 0 ? "live" : "idle";
+  return (
+    <div className={`radar-summary ${mode}`}>
+      <div className="radar-summary-main">
+        <span><Gauge size={13} />workspace radar</span>
+        <strong>{riskCount > 0 ? `${riskCount} items need attention` : activeAgents > 0 ? "Live workspace signal" : "Ready for tracking"}</strong>
+      </div>
+      <div className="radar-summary-metrics" aria-label="Radar summary metrics">
+        <span><Users size={12} />{activeAgents}</span>
+        <span><ClipboardList size={12} />{truthCount}</span>
+        <span><RadioTower size={12} />{activityCount}</span>
+      </div>
+    </div>
+  );
+}
+
 function RightRailTabs({
   activityCount,
   onSelect,
@@ -2333,7 +2366,7 @@ function RightRailTabs({
           type="button"
           onClick={() => onSelect(tab.view)}
         >
-          {tab.icon}
+          <i>{tab.icon}</i>
           <span><strong>{tab.label}</strong><small>{tab.hint}</small></span>
           {tab.count > 0 ? <b>{tab.count}</b> : null}
         </button>
@@ -2514,7 +2547,17 @@ function SelectionInspector({
     const Icon = identity.icon;
     return (
       <section className="rail-section inspector-section">
-        <h2><Icon size={14} /> {selection.agent.agent_id}</h2>
+        <div className="section-title">
+          <h2><Icon size={14} /> Inspector</h2>
+          <Badge tone="live" icon={<Activity size={13} />}>{selection.agent.status}</Badge>
+        </div>
+        <div className="inspector-hero">
+          <span className="agent-avatar solid" style={{ background: agentColor(selection.agent.agent_id) }}><Icon size={15} /></span>
+          <div>
+            <strong>{selection.agent.agent_id}</strong>
+            <p>{identity.label} / {agentSourceLabel(selection.agent)}</p>
+          </div>
+        </div>
         <div className="inspector-grid">
           <span>tool</span><strong>{identity.label}</strong>
           <span>source</span><strong>{agentSourceLabel(selection.agent)}</strong>
@@ -2530,7 +2573,19 @@ function SelectionInspector({
   const domain = selection.domain;
   return (
     <section className="rail-section inspector-section">
-      <h2><Network size={14} /> {domain.name}</h2>
+      <div className="section-title">
+        <h2><Network size={14} /> Inspector</h2>
+        <Badge tone={domain.failures.length > 0 ? "fail" : domain.claims.length > 0 ? "risk" : "neutral"} icon={<Gauge size={13} />}>
+          {domainState(domain)}
+        </Badge>
+      </div>
+      <div className="inspector-hero">
+        <span className="domain-inspector-mark" style={{ borderColor: stateColor(domain), color: stateColor(domain) }}><Network size={15} /></span>
+        <div>
+          <strong>{domain.name}</strong>
+          <p>{domain.path ?? domain.id}</p>
+        </div>
+      </div>
       <div className="inspector-grid">
         <span>state</span><strong>{domainState(domain)}</strong>
         <span>path</span><strong>{domain.path ?? domain.id}</strong>
