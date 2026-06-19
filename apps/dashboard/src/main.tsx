@@ -244,6 +244,7 @@ type ProjectTrackingStatus = {
 };
 
 type WorkspaceLayout = {
+  customZones: CustomCanvasZone[];
   leftOpen: boolean;
   leftRailWidth: number;
   nodePositions: NodePositionMap;
@@ -251,6 +252,16 @@ type WorkspaceLayout = {
   rightRailWidth: number;
   selectedNodeId: string;
   viewport: Viewport | undefined;
+};
+
+type CustomCanvasZone = {
+  id: string;
+  label: string;
+  tone: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 };
 
 type NodePositionMap = Record<string, { x: number; y: number }>;
@@ -318,6 +329,7 @@ const agentPalette = ["#0f766e", "#2563eb", "#7c3aed", "#16803c", "#b45309", "#b
 const storagePrefix = "suka.dashboard.";
 const layoutStoragePrefix = `${storagePrefix}layout.`;
 const layoutStorageKeys = [
+  "customZones",
   "leftOpen",
   "rightOpen",
   "leftRailWidth",
@@ -389,6 +401,7 @@ function Dashboard(): React.ReactElement {
   const [trackingStatus, setTrackingStatus] = useState<ProjectTrackingStatus>(emptyTrackingStatus);
   const [projectError, setProjectError] = useState("");
   const [trackingBusy, setTrackingBusy] = useState(false);
+  const [customZones, setCustomZones] = useState<CustomCanvasZone[]>([]);
   const [hydratedLayoutScope, setHydratedLayoutScope] = useState("");
   const [nodePositions, setNodePositions] = useState<NodePositionMap>({});
   const autoStartedProjectId = useRef("");
@@ -528,8 +541,8 @@ function Dashboard(): React.ReactElement {
   );
   const activeSession = sessionRooms.find((room) => room.id === activeSessionId);
   const { edges, nodes } = useMemo(
-    () => buildFlow(model, state, selectedNodeId, repoMap.edges, nodePositions),
-    [model, nodePositions, repoMap.edges, selectedNodeId, state]
+    () => buildFlow(model, state, selectedNodeId, repoMap.edges, nodePositions, customZones),
+    [customZones, model, nodePositions, repoMap.edges, selectedNodeId, state]
   );
   const conflictInsights = useMemo(() => buildConflictInsights(state), [state]);
   const visibleConflictInsights = useMemo(
@@ -797,6 +810,7 @@ function Dashboard(): React.ReactElement {
     setLeftOpen(layout.leftOpen);
     setRightOpen(layout.rightOpen);
     setFocusMode(false);
+    setCustomZones(layout.customZones);
     setLeftRailWidth(layout.leftRailWidth);
     setRightRailWidth(layout.rightRailWidth);
     setNodePositions(layout.nodePositions);
@@ -825,6 +839,17 @@ function Dashboard(): React.ReactElement {
 
   const storeNodePosition = useCallback((nodeId: string, position: { x: number; y: number }) => {
     if (hydratedLayoutScope !== layoutScope) return;
+    if (nodeId.startsWith("custom-zone:")) {
+      const zoneId = nodeId.slice("custom-zone:".length);
+      setCustomZones((current) => {
+        const next = current.map((zone) => zone.id === zoneId
+          ? { ...zone, x: Math.round(position.x), y: Math.round(position.y) }
+          : zone);
+        writeStoredLayoutCustomZones(layoutScope, next);
+        return next;
+      });
+      return;
+    }
     setNodePositions((current) => {
       const next = {
         ...current,
@@ -883,6 +908,7 @@ function Dashboard(): React.ReactElement {
   const resetWorkspaceLayout = useCallback(() => {
     removeStoredLayout(layoutScope);
     viewportRestored.current = true;
+    setCustomZones([]);
     setLeftOpen(true);
     setRightOpen(true);
     setFocusMode(false);
@@ -895,9 +921,28 @@ function Dashboard(): React.ReactElement {
 
   const resetCanvasArrangement = useCallback(() => {
     removeLayoutStorageValue(layoutScope, "nodePositions");
+    removeLayoutStorageValue(layoutScope, "customZones");
+    setCustomZones([]);
     setNodePositions({});
     window.setTimeout(() => fitView({ duration: 220, padding: 0.18 }), 0);
   }, [fitView, layoutScope]);
+
+  const createCustomZone = useCallback(() => {
+    const index = customZones.length + 1;
+    const zone: CustomCanvasZone = {
+      height: 180,
+      id: `zone-${Date.now()}`,
+      label: `Mission Zone ${index}`,
+      tone: missionZoneTone(index),
+      width: 300,
+      x: 180 + (index % 3) * 36,
+      y: 140 + (index % 3) * 32
+    };
+    const next = [...customZones, zone];
+    setCustomZones(next);
+    writeStoredLayoutCustomZones(layoutScope, next);
+    window.setTimeout(() => fitView({ duration: 180, padding: 0.18 }), 0);
+  }, [customZones, fitView, layoutScope]);
 
   const applyPanelDockPreset = useCallback((preset: PanelDockPreset) => {
     setFocusMode(preset === "focus");
@@ -1157,7 +1202,8 @@ function Dashboard(): React.ReactElement {
               <button aria-label="Zoom in" title="Zoom in" type="button" onClick={() => zoomIn({ duration: 160 })}><ZoomIn size={14} />In</button>
               <button aria-label="Fit graph" title="Fit graph" type="button" onClick={() => fitView({ duration: 200, padding: 0.16 })}><Scan size={14} />Fit</button>
               <button aria-label="Focus local neighborhood" title="Focus local neighborhood" type="button" onClick={() => fitView({ duration: 220, nodes: localFocusNodes(nodes, edges, selectedNodeId), padding: 0.28 })}><Orbit size={14} />Local</button>
-              <button aria-label="Reset map arrangement" title="Reset map arrangement" type="button" onClick={resetCanvasArrangement}><RefreshCw size={14} />Arrange</button>
+              <button aria-label="Create mission zone" title="Create mission zone" type="button" onClick={createCustomZone}><Plus size={14} />Zone</button>
+              <button aria-label="Reset canvas zones and arrangement" title="Reset canvas zones and arrangement" type="button" onClick={resetCanvasArrangement}><RefreshCw size={14} />Reset</button>
               <button
                 aria-label="Focus risk"
                 title="Focus risk"
@@ -2208,8 +2254,8 @@ function AgentNode({ data }: any): React.ReactElement {
 
 function MissionZoneNode({ data }: any): React.ReactElement {
   return (
-    <div className={`mission-zone-node ${data.tone}`}>
-      <span>mission zone</span>
+    <div className={`mission-zone-node ${data.tone} ${data.custom ? "custom" : ""}`}>
+      <span>{data.custom ? "custom zone" : "mission zone"}</span>
       <strong>{data.label}</strong>
       <small>{data.count} areas</small>
     </div>
@@ -3000,7 +3046,8 @@ function buildFlow(
   state: SukaState,
   selectedNodeId: string,
   repoEdges: RepoMapEdge[],
-  nodePositions: NodePositionMap
+  nodePositions: NodePositionMap,
+  customZones: CustomCanvasZone[]
 ): { edges: Edge[]; nodes: Node[] } {
   const domainPositions = new Map(model.map((domain) => [
     domain.id,
@@ -3008,8 +3055,26 @@ function buildFlow(
   ]));
   const missionZones = buildMissionZones(model, domainPositions);
   const nodes: Node[] = [
+    ...customZones.map((zone) => ({
+      data: {
+        count: 0,
+        custom: true,
+        label: zone.label,
+        tone: zone.tone
+      },
+      id: `custom-zone:${zone.id}`,
+      position: { x: zone.x, y: zone.y },
+      selectable: false,
+      style: {
+        height: zone.height,
+        width: zone.width
+      },
+      type: "zone",
+      zIndex: 1
+    })),
     ...missionZones.map((zone) => ({
       data: {
+        custom: false,
         count: zone.count,
         label: zone.label,
         tone: zone.tone
@@ -3393,6 +3458,7 @@ function readStoredRightRailView(): RightRailView {
 
 function readStoredLayout(scope: string): WorkspaceLayout {
   return {
+    customZones: readStoredLayoutCustomZones(scope),
     leftOpen: readStoredLayoutBoolean(scope, "leftOpen", true),
     leftRailWidth: readStoredLayoutNumber(scope, "leftRailWidth", DEFAULT_LEFT_RAIL_WIDTH, LEFT_RAIL_MIN_WIDTH, LEFT_RAIL_MAX_WIDTH),
     nodePositions: readStoredLayoutNodePositions(scope),
@@ -3486,6 +3552,45 @@ function writeStoredLayoutNodePositions(scope: string, positions: NodePositionMa
     return;
   }
   writeLayoutStorageValue(scope, "nodePositions", JSON.stringify(positions));
+}
+
+function readStoredLayoutCustomZones(scope: string): CustomCanvasZone[] {
+  if (typeof window === "undefined") return [];
+  const raw = readLayoutStorageValue(scope, "customZones");
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((item): CustomCanvasZone[] => {
+      if (typeof item !== "object" || item === null) return [];
+      const candidate = item as Partial<Record<keyof CustomCanvasZone, unknown>>;
+      if (typeof candidate.id !== "string" || candidate.id.length === 0) return [];
+      if (typeof candidate.label !== "string" || candidate.label.length === 0) return [];
+      if (typeof candidate.tone !== "string") return [];
+      if (typeof candidate.x !== "number" || typeof candidate.y !== "number") return [];
+      if (typeof candidate.width !== "number" || typeof candidate.height !== "number") return [];
+      if (![candidate.x, candidate.y, candidate.width, candidate.height].every(Number.isFinite)) return [];
+      return [{
+        height: clamp(Math.round(candidate.height), 120, 680),
+        id: candidate.id,
+        label: candidate.label.slice(0, 48),
+        tone: candidate.tone,
+        width: clamp(Math.round(candidate.width), 180, 900),
+        x: Math.round(candidate.x),
+        y: Math.round(candidate.y)
+      }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredLayoutCustomZones(scope: string, zones: CustomCanvasZone[]): void {
+  if (zones.length === 0) {
+    removeLayoutStorageValue(scope, "customZones");
+    return;
+  }
+  writeLayoutStorageValue(scope, "customZones", JSON.stringify(zones));
 }
 
 function removeStoredLayout(scope: string): void {

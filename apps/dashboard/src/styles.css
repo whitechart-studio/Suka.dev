@@ -3587,6 +3587,31 @@ body.is-resizing-rail .rail-resize-handle::after {
   font-weight: 650;
 }
 
+.mission-zone-node.custom {
+  background:
+    linear-gradient(135deg, rgba(99,102,241,0.14), rgba(20,184,166,0.055)),
+    rgba(255,255,255,0.026);
+  border-color: rgba(199,210,254,0.28);
+  border-style: solid;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.05),
+    0 0 0 1px rgba(99,102,241,0.08),
+    0 14px 34px rgba(0,0,0,0.16);
+  pointer-events: auto;
+}
+
+.mission-zone-node.custom::after {
+  border-color: rgba(199,210,254,0.13);
+}
+
+.mission-zone-node.custom span {
+  color: #a5b4fc;
+}
+
+.mission-zone-node.custom strong {
+  color: var(--ink);
+}
+
 .mission-zone-node.teal {
   background:
     linear-gradient(135deg, rgba(20,184,166,0.08), rgba(34,197,94,0.025)),
