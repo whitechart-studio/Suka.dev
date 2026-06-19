@@ -667,6 +667,15 @@ input::placeholder { color: var(--muted); }
   border-color: rgba(45,212,191,0.24);
 }
 
+.tracking-folder-action {
+  background: rgba(45,212,191,0.13);
+  border-color: rgba(45,212,191,0.3);
+  color: var(--ink);
+  justify-content: center;
+  min-height: 38px;
+  width: 100%;
+}
+
 .project-option span {
   align-items: center;
   color: var(--ink-2);
@@ -1503,10 +1512,12 @@ input::placeholder { color: var(--muted); }
   padding: 10px 12px;
 }
 
-.welcome-command span {
+.welcome-command summary {
   color: #a5b4fc;
+  cursor: pointer;
   font-size: 10px;
   font-weight: 700;
+  list-style-position: inside;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -1517,7 +1528,196 @@ input::placeholder { color: var(--muted); }
   color: #c9d1d9;
   display: block;
   font-size: 11px;
+  margin-top: 8px;
   padding: 5px 8px;
+}
+
+.welcome-launcher {
+  background:
+    linear-gradient(135deg, rgba(45,212,191,0.1), rgba(99,102,241,0.08)),
+    rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  box-shadow: 0 18px 44px rgba(0,0,0,0.28);
+  display: grid;
+  gap: 12px;
+  max-width: 520px;
+  padding: 14px;
+}
+
+.launcher-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.launcher-head > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.launcher-head span,
+.launcher-path span {
+  align-items: center;
+  color: #a5b4fc;
+  display: flex;
+  font-size: 10px;
+  font-weight: 800;
+  gap: 6px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.launcher-head strong {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.launcher-path {
+  display: grid;
+  gap: 7px;
+}
+
+.launcher-advanced {
+  border-top: 1px solid rgba(255,255,255,0.08);
+  display: grid;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.launcher-advanced summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 750;
+  list-style-position: inside;
+  padding: 4px 0;
+}
+
+.launcher-advanced[open] {
+  padding-top: 8px;
+}
+
+.launcher-advanced[open] summary {
+  color: var(--ink-2);
+}
+
+.launcher-advanced .launcher-path {
+  margin-top: 2px;
+}
+
+.launcher-open-folder {
+  background: rgba(45,212,191,0.17);
+  border-color: rgba(45,212,191,0.36);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+  justify-content: center;
+  min-height: 42px;
+  width: 100%;
+}
+
+.launcher-open-folder:hover {
+  background: rgba(45,212,191,0.24);
+  box-shadow: 0 8px 24px rgba(45,212,191,0.2);
+}
+
+.launcher-path input {
+  background: rgba(4,8,15,0.74);
+  border-color: rgba(255,255,255,0.13);
+  color: var(--ink);
+  font-size: 12px;
+  min-height: 38px;
+  width: 100%;
+}
+
+.launcher-metrics {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.launcher-metrics div {
+  background: rgba(4,8,15,0.5);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 9px;
+  display: grid;
+  gap: 2px;
+  padding: 9px;
+}
+
+.launcher-metrics strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.launcher-metrics span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.launcher-suggestion {
+  align-items: stretch;
+  background: rgba(45,212,191,0.08);
+  border-color: rgba(45,212,191,0.22);
+  display: grid;
+  gap: 5px;
+  justify-items: stretch;
+  padding: 9px;
+  text-align: left;
+  width: 100%;
+}
+
+.launcher-suggestion span {
+  align-items: center;
+  color: var(--ink-2);
+  display: flex;
+  font-size: 12px;
+  gap: 6px;
+}
+
+.launcher-suggestion code {
+  color: var(--muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.launcher-error {
+  background: rgba(244,63,94,0.12);
+  border-radius: 8px;
+  color: #fb7185;
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 8px;
+}
+
+.launcher-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.launcher-actions > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.launcher-actions button {
+  background: rgba(45,212,191,0.16);
+  border-color: rgba(45,212,191,0.35);
+  color: var(--ink);
+  font-weight: 750;
+  min-height: 36px;
+  padding: 8px 12px;
 }
 
 /* ── Feature pills ───────────────────────── */
@@ -3076,6 +3276,14 @@ input::placeholder { color: var(--muted); }
   .welcome-actions button { justify-content: center; }
   .welcome-actions button + button { display: none; }
   .welcome-command { display: none; }
+  .welcome-launcher { max-width: none; padding: 12px; }
+  .launcher-head,
+  .launcher-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .launcher-actions button { justify-content: center; width: 100%; }
+  .launcher-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
   .welcome-preview { min-height: 360px; padding: 10px; }
   .preview-map     { min-height: 210px; }
