@@ -246,11 +246,14 @@ type ProjectTrackingStatus = {
 type WorkspaceLayout = {
   leftOpen: boolean;
   leftRailWidth: number;
+  nodePositions: NodePositionMap;
   rightOpen: boolean;
   rightRailWidth: number;
   selectedNodeId: string;
   viewport: Viewport | undefined;
 };
+
+type NodePositionMap = Record<string, { x: number; y: number }>;
 
 type SessionRoom = {
   id: string;
@@ -317,6 +320,7 @@ const layoutStorageKeys = [
   "leftOpen",
   "rightOpen",
   "leftRailWidth",
+  "nodePositions",
   "rightRailWidth",
   "selectedNodeId",
   "viewport"
@@ -385,6 +389,7 @@ function Dashboard(): React.ReactElement {
   const [projectError, setProjectError] = useState("");
   const [trackingBusy, setTrackingBusy] = useState(false);
   const [hydratedLayoutScope, setHydratedLayoutScope] = useState("");
+  const [nodePositions, setNodePositions] = useState<NodePositionMap>({});
   const autoStartedProjectId = useRef("");
   const manualTrackingStopped = useRef(false);
   const viewportRestored = useRef(false);
@@ -521,7 +526,10 @@ function Dashboard(): React.ReactElement {
     [state.presence, teamSummary.members]
   );
   const activeSession = sessionRooms.find((room) => room.id === activeSessionId);
-  const { edges, nodes } = useMemo(() => buildFlow(model, state, selectedNodeId, repoMap.edges), [model, repoMap.edges, selectedNodeId, state]);
+  const { edges, nodes } = useMemo(
+    () => buildFlow(model, state, selectedNodeId, repoMap.edges, nodePositions),
+    [model, nodePositions, repoMap.edges, selectedNodeId, state]
+  );
   const conflictInsights = useMemo(() => buildConflictInsights(state), [state]);
   const visibleConflictInsights = useMemo(
     () => conflictInsights.filter((insight) => !dismissedInsightIds.has(insight.id)),
@@ -790,6 +798,7 @@ function Dashboard(): React.ReactElement {
     setFocusMode(false);
     setLeftRailWidth(layout.leftRailWidth);
     setRightRailWidth(layout.rightRailWidth);
+    setNodePositions(layout.nodePositions);
     setSelectedNodeId(layout.selectedNodeId);
     if (layout.viewport) {
       void setViewport(layout.viewport, { duration: 0 });
@@ -812,6 +821,21 @@ function Dashboard(): React.ReactElement {
     if (hydratedLayoutScope !== layoutScope) return;
     writeStoredLayoutString(layoutScope, "selectedNodeId", selectedNodeId);
   }, [hydratedLayoutScope, layoutScope, selectedNodeId]);
+
+  const storeNodePosition = useCallback((nodeId: string, position: { x: number; y: number }) => {
+    if (hydratedLayoutScope !== layoutScope) return;
+    setNodePositions((current) => {
+      const next = {
+        ...current,
+        [nodeId]: {
+          x: Math.round(position.x),
+          y: Math.round(position.y)
+        }
+      };
+      writeStoredLayoutNodePositions(layoutScope, next);
+      return next;
+    });
+  }, [hydratedLayoutScope, layoutScope]);
 
   useEffect(() => {
     if (activeSessionId.length === 0) return;
@@ -863,8 +887,15 @@ function Dashboard(): React.ReactElement {
     setFocusMode(false);
     setLeftRailWidth(DEFAULT_LEFT_RAIL_WIDTH);
     setRightRailWidth(DEFAULT_RIGHT_RAIL_WIDTH);
+    setNodePositions({});
     setSelectedNodeId("");
     void fitView({ duration: 220, padding: 0.16 });
+  }, [fitView, layoutScope]);
+
+  const resetCanvasArrangement = useCallback(() => {
+    removeLayoutStorageValue(layoutScope, "nodePositions");
+    setNodePositions({});
+    window.setTimeout(() => fitView({ duration: 220, padding: 0.18 }), 0);
   }, [fitView, layoutScope]);
 
   const shellClass = [
@@ -1082,6 +1113,7 @@ function Dashboard(): React.ReactElement {
               nodeTypes={{ agent: AgentNode, domain: DomainNode }}
               nodes={nodes}
               onMoveEnd={(_, viewport) => writeStoredLayoutViewport(layoutScope, viewport)}
+              onNodeDragStop={(_, node) => storeNodePosition(node.id, node.position)}
               onNodeClick={(_, node) => {
                 setSelectedNodeId(node.id);
                 setRightRailView("inspect");
@@ -1099,6 +1131,7 @@ function Dashboard(): React.ReactElement {
               <button aria-label="Zoom in" title="Zoom in" type="button" onClick={() => zoomIn({ duration: 160 })}><ZoomIn size={14} />In</button>
               <button aria-label="Fit graph" title="Fit graph" type="button" onClick={() => fitView({ duration: 200, padding: 0.16 })}><Scan size={14} />Fit</button>
               <button aria-label="Focus local neighborhood" title="Focus local neighborhood" type="button" onClick={() => fitView({ duration: 220, nodes: localFocusNodes(nodes, edges, selectedNodeId), padding: 0.28 })}><Orbit size={14} />Local</button>
+              <button aria-label="Reset map arrangement" title="Reset map arrangement" type="button" onClick={resetCanvasArrangement}><RefreshCw size={14} />Arrange</button>
               <button
                 aria-label="Focus risk"
                 title="Focus risk"
@@ -1977,7 +2010,7 @@ function SettingsPanel({
         <div className="settings-row">
           <div className="settings-label">
             <span>Workspace layout</span>
-            <p>{layoutScopeLabel} keeps panel sizes, selection, and canvas position separate.</p>
+            <p>{layoutScopeLabel} keeps panel sizes, block arrangement, selection, and canvas position separate.</p>
           </div>
           <button className="settings-reset-btn" type="button" onClick={onResetLayout}>
             <RefreshCw size={12} />
@@ -2892,12 +2925,18 @@ function buildConflictInsights(state: SukaState): ConflictInsight[] {
   return insights.sort((left, right) => severityRank(right.severity) - severityRank(left.severity)).slice(0, 8);
 }
 
-function buildFlow(model: DomainModel[], state: SukaState, selectedNodeId: string, repoEdges: RepoMapEdge[]): { edges: Edge[]; nodes: Node[] } {
+function buildFlow(
+  model: DomainModel[],
+  state: SukaState,
+  selectedNodeId: string,
+  repoEdges: RepoMapEdge[],
+  nodePositions: NodePositionMap
+): { edges: Edge[]; nodes: Node[] } {
   const nodes: Node[] = [
     ...model.map((domain) => ({
       id: domain.id,
       type: "domain",
-      position: { x: domain.x, y: domain.y },
+      position: readNodePosition(nodePositions, domain.id, { x: domain.x, y: domain.y }),
       selected: selectedNodeId === domain.id,
       data: {
         agents: domain.presence.length,
@@ -2915,7 +2954,7 @@ function buildFlow(model: DomainModel[], state: SukaState, selectedNodeId: strin
       return {
         id: `agent:${agent.agent_id}`,
         type: "agent",
-        position: { x: base.x + index * 26, y: base.y + index * 8 },
+        position: readNodePosition(nodePositions, `agent:${agent.agent_id}`, { x: base.x + index * 26, y: base.y + index * 8 }),
         selected: selectedNodeId === `agent:${agent.agent_id}`,
         data: {
           color: agentColor(agent.agent_id),
@@ -2959,6 +2998,11 @@ function buildFlow(model: DomainModel[], state: SukaState, selectedNodeId: strin
   ];
 
   return { edges, nodes };
+}
+
+function readNodePosition(nodePositions: NodePositionMap, nodeId: string, fallback: { x: number; y: number }): { x: number; y: number } {
+  const stored = nodePositions[nodeId];
+  return stored === undefined ? fallback : stored;
 }
 
 function resolveSelection(selectedNodeId: string, model: DomainModel[], state: SukaState): SelectedDetails {
@@ -3190,6 +3234,7 @@ function readStoredLayout(scope: string): WorkspaceLayout {
   return {
     leftOpen: readStoredLayoutBoolean(scope, "leftOpen", true),
     leftRailWidth: readStoredLayoutNumber(scope, "leftRailWidth", DEFAULT_LEFT_RAIL_WIDTH, LEFT_RAIL_MIN_WIDTH, LEFT_RAIL_MAX_WIDTH),
+    nodePositions: readStoredLayoutNodePositions(scope),
     rightOpen: readStoredLayoutBoolean(scope, "rightOpen", true),
     rightRailWidth: readStoredLayoutNumber(scope, "rightRailWidth", DEFAULT_RIGHT_RAIL_WIDTH, RIGHT_RAIL_MIN_WIDTH, RIGHT_RAIL_MAX_WIDTH),
     selectedNodeId: readStoredLayoutString(scope, "selectedNodeId"),
@@ -3249,6 +3294,37 @@ function readStoredLayoutViewport(scope: string): Viewport | undefined {
 
 function writeStoredLayoutViewport(scope: string, viewport: Viewport): void {
   writeLayoutStorageValue(scope, "viewport", JSON.stringify(viewport));
+}
+
+function readStoredLayoutNodePositions(scope: string): NodePositionMap {
+  if (typeof window === "undefined") return {};
+  const raw = readLayoutStorageValue(scope, "nodePositions");
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const positions: NodePositionMap = {};
+    for (const [nodeId, value] of Object.entries(parsed)) {
+      if (typeof nodeId !== "string" || typeof value !== "object" || value === null) continue;
+      const candidate = value as Partial<{ x: unknown; y: unknown }>;
+      if (typeof candidate.x !== "number" || typeof candidate.y !== "number") continue;
+      if (!Number.isFinite(candidate.x) || !Number.isFinite(candidate.y)) continue;
+      positions[nodeId] = {
+        x: Math.round(candidate.x),
+        y: Math.round(candidate.y)
+      };
+    }
+    return positions;
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredLayoutNodePositions(scope: string, positions: NodePositionMap): void {
+  if (Object.keys(positions).length === 0) {
+    removeLayoutStorageValue(scope, "nodePositions");
+    return;
+  }
+  writeLayoutStorageValue(scope, "nodePositions", JSON.stringify(positions));
 }
 
 function removeStoredLayout(scope: string): void {
