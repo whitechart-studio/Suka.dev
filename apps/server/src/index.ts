@@ -1,4 +1,5 @@
 export * from "./file-store.js";
+export * from "./folder-picker.js";
 export * from "./http.js";
 export * from "./logger.js";
 export * from "./memory-store.js";

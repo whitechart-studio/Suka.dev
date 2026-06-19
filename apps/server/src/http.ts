@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { URL } from "node:url";
 import { dashboardHtml } from "./dashboard.js";
+import { selectLocalFolder, type FolderPickerResult } from "./folder-picker.js";
 import type { SukaLogger } from "./logger.js";
 import { ProjectTrackingError, ProjectTrackingWorker } from "./project-tracker.js";
 import { inspectLocalProject } from "./projects.js";
@@ -18,6 +19,7 @@ const lucideBundlePath = require.resolve("lucide/dist/umd/lucide.min.js");
 const dashboardDistPath = resolve(process.cwd(), "apps/dashboard/dist");
 
 export interface HttpServerOptions {
+  folderPicker?: () => Promise<FolderPickerResult>;
   logger?: SukaLogger;
   projectTracker?: ProjectTrackingWorker;
   service?: SukaService;
@@ -38,11 +40,12 @@ export function createSukaHttpServer(options: HttpServerOptions = {}): Server {
   const service = options.service ?? createSukaService();
   const realtime = new RealtimeHub({ service });
   const projectTracker = options.projectTracker ?? new ProjectTrackingWorker(service);
+  const folderPicker = options.folderPicker ?? selectLocalFolder;
   const logger = options.logger;
 
   const server = createServer(async (request, response) => {
     try {
-      await routeRequest(service, realtime, projectTracker, request, response);
+      await routeRequest(service, realtime, projectTracker, folderPicker, request, response);
     } catch (error) {
       logger?.log("error", "request failed", {
         error_code: error instanceof HttpInputError ? error.code : "internal_error",
@@ -110,6 +113,7 @@ async function routeRequest(
   service: SukaService,
   realtime: RealtimeHub,
   projectTracker: ProjectTrackingWorker,
+  folderPicker: () => Promise<FolderPickerResult>,
   request: IncomingMessage,
   response: ServerResponse
 ): Promise<void> {
@@ -228,6 +232,13 @@ async function routeRequest(
     const project = registerProject(service, await readJson(request));
     writeJson(response, 201, {
       data: project
+    });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/projects/select-folder") {
+    writeJson(response, 200, {
+      data: await folderPicker()
     });
     return;
   }

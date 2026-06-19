@@ -26,6 +26,7 @@ import {
   Crosshair,
   Copy,
   FileClock,
+  FolderOpen,
   Gauge,
   GitBranch,
   HardDrive,
@@ -561,8 +562,8 @@ function Dashboard(): React.ReactElement {
     });
   }, [repoMap.root, teamConnection.inviteToken.length]);
 
-  const startProjectTracking = useCallback(async () => {
-    const path = projectPath.trim();
+  const startProjectTracking = useCallback(async (selectedPath?: string): Promise<boolean> => {
+    const path = (selectedPath ?? projectPath).trim() || suggestedProject?.path || "";
     setProjectError("");
     setTrackingBusy(true);
     try {
@@ -609,12 +610,43 @@ function Dashboard(): React.ReactElement {
       const startPayload = await startResponse.json() as { data: ProjectTrackingStatus };
       setTrackingStatus(startPayload.data);
       await Promise.all([loadProjects(), loadState(), loadTeamSummary()]);
+      return true;
     } catch (error) {
       setProjectError(error instanceof Error ? error.message : "Tracking could not be started.");
+      return false;
     } finally {
       setTrackingBusy(false);
     }
-  }, [activeProject, loadProjects, loadState, loadTeamSummary, projectPath, projects]);
+  }, [activeProject, loadProjects, loadState, loadTeamSummary, projectPath, projects, suggestedProject?.path]);
+
+  const selectProjectFolder = useCallback(async (): Promise<boolean> => {
+    setProjectError("");
+    setTrackingBusy(true);
+    try {
+      const response = await fetch("/api/projects/select-folder", {
+        body: "{}",
+        headers: { "content-type": "application/json" },
+        method: "POST"
+      });
+      if (!response.ok) {
+        throw new Error("Folder picker could not be opened.");
+      }
+      const payload = await response.json() as {
+        data: { selected: true; path: string } | { selected: false; reason: string };
+      };
+      if (!payload.data.selected) {
+        setProjectError(payload.data.reason);
+        return false;
+      }
+      setProjectPath(payload.data.path);
+      return await startProjectTracking(payload.data.path);
+    } catch (error) {
+      setProjectError(error instanceof Error ? error.message : "Folder picker could not be opened.");
+      return false;
+    } finally {
+      setTrackingBusy(false);
+    }
+  }, [startProjectTracking]);
 
   const stopProjectTracking = useCallback(async () => {
     setProjectError("");
@@ -717,14 +749,29 @@ function Dashboard(): React.ReactElement {
     return (
       <div className="suka-app" data-theme={settings.theme} data-density={settings.density}>
         <WelcomeSurface
+          activeProject={activeProject}
+          busy={trackingBusy}
           connection={teamConnection}
+          error={projectError}
+          path={projectPath}
           repoName={repoMap.root ?? "workspace"}
           status={status}
+          suggestedProject={suggestedProject}
+          trackingStatus={trackingStatus}
           onDismiss={enterWorkspace}
           onOpenTeam={() => {
             enterWorkspace();
             setTeamPanelOpen(true);
           }}
+          onPathChange={setProjectPath}
+          onSelectFolder={async () => {
+            const selected = await selectProjectFolder();
+            if (selected) {
+              enterWorkspace();
+            }
+          }}
+          onStartTracking={() => void startProjectTracking()}
+          onStopTracking={() => void stopProjectTracking()}
         />
       </div>
     );
@@ -761,6 +808,7 @@ function Dashboard(): React.ReactElement {
             status={trackingStatus}
             suggestedProject={suggestedProject}
             onPathChange={setProjectPath}
+            onSelectFolder={() => void selectProjectFolder()}
             onStart={() => void startProjectTracking()}
             onStop={() => void stopProjectTracking()}
           />
@@ -958,17 +1006,37 @@ function Dashboard(): React.ReactElement {
 }
 
 function WelcomeSurface({
+  activeProject,
+  busy,
   connection,
+  error,
   onDismiss,
   onOpenTeam,
+  onPathChange,
+  onSelectFolder,
+  onStartTracking,
+  onStopTracking,
+  path,
   repoName,
-  status
+  status,
+  suggestedProject,
+  trackingStatus
 }: {
+  activeProject: LocalProject | undefined;
+  busy: boolean;
   connection: TeamConnection;
+  error: string;
   onDismiss(): void;
   onOpenTeam(): void;
+  onPathChange(value: string): void;
+  onSelectFolder(): void;
+  onStartTracking(): void;
+  onStopTracking(): void;
+  path: string;
   repoName: string;
+  suggestedProject: LocalProjectSuggestion | undefined;
   status: string;
+  trackingStatus: ProjectTrackingStatus;
 }): React.ReactElement {
   const workspaceName = connection.workspaceName.trim() || displayName(repoName);
 
@@ -1008,10 +1076,22 @@ function WelcomeSurface({
               Connect team
             </button>
           </div>
-          <div className="welcome-command">
-            <span>agent launch command</span>
+          <details className="welcome-command">
+            <summary>Agent launch command</summary>
             <code>node packages/cli/dist/bin.js session start --repo {repoName}</code>
-          </div>
+          </details>
+          <ProjectLaunchPanel
+            activeProject={activeProject}
+            busy={busy}
+            error={error}
+            path={path}
+            status={trackingStatus}
+            suggestedProject={suggestedProject}
+            onPathChange={onPathChange}
+            onSelectFolder={onSelectFolder}
+            onStart={onStartTracking}
+            onStop={onStopTracking}
+          />
         </div>
 
         <LiveDemo workspaceName={workspaceName} repoName={repoName} />
@@ -1079,6 +1159,93 @@ function WelcomeSurface({
         </div>
       </div>
     </section>
+  );
+}
+
+function ProjectLaunchPanel({
+  activeProject,
+  busy,
+  error,
+  onPathChange,
+  onSelectFolder,
+  onStart,
+  onStop,
+  path,
+  status,
+  suggestedProject
+}: {
+  activeProject: LocalProject | undefined;
+  busy: boolean;
+  error: string;
+  onPathChange(value: string): void;
+  onSelectFolder(): void;
+  onStart(): void;
+  onStop(): void;
+  path: string;
+  status: ProjectTrackingStatus;
+  suggestedProject: LocalProjectSuggestion | undefined;
+}): React.ReactElement {
+  const running = status.running;
+  const launchPath = path || activeProject?.path || suggestedProject?.path || "";
+  const launcherName = activeProject?.name || suggestedProject?.name || "Select project";
+  const statusLabel = running ? `${status.detected_agents} detected` : "ready to track";
+
+  return (
+    <div className="welcome-launcher" aria-label="Project launcher">
+      <div className="launcher-head">
+        <div>
+          <span><HardDrive size={13} /> launch folder</span>
+          <strong>{launcherName}</strong>
+        </div>
+        <Badge tone={running ? "live" : "neutral"} icon={<RadioTower size={12} />}>
+          {running ? "tracking" : "idle"}
+        </Badge>
+      </div>
+
+      <button className="launcher-open-folder" disabled={busy} type="button" onClick={onSelectFolder}>
+        <FolderOpen size={15} />
+        Open folder
+      </button>
+
+      {!running && suggestedProject !== undefined && suggestedProject.path !== launchPath ? (
+        <button className="launcher-suggestion" type="button" onClick={() => onPathChange(suggestedProject.path)}>
+          <span><GitBranch size={13} /> Use detected repo</span>
+          <code>{suggestedProject.path}</code>
+        </button>
+      ) : null}
+
+      {error.length > 0 ? <p className="launcher-error">{error}</p> : null}
+
+      {running ? (
+        <div className="launcher-actions">
+          <span>{statusLabel}</span>
+          <button disabled={busy} type="button" onClick={onStop}>
+            <X size={14} />
+            Stop
+          </button>
+        </div>
+      ) : (
+        <details className="launcher-advanced">
+          <summary>Enter path manually</summary>
+          <label className="launcher-path">
+            <span>Advanced path fallback</span>
+            <input
+              aria-label="Repository path to track"
+              placeholder={launchPath || "/Users/name/work/project"}
+              value={path}
+              onChange={(event) => onPathChange(event.target.value)}
+            />
+          </label>
+          <div className="launcher-actions">
+            <span>{statusLabel}</span>
+            <button disabled={busy || launchPath.trim().length === 0} type="button" onClick={onStart}>
+              <RadioTower size={14} />
+              Track manual path
+            </button>
+          </div>
+        </details>
+      )}
+    </div>
   );
 }
 
@@ -1758,6 +1925,7 @@ function ProjectTrackingControl({
   busy,
   error,
   onPathChange,
+  onSelectFolder,
   onStart,
   onStop,
   path,
@@ -1769,6 +1937,7 @@ function ProjectTrackingControl({
   busy: boolean;
   error: string;
   onPathChange(value: string): void;
+  onSelectFolder(): void;
   onStart(): void;
   onStop(): void;
   path: string;
@@ -1825,6 +1994,11 @@ function ProjectTrackingControl({
             </button>
           ) : null}
 
+          <button className="tracking-folder-action" disabled={busy} type="button" onClick={onSelectFolder}>
+            <FolderOpen size={14} />
+            Open folder
+          </button>
+
           {recentProjects.length > 0 ? (
             <div className="project-list">
               <h3>Recent folders</h3>
@@ -1867,7 +2041,7 @@ function ProjectTrackingControl({
             ) : (
               <button className="primary-action" disabled={busy || path.trim().length === 0} type="button" onClick={onStart}>
                 <RadioTower size={14} />
-                Start tracking
+                Track manual path
               </button>
             )}
           </div>

@@ -125,6 +125,45 @@ test("project API suggests the server launch folder", async () => {
   }
 });
 
+test("project API returns selected folder from injected picker", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-folder-picker-"));
+  const normalizedTempDir = realpathSync(tempDir);
+  const running = await listen({ port: 0 }, createSukaHttpServer({
+    folderPicker: async () => ({ path: normalizedTempDir, selected: true })
+  }));
+  try {
+    const response = await postJson(`${running.url}/api/projects/select-folder`, {});
+    const body = await response.json() as { data: { path: string; selected: boolean } };
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body.data, {
+      path: normalizedTempDir,
+      selected: true
+    });
+  } finally {
+    await running.close();
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
+test("project API reports cancelled folder selection without failing", async () => {
+  const running = await listen({ port: 0 }, createSukaHttpServer({
+    folderPicker: async () => ({ reason: "Folder selection was cancelled.", selected: false })
+  }));
+  try {
+    const response = await postJson(`${running.url}/api/projects/select-folder`, {});
+    const body = await response.json() as { data: { reason: string; selected: boolean } };
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body.data, {
+      reason: "Folder selection was cancelled.",
+      selected: false
+    });
+  } finally {
+    await running.close();
+  }
+});
+
 test("project API persists active project with file-backed state", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "suka-project-api-"));
   try {
