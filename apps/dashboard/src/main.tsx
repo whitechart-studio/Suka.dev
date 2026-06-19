@@ -385,6 +385,8 @@ function Dashboard(): React.ReactElement {
   const [projectError, setProjectError] = useState("");
   const [trackingBusy, setTrackingBusy] = useState(false);
   const [hydratedLayoutScope, setHydratedLayoutScope] = useState("");
+  const autoStartedProjectId = useRef("");
+  const manualTrackingStopped = useRef(false);
   const viewportRestored = useRef(false);
   const shellRef = useRef<HTMLElement | null>(null);
   const { fitView, setViewport, zoomIn, zoomOut } = useReactFlow();
@@ -526,6 +528,7 @@ function Dashboard(): React.ReactElement {
     [conflictInsights, dismissedInsightIds]
   );
   const riskCount = visibleConflictInsights.length + model.filter((item) => item.failures.length > 0).length;
+  const radarSignalCount = riskCount + state.presence.length + state.claims.length + state.briefs.length + state.events.length + state.decisions.length;
   const selectedDetails = useMemo(() => resolveSelection(selectedNodeId, model, state), [model, selectedNodeId, state]);
   const hasLiveState = state.presence.length + state.claims.length + state.events.length + state.decisions.length + state.briefs.length > 0;
   const showWelcome = landingOpen || (!welcomeDismissed && !hasLiveState);
@@ -648,6 +651,7 @@ function Dashboard(): React.ReactElement {
         throw new Error("Tracking could not be started.");
       }
       const startPayload = await startResponse.json() as { data: ProjectTrackingStatus };
+      manualTrackingStopped.current = false;
       setTrackingStatus(startPayload.data);
       await Promise.all([loadProjects(), loadState(), loadTeamSummary()]);
       return true;
@@ -658,6 +662,13 @@ function Dashboard(): React.ReactElement {
       setTrackingBusy(false);
     }
   }, [activeProject, loadProjects, loadState, loadTeamSummary, projectPath, projects, suggestedProject?.path]);
+
+  useEffect(() => {
+    if (activeProject === undefined || trackingBusy || trackingStatus.running || manualTrackingStopped.current) return;
+    if (autoStartedProjectId.current === activeProject.id) return;
+    autoStartedProjectId.current = activeProject.id;
+    void startProjectTracking(activeProject.path);
+  }, [activeProject, startProjectTracking, trackingBusy, trackingStatus.running]);
 
   const selectProjectFolder = useCallback(async (): Promise<boolean> => {
     setProjectError("");
@@ -690,6 +701,7 @@ function Dashboard(): React.ReactElement {
 
   const stopProjectTracking = useCallback(async () => {
     setProjectError("");
+    manualTrackingStopped.current = true;
     setTrackingBusy(true);
     try {
       const response = await fetch("/api/projects/tracking/stop", {
@@ -1123,7 +1135,7 @@ function Dashboard(): React.ReactElement {
             />
           ) : null}
           <RailHeader
-            count={riskCount}
+            count={radarSignalCount}
             icon={<Gauge size={14} />}
             onToggle={() => setRightOpen((value) => !value)}
             open={rightOpen}
@@ -1143,6 +1155,7 @@ function Dashboard(): React.ReactElement {
               <div className="right-panel">
                 {rightRailView === "truth" ? (
                   <CurrentTruthPanel
+                    activeAgents={state.presence.length}
                     briefs={state.briefs}
                     claims={state.claims}
                     decisions={state.decisions}
@@ -2330,12 +2343,14 @@ function RightRailTabs({
 }
 
 function CurrentTruthPanel({
+  activeAgents,
   briefs,
   claims,
   decisions,
   events,
   insights
 }: {
+  activeAgents: number;
   briefs: BriefPointer[];
   claims: ClaimPointer[];
   decisions: DecisionPointer[];
@@ -2360,6 +2375,7 @@ function CurrentTruthPanel({
         </Badge>
       </div>
       <div className="truth-grid">
+        <TruthStat label="agents" value={activeAgents} />
         <TruthStat label="owners" value={ownerCount} />
         <TruthStat label="claims" value={claims.length} />
         <TruthStat label="briefs" value={briefs.length} />

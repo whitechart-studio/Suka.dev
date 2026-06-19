@@ -2353,6 +2353,8 @@ input::placeholder { color: var(--muted); }
 .canvas-shell { grid-column: 2; }
 .right-rail   { grid-column: 3; }
 
+.right-rail { container: right-rail / inline-size; }
+
 .app-shell.left-collapsed .canvas-shell  { grid-column: 1; }
 .app-shell.left-collapsed .right-rail    { grid-column: 2; }
 .app-shell.right-collapsed .canvas-shell { grid-column: 2; }
@@ -2711,9 +2713,9 @@ body.is-resizing-rail .rail-resize-handle::after {
   border: 1px solid var(--line);
   border-radius: 8px;
   display: grid;
-  gap: 3px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  padding: 4px;
+  gap: 4px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 5px;
 }
 
 .right-tabs button {
@@ -2727,10 +2729,10 @@ body.is-resizing-rail .rail-resize-handle::after {
   font-size: 10.5px;
   font-weight: 700;
   gap: 4px;
-  justify-content: center;
-  min-height: 30px;
+  justify-content: flex-start;
+  min-height: 34px;
   min-width: 0;
-  padding: 0 5px;
+  padding: 0 8px;
   transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
 }
 
@@ -2746,6 +2748,7 @@ body.is-resizing-rail .rail-resize-handle::after {
 }
 
 .right-tabs span {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2773,6 +2776,12 @@ body.is-resizing-rail .rail-resize-handle::after {
   height: 100%;
 }
 
+@container right-rail (max-width: 330px) {
+  .truth-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .section-title {
   align-items: center;
   display: flex;
@@ -2786,7 +2795,7 @@ body.is-resizing-rail .rail-resize-handle::after {
 .truth-grid {
   display: grid;
   gap: 6px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .truth-grid > div {
