@@ -1185,6 +1185,29 @@ input::placeholder { color: var(--muted); }
   color: var(--ink-2);
 }
 
+.settings-reset-btn {
+  align-items: center;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink-3);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  transition: border-color var(--dur-fast), color var(--dur-fast), background var(--dur-fast);
+}
+
+.settings-reset-btn:hover {
+  background: rgba(99,102,241,0.12);
+  border-color: rgba(99,102,241,0.4);
+  color: var(--ink);
+}
+
 /* About section */
 .settings-about {
   color: var(--muted);

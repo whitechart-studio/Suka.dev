@@ -243,6 +243,16 @@ type ProjectTrackingStatus = {
   warnings: string[];
 };
 
+type WorkspaceLayout = {
+  focusMode: boolean;
+  leftOpen: boolean;
+  leftRailWidth: number;
+  rightOpen: boolean;
+  rightRailWidth: number;
+  selectedNodeId: string;
+  viewport: Viewport | undefined;
+};
+
 type SessionRoom = {
   id: string;
   workspace_id: string;
@@ -301,6 +311,16 @@ const defaultSettings: AppSettings = {
 
 const agentPalette = ["#0f766e", "#2563eb", "#7c3aed", "#16803c", "#b45309", "#be123c", "#0e7490"];
 const storagePrefix = "suka.dashboard.";
+const layoutStoragePrefix = `${storagePrefix}layout.`;
+const layoutStorageKeys = [
+  "leftOpen",
+  "rightOpen",
+  "focusMode",
+  "leftRailWidth",
+  "rightRailWidth",
+  "selectedNodeId",
+  "viewport"
+] as const;
 const defaultTeamConnection: TeamConnection = {
   inviteToken: "",
   mode: "local",
@@ -339,12 +359,13 @@ function Dashboard(): React.ReactElement {
   const [state, setState] = useState<SukaState>(emptyState);
   const [repoMap, setRepoMap] = useState<RepoMap>({ domains: fallbackDomains, edges: [] });
   const [status, setStatus] = useState("connecting");
-  const [leftOpen, setLeftOpen] = useState(() => readStoredBoolean("leftOpen", true));
-  const [rightOpen, setRightOpen] = useState(() => readStoredBoolean("rightOpen", true));
-  const [leftRailWidth, setLeftRailWidth] = useState(() => readStoredNumber("leftRailWidth", DEFAULT_LEFT_RAIL_WIDTH, LEFT_RAIL_MIN_WIDTH, LEFT_RAIL_MAX_WIDTH));
-  const [rightRailWidth, setRightRailWidth] = useState(() => readStoredNumber("rightRailWidth", DEFAULT_RIGHT_RAIL_WIDTH, RIGHT_RAIL_MIN_WIDTH, RIGHT_RAIL_MAX_WIDTH));
-  const [focusMode, setFocusMode] = useState(() => readStoredBoolean("focusMode", false));
-  const [selectedNodeId, setSelectedNodeId] = useState(() => readStoredString("selectedNodeId"));
+  const [projectPath, setProjectPath] = useState(() => readStoredString("projectPath"));
+  const [leftOpen, setLeftOpen] = useState(true);
+  const [rightOpen, setRightOpen] = useState(true);
+  const [leftRailWidth, setLeftRailWidth] = useState(DEFAULT_LEFT_RAIL_WIDTH);
+  const [rightRailWidth, setRightRailWidth] = useState(DEFAULT_RIGHT_RAIL_WIDTH);
+  const [focusMode, setFocusMode] = useState(false);
+  const [selectedNodeId, setSelectedNodeId] = useState("");
   const [releasingClaimId, setReleasingClaimId] = useState("");
   const [dismissedInsightIds, setDismissedInsightIds] = useState<Set<string>>(() => new Set());
   const [teamPanelOpen, setTeamPanelOpen] = useState(false);
@@ -360,12 +381,16 @@ function Dashboard(): React.ReactElement {
   const [activeProject, setActiveProject] = useState<LocalProject | undefined>();
   const [suggestedProject, setSuggestedProject] = useState<LocalProjectSuggestion | undefined>();
   const [trackingStatus, setTrackingStatus] = useState<ProjectTrackingStatus>(emptyTrackingStatus);
-  const [projectPath, setProjectPath] = useState(() => readStoredString("projectPath"));
   const [projectError, setProjectError] = useState("");
   const [trackingBusy, setTrackingBusy] = useState(false);
+  const [hydratedLayoutScope, setHydratedLayoutScope] = useState("");
   const viewportRestored = useRef(false);
   const shellRef = useRef<HTMLElement | null>(null);
   const { fitView, setViewport, zoomIn, zoomOut } = useReactFlow();
+  const layoutScope = useMemo(() => {
+    const activeProjectKey = activeProject ? `${activeProject.workspace_id}:${activeProject.repo_id}` : "";
+    return createLayoutStorageScope(activeProjectKey || projectPath || repoMap.root);
+  }, [activeProject, projectPath, repoMap.root]);
 
   const loadState = useCallback(async () => {
     setStatus("loading");
@@ -739,19 +764,37 @@ function Dashboard(): React.ReactElement {
   }, [fitView, focusMode, leftOpen, rightOpen]);
 
   useEffect(() => {
-    writeStoredBoolean("leftOpen", leftOpen);
-    writeStoredBoolean("rightOpen", rightOpen);
-    writeStoredBoolean("focusMode", focusMode);
-  }, [focusMode, leftOpen, rightOpen]);
+    const layout = readStoredLayout(layoutScope);
+    setHydratedLayoutScope(layoutScope);
+    viewportRestored.current = false;
+    setLeftOpen(layout.leftOpen);
+    setRightOpen(layout.rightOpen);
+    setFocusMode(layout.focusMode);
+    setLeftRailWidth(layout.leftRailWidth);
+    setRightRailWidth(layout.rightRailWidth);
+    setSelectedNodeId(layout.selectedNodeId);
+    if (layout.viewport) {
+      void setViewport(layout.viewport, { duration: 0 });
+    }
+  }, [layoutScope, setViewport]);
 
   useEffect(() => {
-    writeStoredNumber("leftRailWidth", leftRailWidth);
-    writeStoredNumber("rightRailWidth", rightRailWidth);
-  }, [leftRailWidth, rightRailWidth]);
+    if (hydratedLayoutScope !== layoutScope) return;
+    writeStoredLayoutBoolean(layoutScope, "leftOpen", leftOpen);
+    writeStoredLayoutBoolean(layoutScope, "rightOpen", rightOpen);
+    writeStoredLayoutBoolean(layoutScope, "focusMode", focusMode);
+  }, [focusMode, hydratedLayoutScope, layoutScope, leftOpen, rightOpen]);
 
   useEffect(() => {
-    writeStoredString("selectedNodeId", selectedNodeId);
-  }, [selectedNodeId]);
+    if (hydratedLayoutScope !== layoutScope) return;
+    writeStoredLayoutNumber(layoutScope, "leftRailWidth", leftRailWidth);
+    writeStoredLayoutNumber(layoutScope, "rightRailWidth", rightRailWidth);
+  }, [hydratedLayoutScope, layoutScope, leftRailWidth, rightRailWidth]);
+
+  useEffect(() => {
+    if (hydratedLayoutScope !== layoutScope) return;
+    writeStoredLayoutString(layoutScope, "selectedNodeId", selectedNodeId);
+  }, [hydratedLayoutScope, layoutScope, selectedNodeId]);
 
   useEffect(() => {
     if (activeSessionId.length === 0) return;
@@ -789,11 +832,23 @@ function Dashboard(): React.ReactElement {
   useEffect(() => {
     if (viewportRestored.current || nodes.length === 0) return;
     viewportRestored.current = true;
-    const viewport = readStoredViewport();
+    const viewport = readStoredLayoutViewport(layoutScope);
     if (viewport) {
       void setViewport(viewport, { duration: 0 });
     }
-  }, [nodes.length, setViewport]);
+  }, [layoutScope, nodes.length, setViewport]);
+
+  const resetWorkspaceLayout = useCallback(() => {
+    removeStoredLayout(layoutScope);
+    viewportRestored.current = true;
+    setLeftOpen(true);
+    setRightOpen(true);
+    setFocusMode(false);
+    setLeftRailWidth(DEFAULT_LEFT_RAIL_WIDTH);
+    setRightRailWidth(DEFAULT_RIGHT_RAIL_WIDTH);
+    setSelectedNodeId("");
+    void fitView({ duration: 220, padding: 0.16 });
+  }, [fitView, layoutScope]);
 
   const shellClass = [
     "app-shell",
@@ -923,9 +978,11 @@ function Dashboard(): React.ReactElement {
         ) : null}
         {settingsOpen ? (
           <SettingsPanel
+            layoutScopeLabel={projectPath.trim().length > 0 ? "This project" : "Default workspace"}
             settings={settings}
             status={status}
             onClose={() => setSettingsOpen(false)}
+            onResetLayout={resetWorkspaceLayout}
             onUpdate={(patch) => setSettings((s) => ({ ...s, ...patch }))}
           />
         ) : null}
@@ -1007,7 +1064,7 @@ function Dashboard(): React.ReactElement {
               maxZoom={1.8}
               nodeTypes={{ agent: AgentNode, domain: DomainNode }}
               nodes={nodes}
-              onMoveEnd={(_, viewport) => writeStoredViewport(viewport)}
+              onMoveEnd={(_, viewport) => writeStoredLayoutViewport(layoutScope, viewport)}
               onNodeClick={(_, node) => setSelectedNodeId(node.id)}
               onPaneClick={() => setSelectedNodeId("")}
               proOptions={{ hideAttribution: true }}
@@ -1787,12 +1844,16 @@ function DocsPanel({ onClose }: { onClose(): void }): React.ReactElement {
 }
 
 function SettingsPanel({
+  layoutScopeLabel,
   onClose,
+  onResetLayout,
   onUpdate,
   settings,
   status
 }: {
+  layoutScopeLabel: string;
   onClose(): void;
+  onResetLayout(): void;
   onUpdate(patch: Partial<AppSettings>): void;
   settings: AppSettings;
   status: string;
@@ -1860,6 +1921,16 @@ function SettingsPanel({
               Compact
             </button>
           </div>
+        </div>
+        <div className="settings-row">
+          <div className="settings-label">
+            <span>Workspace layout</span>
+            <p>{layoutScopeLabel} keeps panel sizes, focus mode, selection, and canvas position separate.</p>
+          </div>
+          <button className="settings-reset-btn" type="button" onClick={onResetLayout}>
+            <RefreshCw size={12} />
+            Reset
+          </button>
         </div>
       </div>
 
@@ -2932,6 +3003,78 @@ function writeStoredSettings(value: AppSettings): void {
   writeStorageValue("settings", JSON.stringify(value));
 }
 
+function readStoredLayout(scope: string): WorkspaceLayout {
+  return {
+    focusMode: readStoredLayoutBoolean(scope, "focusMode", false),
+    leftOpen: readStoredLayoutBoolean(scope, "leftOpen", true),
+    leftRailWidth: readStoredLayoutNumber(scope, "leftRailWidth", DEFAULT_LEFT_RAIL_WIDTH, LEFT_RAIL_MIN_WIDTH, LEFT_RAIL_MAX_WIDTH),
+    rightOpen: readStoredLayoutBoolean(scope, "rightOpen", true),
+    rightRailWidth: readStoredLayoutNumber(scope, "rightRailWidth", DEFAULT_RIGHT_RAIL_WIDTH, RIGHT_RAIL_MIN_WIDTH, RIGHT_RAIL_MAX_WIDTH),
+    selectedNodeId: readStoredLayoutString(scope, "selectedNodeId"),
+    viewport: readStoredLayoutViewport(scope)
+  };
+}
+
+function readStoredLayoutBoolean(scope: string, key: string, fallback: boolean): boolean {
+  if (typeof window === "undefined") return fallback;
+  const value = readLayoutStorageValue(scope, key);
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return fallback;
+}
+
+function writeStoredLayoutBoolean(scope: string, key: string, value: boolean): void {
+  writeLayoutStorageValue(scope, key, String(value));
+}
+
+function readStoredLayoutNumber(scope: string, key: string, fallback: number, min: number, max: number): number {
+  if (typeof window === "undefined") return fallback;
+  const value = Number(readLayoutStorageValue(scope, key));
+  return Number.isFinite(value) ? clamp(value, min, max) : fallback;
+}
+
+function writeStoredLayoutNumber(scope: string, key: string, value: number): void {
+  writeLayoutStorageValue(scope, key, String(Math.round(value)));
+}
+
+function readStoredLayoutString(scope: string, key: string): string {
+  if (typeof window === "undefined") return "";
+  return readLayoutStorageValue(scope, key) ?? "";
+}
+
+function writeStoredLayoutString(scope: string, key: string, value: string): void {
+  if (value.length === 0) {
+    removeLayoutStorageValue(scope, key);
+    return;
+  }
+  writeLayoutStorageValue(scope, key, value);
+}
+
+function readStoredLayoutViewport(scope: string): Viewport | undefined {
+  if (typeof window === "undefined") return undefined;
+  const raw = readLayoutStorageValue(scope, "viewport");
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as Partial<Viewport>;
+    if (typeof parsed.x === "number" && typeof parsed.y === "number" && typeof parsed.zoom === "number") {
+      return { x: parsed.x, y: parsed.y, zoom: parsed.zoom };
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+function writeStoredLayoutViewport(scope: string, viewport: Viewport): void {
+  writeLayoutStorageValue(scope, "viewport", JSON.stringify(viewport));
+}
+
+function removeStoredLayout(scope: string): void {
+  for (const key of layoutStorageKeys) {
+    removeLayoutStorageValue(scope, key);
+  }
+}
+
 function readStoredBoolean(key: string, fallback: boolean): boolean {
   if (typeof window === "undefined") return fallback;
   const value = readStorageValue(key);
@@ -2942,16 +3085,6 @@ function readStoredBoolean(key: string, fallback: boolean): boolean {
 
 function writeStoredBoolean(key: string, value: boolean): void {
   writeStorageValue(key, String(value));
-}
-
-function readStoredNumber(key: string, fallback: number, min: number, max: number): number {
-  if (typeof window === "undefined") return fallback;
-  const value = Number(readStorageValue(key));
-  return Number.isFinite(value) ? clamp(value, min, max) : fallback;
-}
-
-function writeStoredNumber(key: string, value: number): void {
-  writeStorageValue(key, String(Math.round(value)));
 }
 
 function readStoredString(key: string): string {
@@ -2965,25 +3098,6 @@ function writeStoredString(key: string, value: string): void {
     return;
   }
   writeStorageValue(key, value);
-}
-
-function readStoredViewport(): Viewport | undefined {
-  if (typeof window === "undefined") return undefined;
-  const raw = readStorageValue("viewport");
-  if (!raw) return undefined;
-  try {
-    const parsed = JSON.parse(raw) as Partial<Viewport>;
-    if (typeof parsed.x === "number" && typeof parsed.y === "number" && typeof parsed.zoom === "number") {
-      return { x: parsed.x, y: parsed.y, zoom: parsed.zoom };
-    }
-  } catch {
-    return undefined;
-  }
-  return undefined;
-}
-
-function writeStoredViewport(viewport: Viewport): void {
-  writeStorageValue("viewport", JSON.stringify(viewport));
 }
 
 function readStorageValue(key: string): string | null {
@@ -3005,6 +3119,44 @@ function writeStorageValue(key: string, value: string): void {
 function removeStorageValue(key: string): void {
   try {
     window.localStorage.removeItem(`${storagePrefix}${key}`);
+  } catch {
+    // Storage is best-effort; the dashboard remains fully usable without it.
+  }
+}
+
+function createLayoutStorageScope(value: string | undefined): string {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  return normalized.length > 0 ? stableHash(normalized) : "default";
+}
+
+function stableHash(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function readLayoutStorageValue(scope: string, key: string): string | null {
+  try {
+    return window.localStorage.getItem(`${layoutStoragePrefix}${scope}.${key}`);
+  } catch {
+    return null;
+  }
+}
+
+function writeLayoutStorageValue(scope: string, key: string, value: string): void {
+  try {
+    window.localStorage.setItem(`${layoutStoragePrefix}${scope}.${key}`, value);
+  } catch {
+    // Storage is best-effort; the dashboard remains fully usable without it.
+  }
+}
+
+function removeLayoutStorageValue(scope: string, key: string): void {
+  try {
+    window.localStorage.removeItem(`${layoutStoragePrefix}${scope}.${key}`);
   } catch {
     // Storage is best-effort; the dashboard remains fully usable without it.
   }
