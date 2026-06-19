@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readlinkSync } from "node:fs";
 import { platform } from "node:os";
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 
 export type DetectedAgentTool = "codex" | "claude-code";
 
@@ -85,7 +85,7 @@ function toAgentCandidate(
   }
 
   const cwd = row.cwd ?? cwdForPid(row.pid) ?? inferCwdFromArgs(row.args);
-  if (cwd === undefined || resolve(cwd) !== repoRoot) {
+  if (cwd === undefined || !isInsidePath(repoRoot, cwd)) {
     return undefined;
   }
 
@@ -372,8 +372,25 @@ function detectChangedFiles(repoRoot: string): string[] {
   return output
     .split("\n")
     .map((line) => line.slice(2).trim())
-    .filter((line) => line.length > 0 && !line.includes(" -> "))
+    .filter((line) => line.length > 0 && !line.includes(" -> ") && isPublicProjectPath(line))
     .slice(0, 20);
+}
+
+function isInsidePath(parent: string, child: string): boolean {
+  const relativePath = relative(resolve(parent), resolve(child));
+  return relativePath.length === 0 || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
+}
+
+function isPublicProjectPath(path: string): boolean {
+  const normalized = path.replaceAll("\\", "/");
+  const segments = normalized.split("/");
+  if (segments.some((segment) => segment === ".claude" || segment === ".agents" || segment === "node_modules")) {
+    return false;
+  }
+  if (normalized === ".env" || normalized.startsWith(".env.")) {
+    return false;
+  }
+  return !normalized.startsWith(".agent/skills/");
 }
 
 function gitOutput(args: string[], cwd?: string): string | undefined {
