@@ -153,8 +153,7 @@
   box-shadow: var(--shadow-sm);
 }
 
-[data-theme="light"] .rail-header,
-[data-theme="light"] .canvas-header {
+[data-theme="light"] .rail-header {
   background: rgba(248,250,252,0.9);
 }
 
@@ -192,14 +191,6 @@
   background: var(--canvas);
   border-color: rgba(15,23,42,0.10);
 }
-
-[data-theme="light"] .canvas-header {
-  background: rgba(240,244,248,0.97);
-  border-bottom-color: rgba(15,23,42,0.09);
-}
-
-[data-theme="light"] .canvas-header h2 { color: var(--ink-2); }
-[data-theme="light"] .canvas-header span { color: var(--muted); }
 
 [data-theme="light"] .react-flow {
   background: var(--canvas);
@@ -326,16 +317,14 @@
   color: var(--ai);
 }
 
-[data-theme="light"] .metric {
+[data-theme="light"] .canvas-hud,
+[data-theme="light"] .canvas-hud-metrics span {
   background: rgba(15,23,42,0.03);
   border-color: rgba(15,23,42,0.08);
 }
-[data-theme="light"] .metric:hover {
-  background: var(--ai-dim);
-  border-color: rgba(79,70,229,0.2);
-}
-[data-theme="light"] .metric strong { color: var(--ink); }
-[data-theme="light"] .metric span { color: var(--muted); }
+[data-theme="light"] .canvas-hud-title h2 { color: var(--ink-2); }
+[data-theme="light"] .canvas-hud-title span,
+[data-theme="light"] .canvas-hud-metrics span { color: var(--muted); }
 
 [data-theme="light"] .back-btn {
   color: var(--ink-3);
@@ -354,10 +343,7 @@
   gap: 4px;
   padding: 6px 7px;
 }
-[data-density="compact"] .metric {
-  padding: 5px 7px;
-}
-[data-density="compact"] .metric strong { font-size: 15px; }
+[data-density="compact"] .canvas-hud { gap: 8px; padding: 6px 8px; }
 
 /* ── Reset ──────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
@@ -2406,8 +2392,7 @@ body.is-resizing-rail .rail-resize-handle::after {
   box-shadow: 0 0 18px rgba(99,102,241,0.45);
 }
 
-.rail-header,
-.canvas-header {
+.rail-header {
   align-items: center;
   background: rgba(255,255,255,0.02);
   border-bottom: 1px solid var(--line);
@@ -2951,60 +2936,76 @@ body.is-resizing-rail .rail-resize-handle::after {
   border-color: rgba(255,255,255,0.06);
 }
 
-.canvas-header {
-  background: rgba(8,12,18,0.95);
-  border-bottom-color: rgba(255,255,255,0.07);
-}
-
-.canvas-header h2 { color: var(--ink-2); }
-
-.canvas-header > div:first-child { display: grid; gap: 2px; }
-
-/* ── Metrics strip ──────────────────────────── */
-.metrics {
-  display: grid;
-  gap: 5px;
-  grid-template-columns: repeat(5, minmax(60px, 1fr));
-}
-
-.metric {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 7px;
-  display: grid;
-  gap: 1px;
-  padding: 6px 8px;
-  transition: background var(--dur-fast), transform var(--dur-fast) var(--ease-spring);
-}
-
-.metric:hover {
-  background: rgba(99,102,241,0.08);
-  border-color: rgba(99,102,241,0.2);
-  transform: translateY(-1px);
-}
-
-.metric strong {
-  color: var(--ink);
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  line-height: 1;
-}
-
-.metric span {
-  align-items: center;
-  color: var(--muted);
-  display: inline-flex;
-  font-size: 10px;
-  font-weight: 500;
-  gap: 4px;
-}
-
 /* ── Flow canvas ────────────────────────────── */
 .flow-wrap {
   flex: 1;
   min-height: 0;
   position: relative;
+}
+
+/* ── Canvas HUD ─────────────────────────────── */
+.canvas-hud {
+  align-items: center;
+  background: rgba(13,18,28,0.9);
+  backdrop-filter: blur(16px) saturate(1.45);
+  -webkit-backdrop-filter: blur(16px) saturate(1.45);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(99,102,241,0.08);
+  display: flex;
+  gap: 12px;
+  left: 12px;
+  max-width: calc(100% - 24px);
+  min-height: 38px;
+  padding: 7px 9px;
+  position: absolute;
+  top: 12px;
+  z-index: var(--z-base);
+}
+
+.canvas-hud-title {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.canvas-hud-title h2 {
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.canvas-hud-title span {
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-hud-metrics {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+}
+
+.canvas-hud-metrics span {
+  align-items: center;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 999px;
+  color: var(--ink-3);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 700;
+  gap: 4px;
+  min-height: 24px;
+  padding: 3px 7px;
+  white-space: nowrap;
+}
+
+.app-shell.left-collapsed .canvas-hud {
+  left: 54px;
+  max-width: calc(100% - 66px);
 }
 
 .react-flow {
@@ -3450,47 +3451,20 @@ body.is-resizing-rail .rail-resize-handle::after {
     padding: 4px;
   }
 
-  /* Canvas header stacks on mobile */
-  .canvas-header {
-    align-items: stretch;
+  .canvas-hud {
+    align-items: flex-start;
     flex-direction: column;
-    gap: 6px;
-    padding: 8px;
+    gap: 5px;
+    left: 8px;
+    max-width: calc(100% - 16px);
+    padding: 7px;
+    top: 8px;
   }
 
-  .canvas-header h2 { font-size: 12px; }
-  .canvas-header > div:first-child span { font-size: 12px; }
-
-  .metrics {
-    display: flex;
-    gap: 4px;
-  }
-
-  .metric {
-    align-items: center;
-    display: flex;
-    flex: 1 1 0;
-    gap: 4px;
-    justify-content: center;
-    min-width: 0;
-    min-height: 34px;
-    padding: 4px 3px;
-  }
-
-  .metric strong {
-    font-size: 14px;
-    line-height: 1;
-  }
-
-  .metric span {
-    font-size: 0;
-    gap: 0;
-  }
-
-  .metric span svg {
-    height: 13px;
-    width: 13px;
-  }
+  .canvas-hud-title h2 { font-size: 12px; }
+  .canvas-hud-title span { font-size: 11px; }
+  .canvas-hud-metrics { gap: 3px; max-width: 100%; overflow: auto; }
+  .canvas-hud-metrics span { font-size: 10px; min-height: 22px; padding: 2px 6px; }
 
   .canvas-toolbar { gap: 1px; padding: 3px; }
 

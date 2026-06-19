@@ -964,20 +964,20 @@ function Dashboard(): React.ReactElement {
         </aside>
 
         <section className="canvas-shell">
-          <div className="canvas-header">
-            <div>
-              <h2><Network size={14} /> Repo Domain Map</h2>
-              <span>{repoMap.root ?? "workspace"} / {domainCatalog.length} areas</span>
-            </div>
-            <div className="metrics">
-              <Metric icon={<Bot size={13} />} label="agents" value={state.presence.length} />
-              <Metric icon={<LockKeyhole size={13} />} label="claims" value={state.claims.length} />
-              <Metric icon={<Activity size={13} />} label="events" value={state.events.length} />
-              <Metric icon={<CheckCheck size={13} />} label="decisions" value={state.decisions.length} />
-              <Metric icon={<FileClock size={13} />} label="briefs" value={state.briefs.length} />
-            </div>
-          </div>
           <div className="flow-wrap">
+            <div className="canvas-hud" aria-label="Canvas status">
+              <div className="canvas-hud-title">
+                <h2><Network size={14} /> Repo Domain Map</h2>
+                <span>{repoMap.root ?? "workspace"} / {domainCatalog.length} areas</span>
+              </div>
+              <div className="canvas-hud-metrics">
+                <span><Bot size={12} />{state.presence.length}</span>
+                <span><LockKeyhole size={12} />{state.claims.length}</span>
+                <span><Activity size={12} />{state.events.length}</span>
+                <span><CheckCheck size={12} />{state.decisions.length}</span>
+                <span><FileClock size={12} />{state.briefs.length}</span>
+              </div>
+            </div>
             {!leftOpen ? (
               <button
                 aria-label="Show agents sidebar"
@@ -1992,15 +1992,6 @@ function AgentNode({ data }: any): React.ReactElement {
 
 function Badge({ children, icon, tone }: { children: React.ReactNode; icon: React.ReactNode; tone: string }): React.ReactElement {
   return <span className={`badge ${tone}`}>{icon}{children}</span>;
-}
-
-function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }): React.ReactElement {
-  return (
-    <div className="metric">
-      <strong>{value}</strong>
-      <span>{icon}{label}</span>
-    </div>
-  );
 }
 
 function ProjectTrackingControl({
