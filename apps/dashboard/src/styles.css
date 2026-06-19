@@ -558,48 +558,170 @@ input::placeholder { color: var(--muted); }
 }
 
 .tracking-control {
-  align-items: center;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  display: inline-flex;
-  gap: 5px;
-  min-height: 34px;
-  padding: 3px;
+  position: relative;
 }
 
-.tracking-control input {
-  background: transparent;
-  border: 0;
-  border-left: 1px solid var(--line);
-  border-radius: 0;
-  color: var(--ink-2);
-  font-size: 11px;
-  height: 26px;
-  min-width: 0;
-  padding: 0 8px;
-  width: 188px;
-}
-
-.tracking-control input:focus {
-  box-shadow: none;
-  color: var(--ink);
-}
-
-.tracking-control .badge {
-  white-space: nowrap;
-}
-
-.tracking-control button {
+.tracking-trigger {
   background: var(--ai-dim);
   border-color: rgba(99,102,241,0.28);
   color: var(--ink-2);
-  min-height: 26px;
-  padding: 3px 8px;
 }
 
-.tracking-control button:hover {
+.tracking-trigger:hover,
+.tracking-trigger[aria-expanded="true"] {
   background: rgba(99,102,241,0.18);
+  color: var(--ink);
+}
+
+.tracking-popover {
+  background: var(--panel-glass);
+  backdrop-filter: blur(18px) saturate(1.35);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  width: min(380px, calc(100vw - 24px));
+  z-index: var(--z-overlay);
+}
+
+.tracking-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.tracking-head > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tracking-head p {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.tracking-stats {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tracking-stats div {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+}
+
+.tracking-stats strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.tracking-stats span,
+.tracking-path span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.project-list {
+  display: grid;
+  gap: 6px;
+}
+
+.project-option {
+  align-items: stretch;
+  background: rgba(255,255,255,0.035);
+  border-color: var(--line);
+  display: grid;
+  gap: 5px;
+  justify-items: stretch;
+  min-height: 0;
+  padding: 8px;
+  text-align: left;
+  width: 100%;
+}
+
+.project-option:hover,
+.project-option.active {
+  background: rgba(99,102,241,0.12);
+  border-color: rgba(99,102,241,0.3);
+}
+
+.project-option.featured {
+  border-color: rgba(45,212,191,0.24);
+}
+
+.project-option span {
+  align-items: center;
+  color: var(--ink-2);
+  display: flex;
+  font-size: 12px;
+  gap: 6px;
+}
+
+.project-option code {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.tracking-path {
+  display: grid;
+  gap: 6px;
+}
+
+.tracking-path input {
+  width: 100%;
+}
+
+.tracking-error,
+.tracking-warning {
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 8px;
+}
+
+.tracking-error {
+  background: var(--rose-dim);
+  color: var(--rose);
+}
+
+.tracking-warning {
+  background: var(--amber-dim);
+  color: var(--amber);
+}
+
+.tracking-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.tracking-actions .primary-action {
+  background: rgba(45,212,191,0.14);
+  border-color: rgba(45,212,191,0.3);
+  color: var(--ink);
+}
+
+.tracking-actions .danger-action {
+  background: var(--rose-dim);
+  border-color: rgba(244,63,94,0.28);
   color: var(--ink);
 }
 
@@ -2996,9 +3118,20 @@ input::placeholder { color: var(--muted); }
     padding: 0;
   }
 
-  .tracking-control input,
-  .tracking-control .badge {
-    display: none;
+  .tracking-trigger span { display: none; }
+
+  .tracking-popover {
+    right: -72px;
+    width: calc(100vw - 12px);
+  }
+
+  .tracking-popover button {
+    font-size: 12px;
+    justify-content: flex-start;
+    min-height: 32px;
+    min-width: 0;
+    padding: 8px;
+    width: auto;
   }
 
   .top-actions .badge.live,

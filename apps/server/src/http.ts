@@ -6,6 +6,7 @@ import { URL } from "node:url";
 import { dashboardHtml } from "./dashboard.js";
 import type { SukaLogger } from "./logger.js";
 import { ProjectTrackingError, ProjectTrackingWorker } from "./project-tracker.js";
+import { inspectLocalProject } from "./projects.js";
 import { RealtimeHub } from "./realtime.js";
 import { buildRepoMap } from "./repo-map.js";
 import { createSukaService, type SukaService } from "./service.js";
@@ -189,6 +190,13 @@ async function routeRequest(
   if (method === "GET" && url.pathname === "/api/projects/active") {
     writeJson(response, 200, {
       data: service.getActiveProject() ?? null
+    });
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/api/projects/default") {
+    writeJson(response, 200, {
+      data: inspectLocalProject({ path: process.cwd() })
     });
     return;
   }

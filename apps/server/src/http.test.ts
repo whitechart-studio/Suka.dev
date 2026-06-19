@@ -103,6 +103,28 @@ test("project API registers, lists, and activates local folders", async () => {
   }
 });
 
+test("project API suggests the server launch folder", async () => {
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  try {
+    const response = await fetch(`${running.url}/api/projects/default`);
+    const body = await response.json() as {
+      data: {
+        name: string;
+        path: string;
+        repo_root: string;
+      };
+    };
+    const repoRoot = realpathSync(join(process.cwd(), "../.."));
+
+    assert.equal(response.status, 200);
+    assert.equal(body.data.path, repoRoot);
+    assert.equal(body.data.repo_root, repoRoot);
+    assert.ok(body.data.name.length > 0);
+  } finally {
+    await running.close();
+  }
+});
+
 test("project API persists active project with file-backed state", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "suka-project-api-"));
   try {

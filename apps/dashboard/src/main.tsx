@@ -230,6 +230,8 @@ type LocalProject = {
   branch?: string;
 };
 
+type LocalProjectSuggestion = Omit<LocalProject, "id">;
+
 type ProjectTrackingStatus = {
   active_project_id?: string;
   detected_agents: number;
@@ -346,6 +348,7 @@ function Dashboard(): React.ReactElement {
   const [settings, setSettings] = useState<AppSettings>(() => readStoredSettings());
   const [projects, setProjects] = useState<LocalProject[]>([]);
   const [activeProject, setActiveProject] = useState<LocalProject | undefined>();
+  const [suggestedProject, setSuggestedProject] = useState<LocalProjectSuggestion | undefined>();
   const [trackingStatus, setTrackingStatus] = useState<ProjectTrackingStatus>(emptyTrackingStatus);
   const [projectPath, setProjectPath] = useState(() => readStoredString("projectPath"));
   const [projectError, setProjectError] = useState("");
@@ -394,13 +397,21 @@ function Dashboard(): React.ReactElement {
 
   const loadProjects = useCallback(async () => {
     try {
-      const [projectsResponse, activeResponse] = await Promise.all([
+      const [projectsResponse, activeResponse, defaultResponse] = await Promise.all([
         fetch("/api/projects", { cache: "no-store" }),
-        fetch("/api/projects/active", { cache: "no-store" })
+        fetch("/api/projects/active", { cache: "no-store" }),
+        fetch("/api/projects/default", { cache: "no-store" })
       ]);
       if (projectsResponse.ok) {
         const payload = await projectsResponse.json() as { data: LocalProject[] };
         setProjects(Array.isArray(payload.data) ? payload.data : []);
+      }
+      if (defaultResponse.ok) {
+        const payload = await defaultResponse.json() as { data: LocalProjectSuggestion };
+        setSuggestedProject(payload.data);
+        if (projectPath.length === 0) {
+          setProjectPath(payload.data.path);
+        }
       }
       if (activeResponse.ok) {
         const payload = await activeResponse.json() as { data: LocalProject | null };
@@ -746,7 +757,9 @@ function Dashboard(): React.ReactElement {
             busy={trackingBusy}
             error={projectError}
             path={projectPath}
+            projects={projects}
             status={trackingStatus}
+            suggestedProject={suggestedProject}
             onPathChange={setProjectPath}
             onStart={() => void startProjectTracking()}
             onStop={() => void stopProjectTracking()}
@@ -1748,7 +1761,9 @@ function ProjectTrackingControl({
   onStart,
   onStop,
   path,
-  status
+  projects,
+  status,
+  suggestedProject
 }: {
   activeProject: LocalProject | undefined;
   busy: boolean;
@@ -1757,35 +1772,107 @@ function ProjectTrackingControl({
   onStart(): void;
   onStop(): void;
   path: string;
+  projects: LocalProject[];
   status: ProjectTrackingStatus;
+  suggestedProject: LocalProjectSuggestion | undefined;
 }): React.ReactElement {
+  const [open, setOpen] = useState(false);
   const running = status.running;
   const label = running
     ? `${status.detected_agents} detected`
     : activeProject?.name ?? "track repo";
+  const displayPath = activeProject?.path ?? path;
+  const recentProjects = projects.slice(0, 4);
 
   return (
-    <div className="tracking-control" title={error || activeProject?.path || "Select a local project folder"}>
-      <Badge tone={running ? "live" : "neutral"} icon={<RadioTower size={12} />}>
-        {label}
-      </Badge>
-      <input
-        aria-label="Project folder path"
-        placeholder="Folder path"
-        value={path}
-        onChange={(event) => onPathChange(event.target.value)}
-      />
-      {running ? (
-        <button aria-label="Stop real agent tracking" disabled={busy} type="button" onClick={onStop}>
-          <X size={14} />
-          Stop
-        </button>
-      ) : (
-        <button aria-label="Start real agent tracking" disabled={busy} type="button" onClick={onStart}>
-          <RadioTower size={14} />
-          Track
-        </button>
-      )}
+    <div className="tracking-control">
+      <button
+        aria-expanded={open}
+        aria-label="Open workspace tracking selector"
+        className="tracking-trigger"
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <RadioTower size={14} />
+        <span>{label}</span>
+      </button>
+      {open ? (
+        <section className="tracking-popover" aria-label="Workspace tracking">
+          <div className="tracking-head">
+            <div>
+              <h2><HardDrive size={14} /> Local workspace</h2>
+              <p>{displayPath.length > 0 ? truncate(displayPath, 64) : "Choose a repo folder to track."}</p>
+            </div>
+            <Badge tone={running ? "live" : "neutral"} icon={<Wifi size={12} />}>
+              {running ? "tracking" : "idle"}
+            </Badge>
+          </div>
+
+          <div className="tracking-stats">
+            <div><strong>{status.detected_agents}</strong><span>detected</span></div>
+            <div><strong>{status.published_presence}</strong><span>published</span></div>
+            <div><strong>{status.interval_seconds}s</strong><span>refresh</span></div>
+          </div>
+
+          {suggestedProject !== undefined ? (
+            <button
+              className="project-option featured"
+              type="button"
+              onClick={() => onPathChange(suggestedProject.path)}
+            >
+              <span><HardDrive size={13} /> Server folder</span>
+              <code>{suggestedProject.path}</code>
+            </button>
+          ) : null}
+
+          {recentProjects.length > 0 ? (
+            <div className="project-list">
+              <h3>Recent folders</h3>
+              {recentProjects.map((project) => (
+                <button
+                  className={project.id === activeProject?.id ? "project-option active" : "project-option"}
+                  key={project.id}
+                  type="button"
+                  onClick={() => onPathChange(project.path)}
+                >
+                  <span><GitBranch size={13} /> {project.name}</span>
+                  <code>{project.path}</code>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          <label className="tracking-path">
+            <span>Folder path</span>
+            <input
+              aria-label="Project folder path"
+              placeholder="/Users/name/work/project"
+              value={path}
+              onChange={(event) => onPathChange(event.target.value)}
+            />
+          </label>
+
+          {error.length > 0 ? <p className="tracking-error">{error}</p> : null}
+          {status.warnings.length > 0 ? <p className="tracking-warning">{status.warnings[0]}</p> : null}
+
+          <div className="tracking-actions">
+            <button type="button" onClick={() => setOpen(false)}>
+              Close
+            </button>
+            {running ? (
+              <button className="danger-action" disabled={busy} type="button" onClick={onStop}>
+                <X size={14} />
+                Stop tracking
+              </button>
+            ) : (
+              <button className="primary-action" disabled={busy || path.trim().length === 0} type="button" onClick={onStart}>
+                <RadioTower size={14} />
+                Start tracking
+              </button>
+            )}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }
