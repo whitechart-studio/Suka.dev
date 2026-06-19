@@ -344,10 +344,10 @@ const emptyTrackingStatus: ProjectTrackingStatus = {
 };
 
 const DEFAULT_LEFT_RAIL_WIDTH = 276;
-const DEFAULT_RIGHT_RAIL_WIDTH = 340;
+const DEFAULT_RIGHT_RAIL_WIDTH = 380;
 const LEFT_RAIL_MIN_WIDTH = 220;
 const LEFT_RAIL_MAX_WIDTH = 420;
-const RIGHT_RAIL_MIN_WIDTH = 280;
+const RIGHT_RAIL_MIN_WIDTH = 340;
 const RIGHT_RAIL_MAX_WIDTH = 560;
 
 type SelectedDetails =
@@ -2315,11 +2315,11 @@ function RightRailTabs({
   selected: RightRailView;
   truthCount: number;
 }): React.ReactElement {
-  const tabs: Array<{ count: number; icon: React.ReactNode; label: string; view: RightRailView }> = [
-    { count: truthCount, icon: <ClipboardList size={13} />, label: "Truth", view: "truth" },
-    { count: 0, icon: <MousePointer2 size={13} />, label: "Inspect", view: "inspect" },
-    { count: riskCount, icon: <TriangleAlert size={13} />, label: "Risk", view: "risk" },
-    { count: activityCount, icon: <RadioTower size={13} />, label: "Activity", view: "activity" }
+  const tabs: Array<{ count: number; hint: string; icon: React.ReactNode; label: string; view: RightRailView }> = [
+    { count: truthCount, hint: "state", icon: <ClipboardList size={13} />, label: "Truth", view: "truth" },
+    { count: 0, hint: "selection", icon: <MousePointer2 size={13} />, label: "Inspect", view: "inspect" },
+    { count: riskCount, hint: "conflicts", icon: <TriangleAlert size={13} />, label: "Risk", view: "risk" },
+    { count: activityCount, hint: "timeline", icon: <RadioTower size={13} />, label: "Activity", view: "activity" }
   ];
 
   return (
@@ -2334,7 +2334,7 @@ function RightRailTabs({
           onClick={() => onSelect(tab.view)}
         >
           {tab.icon}
-          <span>{tab.label}</span>
+          <span><strong>{tab.label}</strong><small>{tab.hint}</small></span>
           {tab.count > 0 ? <b>{tab.count}</b> : null}
         </button>
       ))}
@@ -2390,7 +2390,7 @@ function CurrentTruthPanel({
           <PathList paths={[...latestBrief.changed_files, ...latestBrief.related_claims, ...latestBrief.related_sessions]} />
         </article>
       ) : (
-        <p className="empty">No session brief written yet.</p>
+        <EmptyState icon={<FileClock size={15} />} title="No handoff brief" text="Agents have not written a session brief for this workspace yet." />
       )}
       <TruthList
         icon={<LockKeyhole size={13} />}
@@ -2500,8 +2500,11 @@ function SelectionInspector({
   if (!selection) {
     return (
       <section className="rail-section inspector-section">
-        <h2><MousePointer2 size={14} /> Inspector</h2>
-        <p className="empty">Select a domain or agent on the canvas.</p>
+        <div className="section-title">
+          <h2><MousePointer2 size={14} /> Inspector</h2>
+          <Badge tone="neutral" icon={<MousePointer2 size={13} />}>idle</Badge>
+        </div>
+        <EmptyState icon={<MousePointer2 size={15} />} title="Nothing selected" text="Select an agent or domain on the canvas to inspect ownership, files, and claim actions." />
       </section>
     );
   }
@@ -2620,7 +2623,7 @@ function RiskQueue({
         </Badge>
       </div>
       {insights.length === 0 && risky.length === 0 ? (
-        <p className="empty">No risky domains or conflicts right now.</p>
+        <EmptyState icon={<CheckCheck size={15} />} title="No active risk" text="No risky domains, blockers, or conflict warnings are currently active." />
       ) : null}
       {insights.map((insight) => (
         <article className={`rail-card conflict-card ${insight.severity}`} key={insight.id}>
@@ -2710,7 +2713,12 @@ function ActivityStream({ events, presence }: { events: EventPointer[]; presence
 
   return (
     <section className="rail-section activity-section">
-      <h2><RadioTower size={14} /> Activity</h2>
+      <div className="section-title">
+        <h2><RadioTower size={14} /> Activity</h2>
+        <Badge tone={recentEvents.length + recentPresence.length > 0 ? "live" : "neutral"} icon={<Activity size={13} />}>
+          {recentEvents.length + recentPresence.length}
+        </Badge>
+      </div>
       {recentEvents.map((event) => (
         <article className="rail-card" key={`${event.agent_id}:${event.created_at}:${event.summary}`}>
           <div className="rail-card-head">
@@ -2736,9 +2744,19 @@ function ActivityStream({ events, presence }: { events: EventPointer[]; presence
         );
       })}
       {recentEvents.length === 0 && recentPresence.length === 0 ? (
-        <p className="empty">No recent activity.</p>
+        <EmptyState icon={<RadioTower size={15} />} title="No recent activity" text="Detected agents, events, and session updates will appear here as the workspace changes." />
       ) : null}
     </section>
+  );
+}
+
+function EmptyState({ icon, text, title }: { icon: React.ReactNode; text: string; title: string }): React.ReactElement {
+  return (
+    <div className="panel-empty">
+      <span>{icon}</span>
+      <strong>{title}</strong>
+      <p>{text}</p>
+    </div>
   );
 }
 
