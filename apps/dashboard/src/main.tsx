@@ -16,8 +16,11 @@ import {
 import "@xyflow/react/dist/style.css";
 import {
   Activity,
+  ArrowLeft,
+  BookOpen,
   Bot,
   CheckCheck,
+  ChevronRight,
   ClipboardList,
   Code2,
   Crosshair,
@@ -27,10 +30,10 @@ import {
   GitBranch,
   HardDrive,
   Link2,
-  LogOut,
   LockKeyhole,
   Maximize2,
   Minimize2,
+  Moon,
   MousePointer2,
   Network,
   Orbit,
@@ -43,13 +46,17 @@ import {
   RefreshCw,
   Route,
   Scan,
+  Settings,
   Sparkles,
+  Sun,
   Terminal,
+  Timer,
   TriangleAlert,
   UnlockKeyhole,
   Users,
   Waypoints,
   Wifi,
+  X,
   ZoomIn,
   ZoomOut
 } from "lucide-react";
@@ -212,6 +219,29 @@ type TeamWorkspaceSummary = {
   briefs: number;
 };
 
+type LocalProject = {
+  id: string;
+  name: string;
+  path: string;
+  repo: string;
+  repo_id: string;
+  repo_root: string;
+  workspace_id: string;
+  branch?: string;
+};
+
+type LocalProjectSuggestion = Omit<LocalProject, "id">;
+
+type ProjectTrackingStatus = {
+  active_project_id?: string;
+  detected_agents: number;
+  interval_seconds: number;
+  last_run_at?: string;
+  published_presence: number;
+  running: boolean;
+  warnings: string[];
+};
+
 type SessionRoom = {
   id: string;
   workspace_id: string;
@@ -252,6 +282,22 @@ const graphEdges = [
   ["infra", "api"]
 ] as const;
 
+type AppSettings = {
+  theme: "dark" | "light";
+  pollingInterval: 5 | 10 | 30;
+  showMinimap: boolean;
+  showLegend: boolean;
+  density: "default" | "compact";
+};
+
+const defaultSettings: AppSettings = {
+  theme: "dark",
+  pollingInterval: 5,
+  showMinimap: true,
+  showLegend: true,
+  density: "default"
+};
+
 const agentPalette = ["#0f766e", "#2563eb", "#7c3aed", "#16803c", "#b45309", "#be123c", "#0e7490"];
 const storagePrefix = "suka.dashboard.";
 const defaultTeamConnection: TeamConnection = {
@@ -266,6 +312,14 @@ const emptyTeamSummary: TeamConnectionSummary = {
   members: [],
   mode: "local",
   workspaces: []
+};
+
+const emptyTrackingStatus: ProjectTrackingStatus = {
+  detected_agents: 0,
+  interval_seconds: 15,
+  published_presence: 0,
+  running: false,
+  warnings: []
 };
 
 type SelectedDetails =
@@ -289,6 +343,16 @@ function Dashboard(): React.ReactElement {
   const [activeSessionId, setActiveSessionId] = useState(() => readStoredString("activeSessionId"));
   const [welcomeDismissed, setWelcomeDismissed] = useState(() => readStoredBoolean("welcomeDismissed", false));
   const [landingOpen, setLandingOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [docsOpen, setDocsOpen] = useState(false);
+  const [settings, setSettings] = useState<AppSettings>(() => readStoredSettings());
+  const [projects, setProjects] = useState<LocalProject[]>([]);
+  const [activeProject, setActiveProject] = useState<LocalProject | undefined>();
+  const [suggestedProject, setSuggestedProject] = useState<LocalProjectSuggestion | undefined>();
+  const [trackingStatus, setTrackingStatus] = useState<ProjectTrackingStatus>(emptyTrackingStatus);
+  const [projectPath, setProjectPath] = useState(() => readStoredString("projectPath"));
+  const [projectError, setProjectError] = useState("");
+  const [trackingBusy, setTrackingBusy] = useState(false);
   const viewportRestored = useRef(false);
   const { fitView, setViewport, zoomIn, zoomOut } = useReactFlow();
 
@@ -331,11 +395,53 @@ function Dashboard(): React.ReactElement {
     }
   }, []);
 
+  const loadProjects = useCallback(async () => {
+    try {
+      const [projectsResponse, activeResponse, defaultResponse] = await Promise.all([
+        fetch("/api/projects", { cache: "no-store" }),
+        fetch("/api/projects/active", { cache: "no-store" }),
+        fetch("/api/projects/default", { cache: "no-store" })
+      ]);
+      if (projectsResponse.ok) {
+        const payload = await projectsResponse.json() as { data: LocalProject[] };
+        setProjects(Array.isArray(payload.data) ? payload.data : []);
+      }
+      if (defaultResponse.ok) {
+        const payload = await defaultResponse.json() as { data: LocalProjectSuggestion };
+        setSuggestedProject(payload.data);
+        if (projectPath.length === 0) {
+          setProjectPath(payload.data.path);
+        }
+      }
+      if (activeResponse.ok) {
+        const payload = await activeResponse.json() as { data: LocalProject | null };
+        setActiveProject(payload.data ?? undefined);
+        if (payload.data?.path !== undefined && projectPath.length === 0) {
+          setProjectPath(payload.data.path);
+        }
+      }
+    } catch {
+      setProjects((current) => current);
+    }
+  }, [projectPath.length]);
+
+  const loadTrackingStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/projects/tracking", { cache: "no-store" });
+      if (!response.ok) return;
+      const payload = await response.json() as { data: ProjectTrackingStatus };
+      setTrackingStatus(payload.data);
+    } catch {
+      setTrackingStatus((current) => current);
+    }
+  }, []);
+
   useEffect(() => {
     void loadState();
-    const timer = window.setInterval(() => void loadState(), 5000);
+    const ms = settings.pollingInterval * 1000;
+    const timer = window.setInterval(() => void loadState(), ms);
     return () => window.clearInterval(timer);
-  }, [loadState]);
+  }, [loadState, settings.pollingInterval]);
 
   useEffect(() => {
     void loadRepoMap();
@@ -345,9 +451,25 @@ function Dashboard(): React.ReactElement {
 
   useEffect(() => {
     void loadTeamSummary();
-    const timer = window.setInterval(() => void loadTeamSummary(), 5000);
+    const ms = settings.pollingInterval * 1000;
+    const timer = window.setInterval(() => void loadTeamSummary(), ms);
     return () => window.clearInterval(timer);
-  }, [loadTeamSummary]);
+  }, [loadTeamSummary, settings.pollingInterval]);
+
+  useEffect(() => {
+    void loadProjects();
+    void loadTrackingStatus();
+    const ms = settings.pollingInterval * 1000;
+    const timer = window.setInterval(() => {
+      void loadProjects();
+      void loadTrackingStatus();
+    }, ms);
+    return () => window.clearInterval(timer);
+  }, [loadProjects, loadTrackingStatus, settings.pollingInterval]);
+
+  useEffect(() => {
+    writeStoredSettings(settings);
+  }, [settings]);
 
   const domainCatalog = repoMap.domains.length > 0 ? repoMap.domains : fallbackDomains;
   const model = useMemo(() => buildDomainModel(state, domainCatalog), [domainCatalog, state]);
@@ -365,7 +487,7 @@ function Dashboard(): React.ReactElement {
   const riskCount = visibleConflictInsights.length + model.filter((item) => item.failures.length > 0).length;
   const selectedDetails = useMemo(() => resolveSelection(selectedNodeId, model, state), [model, selectedNodeId, state]);
   const hasLiveState = state.presence.length + state.claims.length + state.events.length + state.decisions.length + state.briefs.length > 0;
-  const showWelcome = (landingOpen || (!welcomeDismissed && !hasLiveState)) && status !== "loading";
+  const showWelcome = landingOpen || (!welcomeDismissed && !hasLiveState);
 
   const releaseClaim = useCallback(async (claimId: string) => {
     setReleasingClaimId(claimId);
@@ -439,6 +561,83 @@ function Dashboard(): React.ReactElement {
     });
   }, [repoMap.root, teamConnection.inviteToken.length]);
 
+  const startProjectTracking = useCallback(async () => {
+    const path = projectPath.trim();
+    setProjectError("");
+    setTrackingBusy(true);
+    try {
+      let project = activeProject;
+      if (path.length > 0 && path !== activeProject?.path) {
+        const createResponse = await fetch("/api/projects", {
+          body: JSON.stringify({ path }),
+          headers: { "content-type": "application/json" },
+          method: "POST"
+        });
+        if (!createResponse.ok) {
+          throw new Error("Project path could not be registered.");
+        }
+        const createPayload = await createResponse.json() as { data: LocalProject };
+        project = createPayload.data;
+        const activateResponse = await fetch(`/api/projects/${encodeURIComponent(project.id)}/activate`, {
+          body: "{}",
+          headers: { "content-type": "application/json" },
+          method: "POST"
+        });
+        if (!activateResponse.ok) {
+          throw new Error("Project could not be activated.");
+        }
+      } else if (project === undefined && projects[0] !== undefined) {
+        project = projects[0];
+        const activateResponse = await fetch(`/api/projects/${encodeURIComponent(project.id)}/activate`, {
+          body: "{}",
+          headers: { "content-type": "application/json" },
+          method: "POST"
+        });
+        if (!activateResponse.ok) {
+          throw new Error("Project could not be activated.");
+        }
+      }
+
+      const startResponse = await fetch("/api/projects/tracking/start", {
+        body: JSON.stringify(project === undefined ? {} : { project_id: project.id }),
+        headers: { "content-type": "application/json" },
+        method: "POST"
+      });
+      if (!startResponse.ok) {
+        throw new Error("Tracking could not be started.");
+      }
+      const startPayload = await startResponse.json() as { data: ProjectTrackingStatus };
+      setTrackingStatus(startPayload.data);
+      await Promise.all([loadProjects(), loadState(), loadTeamSummary()]);
+    } catch (error) {
+      setProjectError(error instanceof Error ? error.message : "Tracking could not be started.");
+    } finally {
+      setTrackingBusy(false);
+    }
+  }, [activeProject, loadProjects, loadState, loadTeamSummary, projectPath, projects]);
+
+  const stopProjectTracking = useCallback(async () => {
+    setProjectError("");
+    setTrackingBusy(true);
+    try {
+      const response = await fetch("/api/projects/tracking/stop", {
+        body: "{}",
+        headers: { "content-type": "application/json" },
+        method: "POST"
+      });
+      if (!response.ok) {
+        throw new Error("Tracking could not be stopped.");
+      }
+      const payload = await response.json() as { data: ProjectTrackingStatus };
+      setTrackingStatus(payload.data);
+      await Promise.all([loadState(), loadTeamSummary()]);
+    } catch (error) {
+      setProjectError(error instanceof Error ? error.message : "Tracking could not be stopped.");
+    } finally {
+      setTrackingBusy(false);
+    }
+  }, [loadState, loadTeamSummary]);
+
   const enterWorkspace = useCallback(() => {
     setWelcomeDismissed(true);
     setLandingOpen(false);
@@ -480,8 +679,23 @@ function Dashboard(): React.ReactElement {
   }, [teamConnection]);
 
   useEffect(() => {
+    writeStoredString("projectPath", projectPath);
+  }, [projectPath]);
+
+  useEffect(() => {
     writeStoredBoolean("welcomeDismissed", welcomeDismissed);
   }, [welcomeDismissed]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (e.key === "?") setDocsOpen(v => !v);
+      if (e.key === "Escape") { setDocsOpen(false); setSettingsOpen(false); }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => {
     if (viewportRestored.current || nodes.length === 0) return;
@@ -501,7 +715,7 @@ function Dashboard(): React.ReactElement {
 
   if (showWelcome) {
     return (
-      <div className="suka-app">
+      <div className="suka-app" data-theme={settings.theme} data-density={settings.density}>
         <WelcomeSurface
           connection={teamConnection}
           repoName={repoMap.root ?? "workspace"}
@@ -517,31 +731,42 @@ function Dashboard(): React.ReactElement {
   }
 
   return (
-    <div className="suka-app">
+    <div className="suka-app" data-theme={settings.theme} data-density={settings.density}>
       <header className="topbar">
         <div className="brand">
-          <div className="brand-mark"><Waypoints size={16} /></div>
+          <button aria-label="Back to landing" className="back-btn" type="button" onClick={exitToLanding}>
+            <ArrowLeft size={15} />
+          </button>
+          <div className="brand-mark"><Waypoints size={15} /></div>
           <div>
             <h1>Suka Operations Canvas</h1>
-            <p>Realtime coordination graph for agentic code work</p>
+            <p>Realtime coordination for agentic work</p>
           </div>
         </div>
         <div className="top-actions">
-          <Badge tone="info" icon={<HardDrive size={13} />}>local workspace</Badge>
-          <Badge tone={teamSummary.active_agents > 0 ? "live" : "neutral"} icon={<Users size={13} />}>
+          <Badge tone="info" icon={<HardDrive size={12} />}>local</Badge>
+          <Badge tone={teamSummary.active_agents > 0 ? "live" : "neutral"} icon={<Users size={12} />}>
             {teamSummary.active_agents > 0 ? `${teamSummary.active_agents} active` : "local only"}
           </Badge>
           {activeSession !== undefined ? (
-            <Badge tone="info" icon={<RadioTower size={13} />}>{activeSession.session_id}</Badge>
+            <Badge tone="info" icon={<RadioTower size={12} />}>{activeSession.session_id}</Badge>
           ) : null}
           <Badge tone={status === "connected" ? "live" : status === "error" ? "fail" : "neutral"} icon={<i className={`status-dot ${status === "connected" ? "live" : status === "error" ? "error" : "neutral"}`} />}>{status}</Badge>
+          <ProjectTrackingControl
+            activeProject={activeProject}
+            busy={trackingBusy}
+            error={projectError}
+            path={projectPath}
+            projects={projects}
+            status={trackingStatus}
+            suggestedProject={suggestedProject}
+            onPathChange={setProjectPath}
+            onStart={() => void startProjectTracking()}
+            onStop={() => void stopProjectTracking()}
+          />
           <button aria-label="Open team connection panel" type="button" onClick={toggleTeamPanel}>
             <Link2 size={14} />
             Team
-          </button>
-          <button aria-label="Exit to landing page" type="button" onClick={exitToLanding}>
-            <LogOut size={14} />
-            Exit
           </button>
           <button aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"} type="button" onClick={() => setFocusMode((value) => !value)}>
             {focusMode ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
@@ -549,7 +774,25 @@ function Dashboard(): React.ReactElement {
           </button>
           <button aria-label="Refresh state" type="button" onClick={() => void loadState()}>
             <RefreshCw size={14} />
-            Refresh
+          </button>
+          <button
+            aria-expanded={docsOpen}
+            aria-label="Open docs"
+            className="docs-btn"
+            title="Docs (?)"
+            type="button"
+            onClick={() => setDocsOpen(v => !v)}
+          >
+            <BookOpen size={14} />
+          </button>
+          <button
+            aria-expanded={settingsOpen}
+            aria-label="Open settings"
+            className="settings-btn"
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Settings size={18} strokeWidth={2.25} />
           </button>
         </div>
         {teamPanelOpen ? (
@@ -564,6 +807,17 @@ function Dashboard(): React.ReactElement {
             onClose={() => setTeamPanelOpen(false)}
             onSelectSession={setActiveSessionId}
             onUpdate={setTeamConnection}
+          />
+        ) : null}
+        {docsOpen ? (
+          <DocsPanel onClose={() => setDocsOpen(false)} />
+        ) : null}
+        {settingsOpen ? (
+          <SettingsPanel
+            settings={settings}
+            status={status}
+            onClose={() => setSettingsOpen(false)}
+            onUpdate={(patch) => setSettings((s) => ({ ...s, ...patch }))}
           />
         ) : null}
       </header>
@@ -638,8 +892,8 @@ function Dashboard(): React.ReactElement {
               onPaneClick={() => setSelectedNodeId("")}
               proOptions={{ hideAttribution: true }}
             >
-              <Background color="rgba(226,232,240,0.12)" gap={28} />
-              <MiniMap maskColor="rgba(15, 23, 42, 0.78)" nodeStrokeWidth={2} pannable zoomable />
+              <Background color={settings.theme === "light" ? "rgba(15,23,42,0.08)" : "rgba(226,232,240,0.07)"} gap={28} />
+              {settings.showMinimap ? <MiniMap maskColor={settings.theme === "light" ? "rgba(241,245,249,0.85)" : "rgba(15,23,42,0.78)"} nodeStrokeWidth={2} pannable zoomable /> : null}
               <Controls showInteractive={false} />
             </ReactFlow>
             <div className="canvas-toolbar">
@@ -651,12 +905,14 @@ function Dashboard(): React.ReactElement {
               <button aria-label="Focus risk" title="Focus risk" type="button" onClick={() => fitView({ duration: 220, nodes: nodes.filter((node) => node.data.state === "failing" || node.data.state === "claimed"), padding: 0.24 })}><Crosshair size={14} />Risk</button>
             </div>
           </div>
-          <div className="canvas-footer">
-            <span><i className="dot blue" /> active work</span>
-            <span><i className="dot amber" /> claimed scope</span>
-            <span><i className="dot rose" /> failing signal</span>
-            <span><i className="dot violet" /> decision attached</span>
-          </div>
+          {settings.showLegend ? (
+            <div className="canvas-footer">
+              <span><i className="dot blue" /> active work</span>
+              <span><i className="dot amber" /> claimed scope</span>
+              <span><i className="dot rose" /> failing signal</span>
+              <span><i className="dot violet" /> decision attached</span>
+            </div>
+          ) : null}
         </section>
 
         <aside className="rail right-rail">
@@ -692,7 +948,7 @@ function Dashboard(): React.ReactElement {
                 onReleaseClaim={releaseClaim}
                 releasingClaimId={releasingClaimId}
               />
-              <ActivityStream events={state.events} />
+              <ActivityStream events={state.events} presence={state.presence} />
             </div>
           ) : <CompactRisk count={riskCount} />}
         </aside>
@@ -758,31 +1014,205 @@ function WelcomeSurface({
           </div>
         </div>
 
-        <div className="welcome-preview" aria-label="Suka operations preview">
-          <div className="preview-top">
-            <div>
-              <strong>{workspaceName}</strong>
-              <span>{repoName} / local-first</span>
+        <LiveDemo workspaceName={workspaceName} repoName={repoName} />
+      </div>
+
+      {/* ── Feature pills ── */}
+      <div className="welcome-features">
+        <div className="feature-pill">
+          <span className="feature-pill-icon" style={{ color: "var(--teal)" }}><Orbit size={15} /></span>
+          <div>
+            <strong>Zero-setup presence</strong>
+            <span>Agents broadcast location automatically</span>
+          </div>
+        </div>
+        <div className="feature-pill">
+          <span className="feature-pill-icon" style={{ color: "var(--rose)" }}><TriangleAlert size={15} /></span>
+          <div>
+            <strong>Conflict detection</strong>
+            <span>Overlapping scopes surface in real time</span>
+          </div>
+        </div>
+        <div className="feature-pill">
+          <span className="feature-pill-icon" style={{ color: "var(--violet)" }}><CheckCheck size={15} /></span>
+          <div>
+            <strong>Shared decisions</strong>
+            <span>Decisions persist across agents & sessions</span>
+          </div>
+        </div>
+        <div className="feature-pill">
+          <span className="feature-pill-icon" style={{ color: "var(--amber)" }}><FileClock size={15} /></span>
+          <div>
+            <strong>Handoff briefs</strong>
+            <span>Agents leave structured context on exit</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── How it works ── */}
+      <div className="welcome-how">
+        <p className="how-label">HOW IT WORKS</p>
+        <div className="how-steps">
+          <div className="how-step">
+            <div className="how-step-num">1</div>
+            <div className="how-step-body">
+              <strong>Agents start a session</strong>
+              <span>One CLI command registers the agent into a live workspace with scope, tool, and task.</span>
             </div>
-            <Badge tone="live" icon={<Activity size={13} />}>mission ready</Badge>
           </div>
-          <div className="preview-map">
-            <PreviewNode className="primary" label="Repo Map" meta="domains / routes / tests" />
-            <PreviewNode className="agent one" label="Codex" meta="editing server" />
-            <PreviewNode className="agent two" label="Claude" meta="reviewing UI" />
-            <PreviewNode className="risk" label="Conflict Radar" meta="API touched recently" />
-            <span className="preview-edge edge-a" />
-            <span className="preview-edge edge-b" />
-            <span className="preview-edge edge-c" />
+          <span className="how-arrow"><ChevronRight size={16} /></span>
+          <div className="how-step">
+            <div className="how-step-num">2</div>
+            <div className="how-step-body">
+              <strong>Suka tracks state</strong>
+              <span>Presence, ownership claims, events, and conflicts are computed and broadcast continuously.</span>
+            </div>
           </div>
-          <div className="preview-truth">
-            <div><LockKeyhole size={13} /><span>Ownership</span><strong>0 claims</strong></div>
-            <div><FileClock size={13} /><span>Briefs</span><strong>handoff ready</strong></div>
-            <div><CheckCheck size={13} /><span>Decisions</span><strong>shared truth</strong></div>
+          <span className="how-arrow"><ChevronRight size={16} /></span>
+          <div className="how-step">
+            <div className="how-step-num">3</div>
+            <div className="how-step-body">
+              <strong>Team sees live intent</strong>
+              <span>Humans and other agents read a shared map — no merge conflicts, no duplicate work.</span>
+            </div>
           </div>
         </div>
       </div>
     </section>
+  );
+}
+
+/* ── Live animated demo ─────────────────────────────────────── */
+type DemoPhase = "idle" | "agent1" | "agent2" | "claim" | "conflict" | "resolve" | "brief" | "reset";
+
+const DEMO_SCRIPT: { phase: DemoPhase; duration: number }[] = [
+  { phase: "idle",     duration: 800  },
+  { phase: "agent1",   duration: 1400 },
+  { phase: "agent2",   duration: 1400 },
+  { phase: "claim",    duration: 1600 },
+  { phase: "conflict", duration: 2000 },
+  { phase: "resolve",  duration: 1800 },
+  { phase: "brief",    duration: 2000 },
+  { phase: "reset",    duration: 600  },
+];
+
+function LiveDemo({ workspaceName, repoName }: { workspaceName: string; repoName: string }): React.ReactElement {
+  const [phaseIdx, setPhaseIdx] = useState(0);
+  const phase = DEMO_SCRIPT[phaseIdx]?.phase ?? "idle";
+
+  useEffect(() => {
+    const duration = DEMO_SCRIPT[phaseIdx]?.duration ?? 1000;
+    const t = setTimeout(() => {
+      setPhaseIdx(i => (i + 1) % DEMO_SCRIPT.length);
+    }, duration);
+    return () => clearTimeout(t);
+  }, [phaseIdx]);
+
+  const showAgent1  = ["agent1","agent2","claim","conflict","resolve","brief"].includes(phase);
+  const showAgent2  = ["agent2","claim","conflict","resolve","brief"].includes(phase);
+  const showClaim   = ["claim","conflict","resolve","brief"].includes(phase);
+  const showConflict = phase === "conflict";
+  const showResolve = ["resolve","brief"].includes(phase);
+  const showBrief   = phase === "brief";
+
+  const eventLog: { icon: React.ReactNode; text: string; tone: string }[] = [];
+  if (showAgent1)   eventLog.push({ icon: <Bot size={11} />,           text: "Codex joined · auth/",     tone: "blue"   });
+  if (showAgent2)   eventLog.push({ icon: <Bot size={11} />,           text: "Claude joined · checkout/", tone: "violet" });
+  if (showClaim)    eventLog.push({ icon: <LockKeyhole size={11} />,   text: "Codex claimed auth/login",  tone: "teal"   });
+  if (showConflict) eventLog.push({ icon: <TriangleAlert size={11} />, text: "Conflict · checkout/api",   tone: "rose"   });
+  if (showResolve)  eventLog.push({ icon: <CheckCheck size={11} />,    text: "Resolved · priority: Claude", tone: "green" });
+  if (showBrief)    eventLog.push({ icon: <FileClock size={11} />,     text: "Brief posted · handoff ready", tone: "amber" });
+
+  return (
+    <div className="live-demo" aria-label="Suka live demo">
+      {/* Header */}
+      <div className="demo-header">
+        <div className="demo-header-left">
+          <span className="demo-dot" />
+          <strong>{workspaceName}</strong>
+          <span className="demo-repo">{repoName}</span>
+        </div>
+        <Badge tone="live" icon={<Activity size={11} />}>live sim</Badge>
+      </div>
+
+      {/* Canvas area */}
+      <div className="demo-canvas">
+        {/* Domain nodes */}
+        <div className="demo-node domain" style={{ left: "50%", top: "36%", transform: "translate(-50%,-50%)" }}>
+          <span className="demo-node-icon"><Waypoints size={11} /></span>
+          <span>Repo Map</span>
+        </div>
+        <div className={`demo-node domain auth ${showClaim ? "claimed" : ""}`} style={{ left: "14%", top: "58%" }}>
+          <span className="demo-node-icon"><HardDrive size={11} /></span>
+          <span>auth/</span>
+          {showClaim && <span className="demo-claim-dot" />}
+        </div>
+        <div className={`demo-node domain checkout ${showConflict ? "conflict" : showResolve ? "resolved" : ""}`} style={{ left: "66%", top: "64%" }}>
+          <span className="demo-node-icon"><Code2 size={11} /></span>
+          <span>checkout/</span>
+          {showConflict && <span className="demo-conflict-badge"><TriangleAlert size={9} /></span>}
+          {showResolve  && <span className="demo-resolve-badge"><CheckCheck size={9} /></span>}
+        </div>
+
+        {/* Agent nodes */}
+        <div className={`demo-agent-node blue ${showAgent1 ? "visible" : ""}`} style={{ left: "6%", top: "18%" }}>
+          <Bot size={12} />
+          <span>Codex</span>
+        </div>
+        <div className={`demo-agent-node violet ${showAgent2 ? "visible" : ""}`} style={{ left: "72%", top: "14%" }}>
+          <Bot size={12} />
+          <span>Claude</span>
+        </div>
+
+        {/* Animated edges */}
+        <svg className="demo-edges" viewBox="0 0 300 200" preserveAspectRatio="none">
+          {showAgent1 && (
+            <line className="demo-edge blue" x1="40" y1="46" x2="130" y2="82" />
+          )}
+          {showAgent2 && (
+            <line className="demo-edge violet" x1="230" y1="40" x2="165" y2="82" />
+          )}
+          {showClaim && (
+            <line className="demo-edge teal" x1="130" y1="92" x2="65" y2="122" />
+          )}
+          {(showConflict || showResolve) && (
+            <line className={`demo-edge ${showConflict ? "rose" : "green"}`} x1="165" y1="92" x2="228" y2="132" />
+          )}
+        </svg>
+
+        {/* Brief bubble */}
+        {showBrief && (
+          <div className="demo-brief-bubble">
+            <FileClock size={10} />
+            <span>handoff ready</span>
+          </div>
+        )}
+      </div>
+
+      {/* Event log */}
+      <div className="demo-log">
+        {eventLog.slice(-3).map((ev, i) => (
+          <div key={i} className={`demo-log-row tone-${ev.tone} ${i === eventLog.length - 1 ? "latest" : ""}`}>
+            {ev.icon}
+            <span>{ev.text}</span>
+          </div>
+        ))}
+        {eventLog.length === 0 && (
+          <div className="demo-log-row tone-muted">
+            <Orbit size={11} />
+            <span>Waiting for agents…</span>
+          </div>
+        )}
+      </div>
+
+      {/* Footer stats */}
+      <div className="demo-footer">
+        <span><Bot size={11} />{showAgent2 ? "2" : showAgent1 ? "1" : "0"} agents</span>
+        <span><LockKeyhole size={11} />{showClaim ? "1" : "0"} claims</span>
+        <span><TriangleAlert size={11} />{showConflict ? "1" : "0"} conflicts</span>
+        <span><CheckCheck size={11} />{showResolve ? "1" : "0"} decisions</span>
+      </div>
+    </div>
   );
 }
 
@@ -960,6 +1390,306 @@ function TeamConnectionPanel({
   );
 }
 
+/* ── Docs panel ──────────────────────────────────────────────── */
+const DOCS_SECTIONS = [
+  {
+    id: "quickstart",
+    title: "Quick Start",
+    icon: "rocket",
+    items: [
+      {
+        label: "1. Start the server",
+        code: "suka serve",
+        desc: "Starts the local coordination server on port 4366."
+      },
+      {
+        label: "2. Register your agent",
+        code: "eval $(suka session start --repo my-repo --json | jq -r '.env | to_entries[] | \"export \\(.key)=\\(.value)\"')",
+        desc: "Registers the agent and exports SUKA_* env vars into the shell."
+      },
+      {
+        label: "3. Broadcast presence",
+        code: "suka presence --task \"refactoring auth\" --watch",
+        desc: "Keeps the agent visible on the canvas with a heartbeat."
+      },
+      {
+        label: "4. Open the dashboard",
+        code: "open http://localhost:5173",
+        desc: "View live agent coordination in your browser."
+      }
+    ]
+  },
+  {
+    id: "session",
+    title: "Sessions",
+    icon: "session",
+    items: [
+      { label: "session start", code: "suka session start [--repo NAME] [--agent ID] [--tool TOOL] [--env-file .suka/session.env]", desc: "Registers a new agent session. Outputs env vars to export." },
+      { label: "session join", code: "suka session join [--workspace ID] [--repo-id ID] [--session ID] [--task TEXT] [--watch]", desc: "Joins an existing session and begins broadcasting presence." },
+      { label: "session status", code: "suka session status [--workspace ID] [--repo-id ID] [--session ID]", desc: "Shows active agents in the current session." },
+      { label: "session end", code: "suka session end [--workspace ID] [--repo-id ID] [--session ID]", desc: "Removes the agent from the session." }
+    ]
+  },
+  {
+    id: "pointers",
+    title: "Pointer Commands",
+    icon: "pointer",
+    items: [
+      { label: "presence", code: "suka presence [--task TEXT] [--file PATH] [--status editing] [--watch]", desc: "Broadcasts what the agent is currently working on. Use --watch for continuous heartbeat." },
+      { label: "claim", code: "suka claim <path> [--reason TEXT] [--ttl 45]", desc: "Soft-locks a file path so others know it's in use." },
+      { label: "block", code: "suka block <path> [--reason TEXT] [--ttl 45]", desc: "Hard-blocks a path — higher severity than claim." },
+      { label: "release", code: "suka release <claim-id>", desc: "Releases a claim or block by ID." },
+      { label: "event", code: "suka event <type> <summary> [--path PATH] [--api API]", desc: "Records a coordination event (e.g. file_changed, api_touched)." },
+      { label: "decision", code: "suka decision <title> --body TEXT [--status accepted] [--confidence high]", desc: "Posts a shared decision that persists across agents." },
+      { label: "brief write", code: "suka brief write <summary> --next TEXT [--changed PATH] [--risk TEXT] [--blocker TEXT]", desc: "Writes a handoff brief so the next agent knows the context." },
+      { label: "brief read", code: "suka brief read [--session current]", desc: "Reads the most recent brief for the current session." }
+    ]
+  },
+  {
+    id: "inspect",
+    title: "Inspect & Debug",
+    icon: "inspect",
+    items: [
+      { label: "status", code: "suka status [--json]", desc: "Prints the full live state: presence, claims, events, decisions, briefs." },
+      { label: "conflicts", code: "suka conflicts [--path PATH] [--since-session-start]", desc: "Lists active scope conflicts for the current session." },
+      { label: "remind", code: "suka remind [--changed] [--path PATH]", desc: "Prints a truth reminder — decisions and claims relevant to the current work." },
+      { label: "team", code: "suka team [--json]", desc: "Shows all active agents across all workspaces." },
+      { label: "doctor", code: "suka doctor [--server URL]", desc: "Health-checks the server connection and session context." },
+      { label: "cleanup", code: "suka cleanup [--workspace ID] [--repo ID] [--session ID]", desc: "Removes expired presence and stale session data." }
+    ]
+  },
+  {
+    id: "env",
+    title: "Environment Variables",
+    icon: "env",
+    items: [
+      { label: "SUKA_SERVER_URL", code: "http://127.0.0.1:4366", desc: "Override the default server URL." },
+      { label: "SUKA_AGENT_ID", code: "my-agent", desc: "Default agent identity used by all commands." },
+      { label: "SUKA_AGENT_TOOL", code: "claude-code", desc: "Agent tool name shown in the dashboard." },
+      { label: "SUKA_WORKSPACE_ID", code: "local-my-repo", desc: "Workspace scope for all pointer commands." },
+      { label: "SUKA_REPO_ID", code: "my-repo", desc: "Repository identifier within the workspace." },
+      { label: "SUKA_SESSION_ID", code: "sess_abc123", desc: "Session ID scoping presence and claims." }
+    ]
+  }
+] as const;
+
+function DocsPanel({ onClose }: { onClose(): void }): React.ReactElement {
+  const [activeSection, setActiveSection] = useState<string>("quickstart");
+  const section = DOCS_SECTIONS.find(s => s.id === activeSection) ?? DOCS_SECTIONS[0];
+  const [copied, setCopied] = useState("");
+
+  function copyCode(code: string) {
+    void navigator.clipboard.writeText(code);
+    setCopied(code);
+    setTimeout(() => setCopied(""), 1800);
+  }
+
+  return (
+    <div className="docs-panel" role="dialog" aria-label="Documentation">
+      <div className="docs-head">
+        <div className="docs-head-left">
+          <BookOpen size={14} />
+          <span>Docs</span>
+          <span className="docs-shortcut">?</span>
+        </div>
+        <button aria-label="Close docs" type="button" onClick={onClose}><X size={14} /></button>
+      </div>
+
+      <div className="docs-body">
+        <nav className="docs-nav">
+          {DOCS_SECTIONS.map(s => (
+            <button
+              key={s.id}
+              type="button"
+              className={activeSection === s.id ? "active" : ""}
+              onClick={() => setActiveSection(s.id)}
+            >
+              {s.title}
+            </button>
+          ))}
+        </nav>
+
+        <div className="docs-content">
+          <p className="docs-section-title">{section.title}</p>
+          {section.items.map((item, i) => (
+            <div key={i} className="docs-item">
+              <div className="docs-item-head">
+                <span className="docs-item-label">{item.label}</span>
+              </div>
+              <div className="docs-item-code-wrap">
+                <code className="docs-item-code">{item.code}</code>
+                <button
+                  aria-label="Copy command"
+                  className="docs-copy-btn"
+                  type="button"
+                  onClick={() => copyCode(item.code)}
+                >
+                  {copied === item.code ? <CheckCheck size={11} /> : <Copy size={11} />}
+                </button>
+              </div>
+              <p className="docs-item-desc">{item.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SettingsPanel({
+  onClose,
+  onUpdate,
+  settings,
+  status
+}: {
+  onClose(): void;
+  onUpdate(patch: Partial<AppSettings>): void;
+  settings: AppSettings;
+  status: string;
+}): React.ReactElement {
+  return (
+    <section aria-label="Settings" className="settings-panel">
+      <div className="settings-head">
+        <div>
+          <h2><Settings size={14} /> Settings</h2>
+          <p>Appearance, canvas &amp; polling</p>
+        </div>
+        <button aria-label="Close settings" type="button" onClick={onClose}>
+          <ChevronRight size={14} />
+        </button>
+      </div>
+
+      <div className="settings-section">
+        <h3>Appearance</h3>
+        <div className="settings-row">
+          <div className="settings-label">
+            <span>Theme</span>
+            <p>Switch between dark and light mode</p>
+          </div>
+          <div className="theme-toggle">
+            <button
+              aria-pressed={settings.theme === "dark"}
+              className={settings.theme === "dark" ? "active" : ""}
+              type="button"
+              onClick={() => onUpdate({ theme: "dark" })}
+            >
+              <Moon size={13} />
+              Dark
+            </button>
+            <button
+              aria-pressed={settings.theme === "light"}
+              className={settings.theme === "light" ? "active" : ""}
+              type="button"
+              onClick={() => onUpdate({ theme: "light" })}
+            >
+              <Sun size={13} />
+              Light
+            </button>
+          </div>
+        </div>
+        <div className="settings-row">
+          <div className="settings-label">
+            <span>Density</span>
+            <p>Compact reduces spacing throughout</p>
+          </div>
+          <div className="theme-toggle">
+            <button
+              aria-pressed={settings.density === "default"}
+              className={settings.density === "default" ? "active" : ""}
+              type="button"
+              onClick={() => onUpdate({ density: "default" })}
+            >
+              Default
+            </button>
+            <button
+              aria-pressed={settings.density === "compact"}
+              className={settings.density === "compact" ? "active" : ""}
+              type="button"
+              onClick={() => onUpdate({ density: "compact" })}
+            >
+              Compact
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <h3>Canvas</h3>
+        <div className="settings-row">
+          <div className="settings-label">
+            <span>Minimap</span>
+            <p>Show navigation minimap</p>
+          </div>
+          <button
+            aria-pressed={settings.showMinimap}
+            className={`toggle-switch ${settings.showMinimap ? "on" : ""}`}
+            type="button"
+            onClick={() => onUpdate({ showMinimap: !settings.showMinimap })}
+          >
+            <span className="toggle-thumb" />
+          </button>
+        </div>
+        <div className="settings-row">
+          <div className="settings-label">
+            <span>Legend</span>
+            <p>Show colour legend below canvas</p>
+          </div>
+          <button
+            aria-pressed={settings.showLegend}
+            className={`toggle-switch ${settings.showLegend ? "on" : ""}`}
+            type="button"
+            onClick={() => onUpdate({ showLegend: !settings.showLegend })}
+          >
+            <span className="toggle-thumb" />
+          </button>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <h3>Polling</h3>
+        <div className="settings-row">
+          <div className="settings-label">
+            <span>Refresh interval</span>
+            <p>How often state is fetched from server</p>
+          </div>
+          <div className="interval-group">
+            {([5, 10, 30] as const).map((val) => (
+              <button
+                aria-pressed={settings.pollingInterval === val}
+                className={settings.pollingInterval === val ? "active" : ""}
+                key={val}
+                type="button"
+                onClick={() => onUpdate({ pollingInterval: val })}
+              >
+                <Timer size={12} />
+                {val}s
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <h3>About</h3>
+        <div className="settings-about">
+          <div>
+            <span>Status</span>
+            <Badge tone={status === "connected" ? "live" : "neutral"} icon={<Wifi size={11} />}>{status}</Badge>
+          </div>
+          <div>
+            <span>Version</span>
+            <code>0.0.0</code>
+          </div>
+          <div>
+            <span>Build</span>
+            <code>local-first</code>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function buildSessionRooms(members: PresencePointer[]): SessionRoom[] {
   const rooms = new Map<string, SessionRoom>();
 
@@ -1019,6 +1749,130 @@ function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; 
     <div className="metric">
       <strong>{value}</strong>
       <span>{icon}{label}</span>
+    </div>
+  );
+}
+
+function ProjectTrackingControl({
+  activeProject,
+  busy,
+  error,
+  onPathChange,
+  onStart,
+  onStop,
+  path,
+  projects,
+  status,
+  suggestedProject
+}: {
+  activeProject: LocalProject | undefined;
+  busy: boolean;
+  error: string;
+  onPathChange(value: string): void;
+  onStart(): void;
+  onStop(): void;
+  path: string;
+  projects: LocalProject[];
+  status: ProjectTrackingStatus;
+  suggestedProject: LocalProjectSuggestion | undefined;
+}): React.ReactElement {
+  const [open, setOpen] = useState(false);
+  const running = status.running;
+  const label = running
+    ? `${status.detected_agents} detected`
+    : activeProject?.name ?? "track repo";
+  const displayPath = activeProject?.path ?? path;
+  const recentProjects = projects.slice(0, 4);
+
+  return (
+    <div className="tracking-control">
+      <button
+        aria-expanded={open}
+        aria-label="Open workspace tracking selector"
+        className="tracking-trigger"
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <RadioTower size={14} />
+        <span>{label}</span>
+      </button>
+      {open ? (
+        <section className="tracking-popover" aria-label="Workspace tracking">
+          <div className="tracking-head">
+            <div>
+              <h2><HardDrive size={14} /> Local workspace</h2>
+              <p>{displayPath.length > 0 ? truncate(displayPath, 64) : "Choose a repo folder to track."}</p>
+            </div>
+            <Badge tone={running ? "live" : "neutral"} icon={<Wifi size={12} />}>
+              {running ? "tracking" : "idle"}
+            </Badge>
+          </div>
+
+          <div className="tracking-stats">
+            <div><strong>{status.detected_agents}</strong><span>detected</span></div>
+            <div><strong>{status.published_presence}</strong><span>published</span></div>
+            <div><strong>{status.interval_seconds}s</strong><span>refresh</span></div>
+          </div>
+
+          {suggestedProject !== undefined ? (
+            <button
+              className="project-option featured"
+              type="button"
+              onClick={() => onPathChange(suggestedProject.path)}
+            >
+              <span><HardDrive size={13} /> Server folder</span>
+              <code>{suggestedProject.path}</code>
+            </button>
+          ) : null}
+
+          {recentProjects.length > 0 ? (
+            <div className="project-list">
+              <h3>Recent folders</h3>
+              {recentProjects.map((project) => (
+                <button
+                  className={project.id === activeProject?.id ? "project-option active" : "project-option"}
+                  key={project.id}
+                  type="button"
+                  onClick={() => onPathChange(project.path)}
+                >
+                  <span><GitBranch size={13} /> {project.name}</span>
+                  <code>{project.path}</code>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          <label className="tracking-path">
+            <span>Folder path</span>
+            <input
+              aria-label="Project folder path"
+              placeholder="/Users/name/work/project"
+              value={path}
+              onChange={(event) => onPathChange(event.target.value)}
+            />
+          </label>
+
+          {error.length > 0 ? <p className="tracking-error">{error}</p> : null}
+          {status.warnings.length > 0 ? <p className="tracking-warning">{status.warnings[0]}</p> : null}
+
+          <div className="tracking-actions">
+            <button type="button" onClick={() => setOpen(false)}>
+              Close
+            </button>
+            {running ? (
+              <button className="danger-action" disabled={busy} type="button" onClick={onStop}>
+                <X size={14} />
+                Stop tracking
+              </button>
+            ) : (
+              <button className="primary-action" disabled={busy || path.trim().length === 0} type="button" onClick={onStart}>
+                <RadioTower size={14} />
+                Start tracking
+              </button>
+            )}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -1426,11 +2280,14 @@ function ClaimActions({
   );
 }
 
-function ActivityStream({ events }: { events: EventPointer[] }): React.ReactElement {
+function ActivityStream({ events, presence }: { events: EventPointer[]; presence: PresencePointer[] }): React.ReactElement {
+  const recentEvents = events.slice().sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at)).slice(0, 4);
+  const recentPresence = presence.slice().sort((left, right) => Date.parse(right.last_seen ?? "") - Date.parse(left.last_seen ?? "")).slice(0, Math.max(0, 6 - recentEvents.length));
+
   return (
     <section className="rail-section activity-section">
       <h2><RadioTower size={14} /> Activity</h2>
-      {events.slice().reverse().slice(0, 6).map((event) => (
+      {recentEvents.map((event) => (
         <article className="rail-card" key={`${event.agent_id}:${event.created_at}:${event.summary}`}>
           <div className="rail-card-head">
             <strong><Activity size={13} />{truncate(event.summary, 54)}</strong>
@@ -1440,6 +2297,23 @@ function ActivityStream({ events }: { events: EventPointer[] }): React.ReactElem
           <PathList paths={eventScopeValues(event)} />
         </article>
       ))}
+      {recentPresence.map((agent) => {
+        const identity = agentIdentity(agent);
+        const Icon = identity.icon;
+        return (
+          <article className="rail-card" key={`presence:${agent.agent_id}:${agent.last_seen ?? ""}`}>
+            <div className="rail-card-head">
+              <strong><Icon size={13} />{truncate(agent.task ?? `${identity.label} active`, 54)}</strong>
+              <Badge tone="live" icon={<Activity size={13} />}>{agent.status}</Badge>
+            </div>
+            <p>{agent.agent_id} / {agent.last_seen ? relativeTime(agent.last_seen) : "active now"}</p>
+            <PathList paths={agent.current_files ?? []} />
+          </article>
+        );
+      })}
+      {recentEvents.length === 0 && recentPresence.length === 0 ? (
+        <p className="empty">No recent activity.</p>
+      ) : null}
     </section>
   );
 }
@@ -1786,6 +2660,28 @@ function readStoredTeamConnection(): TeamConnection {
 
 function writeStoredTeamConnection(value: TeamConnection): void {
   writeStorageValue("teamConnection", JSON.stringify(value));
+}
+
+function readStoredSettings(): AppSettings {
+  if (typeof window === "undefined") return defaultSettings;
+  const raw = readStorageValue("settings");
+  if (!raw) return defaultSettings;
+  try {
+    const parsed = JSON.parse(raw) as Partial<AppSettings>;
+    return {
+      density: parsed.density === "compact" ? "compact" : "default",
+      pollingInterval: [5, 10, 30].includes(parsed.pollingInterval as number) ? (parsed.pollingInterval as 5 | 10 | 30) : 5,
+      showLegend: typeof parsed.showLegend === "boolean" ? parsed.showLegend : true,
+      showMinimap: typeof parsed.showMinimap === "boolean" ? parsed.showMinimap : true,
+      theme: parsed.theme === "light" ? "light" : "dark"
+    };
+  } catch {
+    return defaultSettings;
+  }
+}
+
+function writeStoredSettings(value: AppSettings): void {
+  writeStorageValue("settings", JSON.stringify(value));
 }
 
 function readStoredBoolean(key: string, fallback: boolean): boolean {
