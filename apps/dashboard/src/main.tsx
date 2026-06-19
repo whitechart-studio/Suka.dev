@@ -243,6 +243,15 @@ type ProjectTrackingStatus = {
   warnings: string[];
 };
 
+type WorkspaceLayout = {
+  leftOpen: boolean;
+  leftRailWidth: number;
+  rightOpen: boolean;
+  rightRailWidth: number;
+  selectedNodeId: string;
+  viewport: Viewport | undefined;
+};
+
 type SessionRoom = {
   id: string;
   workspace_id: string;
@@ -291,6 +300,8 @@ type AppSettings = {
   density: "default" | "compact";
 };
 
+type RightRailView = "truth" | "inspect" | "risk" | "activity";
+
 const defaultSettings: AppSettings = {
   theme: "dark",
   pollingInterval: 5,
@@ -301,6 +312,15 @@ const defaultSettings: AppSettings = {
 
 const agentPalette = ["#0f766e", "#2563eb", "#7c3aed", "#16803c", "#b45309", "#be123c", "#0e7490"];
 const storagePrefix = "suka.dashboard.";
+const layoutStoragePrefix = `${storagePrefix}layout.`;
+const layoutStorageKeys = [
+  "leftOpen",
+  "rightOpen",
+  "leftRailWidth",
+  "rightRailWidth",
+  "selectedNodeId",
+  "viewport"
+] as const;
 const defaultTeamConnection: TeamConnection = {
   inviteToken: "",
   mode: "local",
@@ -324,10 +344,10 @@ const emptyTrackingStatus: ProjectTrackingStatus = {
 };
 
 const DEFAULT_LEFT_RAIL_WIDTH = 276;
-const DEFAULT_RIGHT_RAIL_WIDTH = 340;
+const DEFAULT_RIGHT_RAIL_WIDTH = 380;
 const LEFT_RAIL_MIN_WIDTH = 220;
 const LEFT_RAIL_MAX_WIDTH = 420;
-const RIGHT_RAIL_MIN_WIDTH = 280;
+const RIGHT_RAIL_MIN_WIDTH = 340;
 const RIGHT_RAIL_MAX_WIDTH = 560;
 
 type SelectedDetails =
@@ -339,12 +359,13 @@ function Dashboard(): React.ReactElement {
   const [state, setState] = useState<SukaState>(emptyState);
   const [repoMap, setRepoMap] = useState<RepoMap>({ domains: fallbackDomains, edges: [] });
   const [status, setStatus] = useState("connecting");
-  const [leftOpen, setLeftOpen] = useState(() => readStoredBoolean("leftOpen", true));
-  const [rightOpen, setRightOpen] = useState(() => readStoredBoolean("rightOpen", true));
-  const [leftRailWidth, setLeftRailWidth] = useState(() => readStoredNumber("leftRailWidth", DEFAULT_LEFT_RAIL_WIDTH, LEFT_RAIL_MIN_WIDTH, LEFT_RAIL_MAX_WIDTH));
-  const [rightRailWidth, setRightRailWidth] = useState(() => readStoredNumber("rightRailWidth", DEFAULT_RIGHT_RAIL_WIDTH, RIGHT_RAIL_MIN_WIDTH, RIGHT_RAIL_MAX_WIDTH));
-  const [focusMode, setFocusMode] = useState(() => readStoredBoolean("focusMode", false));
-  const [selectedNodeId, setSelectedNodeId] = useState(() => readStoredString("selectedNodeId"));
+  const [projectPath, setProjectPath] = useState(() => readStoredString("projectPath"));
+  const [leftOpen, setLeftOpen] = useState(true);
+  const [rightOpen, setRightOpen] = useState(true);
+  const [leftRailWidth, setLeftRailWidth] = useState(DEFAULT_LEFT_RAIL_WIDTH);
+  const [rightRailWidth, setRightRailWidth] = useState(DEFAULT_RIGHT_RAIL_WIDTH);
+  const [focusMode, setFocusMode] = useState(false);
+  const [selectedNodeId, setSelectedNodeId] = useState("");
   const [releasingClaimId, setReleasingClaimId] = useState("");
   const [dismissedInsightIds, setDismissedInsightIds] = useState<Set<string>>(() => new Set());
   const [teamPanelOpen, setTeamPanelOpen] = useState(false);
@@ -356,16 +377,23 @@ function Dashboard(): React.ReactElement {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(() => readStoredSettings());
+  const [rightRailView, setRightRailView] = useState<RightRailView>(() => readStoredRightRailView());
   const [projects, setProjects] = useState<LocalProject[]>([]);
   const [activeProject, setActiveProject] = useState<LocalProject | undefined>();
   const [suggestedProject, setSuggestedProject] = useState<LocalProjectSuggestion | undefined>();
   const [trackingStatus, setTrackingStatus] = useState<ProjectTrackingStatus>(emptyTrackingStatus);
-  const [projectPath, setProjectPath] = useState(() => readStoredString("projectPath"));
   const [projectError, setProjectError] = useState("");
   const [trackingBusy, setTrackingBusy] = useState(false);
+  const [hydratedLayoutScope, setHydratedLayoutScope] = useState("");
+  const autoStartedProjectId = useRef("");
+  const manualTrackingStopped = useRef(false);
   const viewportRestored = useRef(false);
   const shellRef = useRef<HTMLElement | null>(null);
   const { fitView, setViewport, zoomIn, zoomOut } = useReactFlow();
+  const layoutScope = useMemo(() => {
+    const activeProjectKey = activeProject ? `${activeProject.workspace_id}:${activeProject.repo_id}` : "";
+    return createLayoutStorageScope(activeProjectKey || projectPath || repoMap.root);
+  }, [activeProject, projectPath, repoMap.root]);
 
   const loadState = useCallback(async () => {
     setStatus("loading");
@@ -482,6 +510,10 @@ function Dashboard(): React.ReactElement {
     writeStoredSettings(settings);
   }, [settings]);
 
+  useEffect(() => {
+    writeStoredString("rightRailView", rightRailView);
+  }, [rightRailView]);
+
   const domainCatalog = repoMap.domains.length > 0 ? repoMap.domains : fallbackDomains;
   const model = useMemo(() => buildDomainModel(state, domainCatalog), [domainCatalog, state]);
   const sessionRooms = useMemo(
@@ -496,6 +528,7 @@ function Dashboard(): React.ReactElement {
     [conflictInsights, dismissedInsightIds]
   );
   const riskCount = visibleConflictInsights.length + model.filter((item) => item.failures.length > 0).length;
+  const radarSignalCount = riskCount + state.presence.length + state.claims.length + state.briefs.length + state.events.length + state.decisions.length;
   const selectedDetails = useMemo(() => resolveSelection(selectedNodeId, model, state), [model, selectedNodeId, state]);
   const hasLiveState = state.presence.length + state.claims.length + state.events.length + state.decisions.length + state.briefs.length > 0;
   const showWelcome = landingOpen || (!welcomeDismissed && !hasLiveState);
@@ -618,6 +651,7 @@ function Dashboard(): React.ReactElement {
         throw new Error("Tracking could not be started.");
       }
       const startPayload = await startResponse.json() as { data: ProjectTrackingStatus };
+      manualTrackingStopped.current = false;
       setTrackingStatus(startPayload.data);
       await Promise.all([loadProjects(), loadState(), loadTeamSummary()]);
       return true;
@@ -628,6 +662,13 @@ function Dashboard(): React.ReactElement {
       setTrackingBusy(false);
     }
   }, [activeProject, loadProjects, loadState, loadTeamSummary, projectPath, projects, suggestedProject?.path]);
+
+  useEffect(() => {
+    if (activeProject === undefined || trackingBusy || trackingStatus.running || manualTrackingStopped.current) return;
+    if (autoStartedProjectId.current === activeProject.id) return;
+    autoStartedProjectId.current = activeProject.id;
+    void startProjectTracking(activeProject.path);
+  }, [activeProject, startProjectTracking, trackingBusy, trackingStatus.running]);
 
   const selectProjectFolder = useCallback(async (): Promise<boolean> => {
     setProjectError("");
@@ -660,6 +701,7 @@ function Dashboard(): React.ReactElement {
 
   const stopProjectTracking = useCallback(async () => {
     setProjectError("");
+    manualTrackingStopped.current = true;
     setTrackingBusy(true);
     try {
       const response = await fetch("/api/projects/tracking/stop", {
@@ -739,19 +781,37 @@ function Dashboard(): React.ReactElement {
   }, [fitView, focusMode, leftOpen, rightOpen]);
 
   useEffect(() => {
-    writeStoredBoolean("leftOpen", leftOpen);
-    writeStoredBoolean("rightOpen", rightOpen);
-    writeStoredBoolean("focusMode", focusMode);
-  }, [focusMode, leftOpen, rightOpen]);
+    const layout = readStoredLayout(layoutScope);
+    removeLayoutStorageValue(layoutScope, "focusMode");
+    setHydratedLayoutScope(layoutScope);
+    viewportRestored.current = false;
+    setLeftOpen(layout.leftOpen);
+    setRightOpen(layout.rightOpen);
+    setFocusMode(false);
+    setLeftRailWidth(layout.leftRailWidth);
+    setRightRailWidth(layout.rightRailWidth);
+    setSelectedNodeId(layout.selectedNodeId);
+    if (layout.viewport) {
+      void setViewport(layout.viewport, { duration: 0 });
+    }
+  }, [layoutScope, setViewport]);
 
   useEffect(() => {
-    writeStoredNumber("leftRailWidth", leftRailWidth);
-    writeStoredNumber("rightRailWidth", rightRailWidth);
-  }, [leftRailWidth, rightRailWidth]);
+    if (hydratedLayoutScope !== layoutScope) return;
+    writeStoredLayoutBoolean(layoutScope, "leftOpen", leftOpen);
+    writeStoredLayoutBoolean(layoutScope, "rightOpen", rightOpen);
+  }, [hydratedLayoutScope, layoutScope, leftOpen, rightOpen]);
 
   useEffect(() => {
-    writeStoredString("selectedNodeId", selectedNodeId);
-  }, [selectedNodeId]);
+    if (hydratedLayoutScope !== layoutScope) return;
+    writeStoredLayoutNumber(layoutScope, "leftRailWidth", leftRailWidth);
+    writeStoredLayoutNumber(layoutScope, "rightRailWidth", rightRailWidth);
+  }, [hydratedLayoutScope, layoutScope, leftRailWidth, rightRailWidth]);
+
+  useEffect(() => {
+    if (hydratedLayoutScope !== layoutScope) return;
+    writeStoredLayoutString(layoutScope, "selectedNodeId", selectedNodeId);
+  }, [hydratedLayoutScope, layoutScope, selectedNodeId]);
 
   useEffect(() => {
     if (activeSessionId.length === 0) return;
@@ -789,11 +849,23 @@ function Dashboard(): React.ReactElement {
   useEffect(() => {
     if (viewportRestored.current || nodes.length === 0) return;
     viewportRestored.current = true;
-    const viewport = readStoredViewport();
+    const viewport = readStoredLayoutViewport(layoutScope);
     if (viewport) {
       void setViewport(viewport, { duration: 0 });
     }
-  }, [nodes.length, setViewport]);
+  }, [layoutScope, nodes.length, setViewport]);
+
+  const resetWorkspaceLayout = useCallback(() => {
+    removeStoredLayout(layoutScope);
+    viewportRestored.current = true;
+    setLeftOpen(true);
+    setRightOpen(true);
+    setFocusMode(false);
+    setLeftRailWidth(DEFAULT_LEFT_RAIL_WIDTH);
+    setRightRailWidth(DEFAULT_RIGHT_RAIL_WIDTH);
+    setSelectedNodeId("");
+    void fitView({ duration: 220, padding: 0.16 });
+  }, [fitView, layoutScope]);
 
   const shellClass = [
     "app-shell",
@@ -923,9 +995,11 @@ function Dashboard(): React.ReactElement {
         ) : null}
         {settingsOpen ? (
           <SettingsPanel
+            layoutScopeLabel={projectPath.trim().length > 0 ? "This project" : "Default workspace"}
             settings={settings}
             status={status}
             onClose={() => setSettingsOpen(false)}
+            onResetLayout={resetWorkspaceLayout}
             onUpdate={(patch) => setSettings((s) => ({ ...s, ...patch }))}
           />
         ) : null}
@@ -1007,8 +1081,11 @@ function Dashboard(): React.ReactElement {
               maxZoom={1.8}
               nodeTypes={{ agent: AgentNode, domain: DomainNode }}
               nodes={nodes}
-              onMoveEnd={(_, viewport) => writeStoredViewport(viewport)}
-              onNodeClick={(_, node) => setSelectedNodeId(node.id)}
+              onMoveEnd={(_, viewport) => writeStoredLayoutViewport(layoutScope, viewport)}
+              onNodeClick={(_, node) => {
+                setSelectedNodeId(node.id);
+                setRightRailView("inspect");
+              }}
               onPaneClick={() => setSelectedNodeId("")}
               proOptions={{ hideAttribution: true }}
             >
@@ -1022,7 +1099,17 @@ function Dashboard(): React.ReactElement {
               <button aria-label="Zoom in" title="Zoom in" type="button" onClick={() => zoomIn({ duration: 160 })}><ZoomIn size={14} />In</button>
               <button aria-label="Fit graph" title="Fit graph" type="button" onClick={() => fitView({ duration: 200, padding: 0.16 })}><Scan size={14} />Fit</button>
               <button aria-label="Focus local neighborhood" title="Focus local neighborhood" type="button" onClick={() => fitView({ duration: 220, nodes: localFocusNodes(nodes, edges, selectedNodeId), padding: 0.28 })}><Orbit size={14} />Local</button>
-              <button aria-label="Focus risk" title="Focus risk" type="button" onClick={() => fitView({ duration: 220, nodes: nodes.filter((node) => node.data.state === "failing" || node.data.state === "claimed"), padding: 0.24 })}><Crosshair size={14} />Risk</button>
+              <button
+                aria-label="Focus risk"
+                title="Focus risk"
+                type="button"
+                onClick={() => {
+                  setRightRailView("risk");
+                  fitView({ duration: 220, nodes: nodes.filter((node) => node.data.state === "failing" || node.data.state === "claimed"), padding: 0.24 });
+                }}
+              >
+                <Crosshair size={14} />Risk
+              </button>
             </div>
           </div>
           {settings.showLegend ? (
@@ -1048,7 +1135,7 @@ function Dashboard(): React.ReactElement {
             />
           ) : null}
           <RailHeader
-            count={riskCount}
+            count={radarSignalCount}
             icon={<Gauge size={14} />}
             onToggle={() => setRightOpen((value) => !value)}
             open={rightOpen}
@@ -1058,28 +1145,50 @@ function Dashboard(): React.ReactElement {
           />
           {rightOpen ? (
             <div className="right-stack">
-              <CurrentTruthPanel
-                briefs={state.briefs}
-                claims={state.claims}
-                decisions={state.decisions}
-                events={state.events}
-                insights={visibleConflictInsights}
+              <RadarSummary
+                activeAgents={state.presence.length}
+                activityCount={state.events.length + state.presence.length}
+                riskCount={riskCount}
+                truthCount={state.claims.length + state.briefs.length + state.decisions.length}
               />
-              <SelectionInspector
-                defaultAgentId={state.presence[0]?.agent_id ?? "local-agent"}
-                onCreateClaim={createClaim}
-                onReleaseClaim={releaseClaim}
-                releasingClaimId={releasingClaimId}
-                selection={selectedDetails}
+              <RightRailTabs
+                activityCount={state.events.length + state.presence.length}
+                riskCount={riskCount}
+                selected={rightRailView}
+                truthCount={state.claims.length + state.briefs.length + state.decisions.length}
+                onSelect={setRightRailView}
               />
-              <RiskQueue
-                insights={visibleConflictInsights}
-                model={model}
-                onAcknowledgeInsight={acknowledgeInsight}
-                onReleaseClaim={releaseClaim}
-                releasingClaimId={releasingClaimId}
-              />
-              <ActivityStream events={state.events} presence={state.presence} />
+              <div className="right-panel">
+                {rightRailView === "truth" ? (
+                  <CurrentTruthPanel
+                    activeAgents={state.presence.length}
+                    briefs={state.briefs}
+                    claims={state.claims}
+                    decisions={state.decisions}
+                    events={state.events}
+                    insights={visibleConflictInsights}
+                  />
+                ) : null}
+                {rightRailView === "inspect" ? (
+                  <SelectionInspector
+                    defaultAgentId={state.presence[0]?.agent_id ?? "local-agent"}
+                    onCreateClaim={createClaim}
+                    onReleaseClaim={releaseClaim}
+                    releasingClaimId={releasingClaimId}
+                    selection={selectedDetails}
+                  />
+                ) : null}
+                {rightRailView === "risk" ? (
+                  <RiskQueue
+                    insights={visibleConflictInsights}
+                    model={model}
+                    onAcknowledgeInsight={acknowledgeInsight}
+                    onReleaseClaim={releaseClaim}
+                    releasingClaimId={releasingClaimId}
+                  />
+                ) : null}
+                {rightRailView === "activity" ? <ActivityStream events={state.events} presence={state.presence} /> : null}
+              </div>
             </div>
           ) : <CompactRisk count={riskCount} />}
         </aside>
@@ -1787,12 +1896,16 @@ function DocsPanel({ onClose }: { onClose(): void }): React.ReactElement {
 }
 
 function SettingsPanel({
+  layoutScopeLabel,
   onClose,
+  onResetLayout,
   onUpdate,
   settings,
   status
 }: {
+  layoutScopeLabel: string;
   onClose(): void;
+  onResetLayout(): void;
   onUpdate(patch: Partial<AppSettings>): void;
   settings: AppSettings;
   status: string;
@@ -1860,6 +1973,16 @@ function SettingsPanel({
               Compact
             </button>
           </div>
+        </div>
+        <div className="settings-row">
+          <div className="settings-label">
+            <span>Workspace layout</span>
+            <p>{layoutScopeLabel} keeps panel sizes, selection, and canvas position separate.</p>
+          </div>
+          <button className="settings-reset-btn" type="button" onClick={onResetLayout}>
+            <RefreshCw size={12} />
+            Reset
+          </button>
         </div>
       </div>
 
@@ -2147,18 +2270,25 @@ function AgentCard({ agent }: { agent: PresencePointer }): React.ReactElement {
   const identity = agentIdentity(agent);
   const Icon = identity.icon;
   const source = agentSourceLabel(agent);
+  const color = agentColor(agent.agent_id);
   return (
-    <article className="agent-card">
-      <div className="agent-top">
-        <span className="agent-avatar" style={{ background: agentColor(agent.agent_id) }}><Icon size={14} /></span>
-        <div>
+    <article className="agent-card" style={{ "--agent-color": color } as React.CSSProperties}>
+      <div className="agent-card-band">
+        <span className="agent-avatar solid"><Icon size={14} /></span>
+        <div className="agent-identity">
           <h3>{agent.agent_id}</h3>
-          <p>{identity.label} / {source} / {agent.branch ?? "none"}</p>
+          <p>{identity.label} / {source}</p>
         </div>
-        <Badge tone="live" icon={<Activity size={13} />}>{agent.status}</Badge>
+        <span className="agent-status-pill"><Activity size={12} />{agent.status}</span>
       </div>
-      <p className="task"><Route size={13} />{truncate(agent.task ?? "none", 58)}</p>
-      <PathList paths={agent.current_files ?? []} />
+      <div className="agent-card-body">
+        <div className="agent-meta-row">
+          <span><GitBranch size={12} />{truncate(agent.branch ?? "none", 22)}</span>
+          <span><Route size={12} />{agent.current_files?.length ?? 0} files</span>
+        </div>
+        <p className="task"><Route size={13} />{truncate(agent.task ?? "none", 58)}</p>
+        <PathList paths={agent.current_files ?? []} />
+      </div>
     </article>
   );
 }
@@ -2178,13 +2308,82 @@ function CompactRisk({ count }: { count: number }): React.ReactElement {
   return <div className="compact-risk"><TriangleAlert size={18} /><span>{count}</span></div>;
 }
 
+function RadarSummary({
+  activeAgents,
+  activityCount,
+  riskCount,
+  truthCount
+}: {
+  activeAgents: number;
+  activityCount: number;
+  riskCount: number;
+  truthCount: number;
+}): React.ReactElement {
+  const mode = riskCount > 0 ? "attention" : activeAgents > 0 ? "live" : "idle";
+  return (
+    <div className={`radar-summary ${mode}`}>
+      <div className="radar-summary-main">
+        <span><Gauge size={13} />workspace radar</span>
+        <strong>{riskCount > 0 ? `${riskCount} items need attention` : activeAgents > 0 ? "Live workspace signal" : "Ready for tracking"}</strong>
+      </div>
+      <div className="radar-summary-metrics" aria-label="Radar summary metrics">
+        <span><Users size={12} />{activeAgents}</span>
+        <span><ClipboardList size={12} />{truthCount}</span>
+        <span><RadioTower size={12} />{activityCount}</span>
+      </div>
+    </div>
+  );
+}
+
+function RightRailTabs({
+  activityCount,
+  onSelect,
+  riskCount,
+  selected,
+  truthCount
+}: {
+  activityCount: number;
+  onSelect(view: RightRailView): void;
+  riskCount: number;
+  selected: RightRailView;
+  truthCount: number;
+}): React.ReactElement {
+  const tabs: Array<{ count: number; hint: string; icon: React.ReactNode; label: string; view: RightRailView }> = [
+    { count: truthCount, hint: "state", icon: <ClipboardList size={13} />, label: "Truth", view: "truth" },
+    { count: 0, hint: "selection", icon: <MousePointer2 size={13} />, label: "Inspect", view: "inspect" },
+    { count: riskCount, hint: "conflicts", icon: <TriangleAlert size={13} />, label: "Risk", view: "risk" },
+    { count: activityCount, hint: "timeline", icon: <RadioTower size={13} />, label: "Activity", view: "activity" }
+  ];
+
+  return (
+    <div className="right-tabs" role="tablist" aria-label="Radar panels">
+      {tabs.map((tab) => (
+        <button
+          aria-selected={selected === tab.view}
+          className={selected === tab.view ? "active" : ""}
+          key={tab.view}
+          role="tab"
+          type="button"
+          onClick={() => onSelect(tab.view)}
+        >
+          <i>{tab.icon}</i>
+          <span><strong>{tab.label}</strong><small>{tab.hint}</small></span>
+          {tab.count > 0 ? <b>{tab.count}</b> : null}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function CurrentTruthPanel({
+  activeAgents,
   briefs,
   claims,
   decisions,
   events,
   insights
 }: {
+  activeAgents: number;
   briefs: BriefPointer[];
   claims: ClaimPointer[];
   decisions: DecisionPointer[];
@@ -2209,6 +2408,7 @@ function CurrentTruthPanel({
         </Badge>
       </div>
       <div className="truth-grid">
+        <TruthStat label="agents" value={activeAgents} />
         <TruthStat label="owners" value={ownerCount} />
         <TruthStat label="claims" value={claims.length} />
         <TruthStat label="briefs" value={briefs.length} />
@@ -2223,7 +2423,7 @@ function CurrentTruthPanel({
           <PathList paths={[...latestBrief.changed_files, ...latestBrief.related_claims, ...latestBrief.related_sessions]} />
         </article>
       ) : (
-        <p className="empty">No session brief written yet.</p>
+        <EmptyState icon={<FileClock size={15} />} title="No handoff brief" text="Agents have not written a session brief for this workspace yet." />
       )}
       <TruthList
         icon={<LockKeyhole size={13} />}
@@ -2333,8 +2533,11 @@ function SelectionInspector({
   if (!selection) {
     return (
       <section className="rail-section inspector-section">
-        <h2><MousePointer2 size={14} /> Inspector</h2>
-        <p className="empty">Select a domain or agent on the canvas.</p>
+        <div className="section-title">
+          <h2><MousePointer2 size={14} /> Inspector</h2>
+          <Badge tone="neutral" icon={<MousePointer2 size={13} />}>idle</Badge>
+        </div>
+        <EmptyState icon={<MousePointer2 size={15} />} title="Nothing selected" text="Select an agent or domain on the canvas to inspect ownership, files, and claim actions." />
       </section>
     );
   }
@@ -2344,7 +2547,17 @@ function SelectionInspector({
     const Icon = identity.icon;
     return (
       <section className="rail-section inspector-section">
-        <h2><Icon size={14} /> {selection.agent.agent_id}</h2>
+        <div className="section-title">
+          <h2><Icon size={14} /> Inspector</h2>
+          <Badge tone="live" icon={<Activity size={13} />}>{selection.agent.status}</Badge>
+        </div>
+        <div className="inspector-hero">
+          <span className="agent-avatar solid" style={{ background: agentColor(selection.agent.agent_id) }}><Icon size={15} /></span>
+          <div>
+            <strong>{selection.agent.agent_id}</strong>
+            <p>{identity.label} / {agentSourceLabel(selection.agent)}</p>
+          </div>
+        </div>
         <div className="inspector-grid">
           <span>tool</span><strong>{identity.label}</strong>
           <span>source</span><strong>{agentSourceLabel(selection.agent)}</strong>
@@ -2360,7 +2573,19 @@ function SelectionInspector({
   const domain = selection.domain;
   return (
     <section className="rail-section inspector-section">
-      <h2><Network size={14} /> {domain.name}</h2>
+      <div className="section-title">
+        <h2><Network size={14} /> Inspector</h2>
+        <Badge tone={domain.failures.length > 0 ? "fail" : domain.claims.length > 0 ? "risk" : "neutral"} icon={<Gauge size={13} />}>
+          {domainState(domain)}
+        </Badge>
+      </div>
+      <div className="inspector-hero">
+        <span className="domain-inspector-mark" style={{ borderColor: stateColor(domain), color: stateColor(domain) }}><Network size={15} /></span>
+        <div>
+          <strong>{domain.name}</strong>
+          <p>{domain.path ?? domain.id}</p>
+        </div>
+      </div>
       <div className="inspector-grid">
         <span>state</span><strong>{domainState(domain)}</strong>
         <span>path</span><strong>{domain.path ?? domain.id}</strong>
@@ -2446,6 +2671,15 @@ function RiskQueue({
 
   return (
     <section className="rail-section">
+      <div className="section-title">
+        <h2><TriangleAlert size={14} /> Risk Queue</h2>
+        <Badge tone={insights.length > 0 || risky.length > 0 ? "risk" : "live"} icon={<Gauge size={13} />}>
+          {insights.length + risky.length}
+        </Badge>
+      </div>
+      {insights.length === 0 && risky.length === 0 ? (
+        <EmptyState icon={<CheckCheck size={15} />} title="No active risk" text="No risky domains, blockers, or conflict warnings are currently active." />
+      ) : null}
       {insights.map((insight) => (
         <article className={`rail-card conflict-card ${insight.severity}`} key={insight.id}>
           <div className="rail-card-head">
@@ -2534,7 +2768,12 @@ function ActivityStream({ events, presence }: { events: EventPointer[]; presence
 
   return (
     <section className="rail-section activity-section">
-      <h2><RadioTower size={14} /> Activity</h2>
+      <div className="section-title">
+        <h2><RadioTower size={14} /> Activity</h2>
+        <Badge tone={recentEvents.length + recentPresence.length > 0 ? "live" : "neutral"} icon={<Activity size={13} />}>
+          {recentEvents.length + recentPresence.length}
+        </Badge>
+      </div>
       {recentEvents.map((event) => (
         <article className="rail-card" key={`${event.agent_id}:${event.created_at}:${event.summary}`}>
           <div className="rail-card-head">
@@ -2560,9 +2799,19 @@ function ActivityStream({ events, presence }: { events: EventPointer[]; presence
         );
       })}
       {recentEvents.length === 0 && recentPresence.length === 0 ? (
-        <p className="empty">No recent activity.</p>
+        <EmptyState icon={<RadioTower size={15} />} title="No recent activity" text="Detected agents, events, and session updates will appear here as the workspace changes." />
       ) : null}
     </section>
+  );
+}
+
+function EmptyState({ icon, text, title }: { icon: React.ReactNode; text: string; title: string }): React.ReactElement {
+  return (
+    <div className="panel-empty">
+      <span>{icon}</span>
+      <strong>{title}</strong>
+      <p>{text}</p>
+    </div>
   );
 }
 
@@ -2932,6 +3181,82 @@ function writeStoredSettings(value: AppSettings): void {
   writeStorageValue("settings", JSON.stringify(value));
 }
 
+function readStoredRightRailView(): RightRailView {
+  const value = readStoredString("rightRailView");
+  return value === "inspect" || value === "risk" || value === "activity" ? value : "truth";
+}
+
+function readStoredLayout(scope: string): WorkspaceLayout {
+  return {
+    leftOpen: readStoredLayoutBoolean(scope, "leftOpen", true),
+    leftRailWidth: readStoredLayoutNumber(scope, "leftRailWidth", DEFAULT_LEFT_RAIL_WIDTH, LEFT_RAIL_MIN_WIDTH, LEFT_RAIL_MAX_WIDTH),
+    rightOpen: readStoredLayoutBoolean(scope, "rightOpen", true),
+    rightRailWidth: readStoredLayoutNumber(scope, "rightRailWidth", DEFAULT_RIGHT_RAIL_WIDTH, RIGHT_RAIL_MIN_WIDTH, RIGHT_RAIL_MAX_WIDTH),
+    selectedNodeId: readStoredLayoutString(scope, "selectedNodeId"),
+    viewport: readStoredLayoutViewport(scope)
+  };
+}
+
+function readStoredLayoutBoolean(scope: string, key: string, fallback: boolean): boolean {
+  if (typeof window === "undefined") return fallback;
+  const value = readLayoutStorageValue(scope, key);
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return fallback;
+}
+
+function writeStoredLayoutBoolean(scope: string, key: string, value: boolean): void {
+  writeLayoutStorageValue(scope, key, String(value));
+}
+
+function readStoredLayoutNumber(scope: string, key: string, fallback: number, min: number, max: number): number {
+  if (typeof window === "undefined") return fallback;
+  const value = Number(readLayoutStorageValue(scope, key));
+  return Number.isFinite(value) ? clamp(value, min, max) : fallback;
+}
+
+function writeStoredLayoutNumber(scope: string, key: string, value: number): void {
+  writeLayoutStorageValue(scope, key, String(Math.round(value)));
+}
+
+function readStoredLayoutString(scope: string, key: string): string {
+  if (typeof window === "undefined") return "";
+  return readLayoutStorageValue(scope, key) ?? "";
+}
+
+function writeStoredLayoutString(scope: string, key: string, value: string): void {
+  if (value.length === 0) {
+    removeLayoutStorageValue(scope, key);
+    return;
+  }
+  writeLayoutStorageValue(scope, key, value);
+}
+
+function readStoredLayoutViewport(scope: string): Viewport | undefined {
+  if (typeof window === "undefined") return undefined;
+  const raw = readLayoutStorageValue(scope, "viewport");
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as Partial<Viewport>;
+    if (typeof parsed.x === "number" && typeof parsed.y === "number" && typeof parsed.zoom === "number") {
+      return { x: parsed.x, y: parsed.y, zoom: parsed.zoom };
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+function writeStoredLayoutViewport(scope: string, viewport: Viewport): void {
+  writeLayoutStorageValue(scope, "viewport", JSON.stringify(viewport));
+}
+
+function removeStoredLayout(scope: string): void {
+  for (const key of layoutStorageKeys) {
+    removeLayoutStorageValue(scope, key);
+  }
+}
+
 function readStoredBoolean(key: string, fallback: boolean): boolean {
   if (typeof window === "undefined") return fallback;
   const value = readStorageValue(key);
@@ -2942,16 +3267,6 @@ function readStoredBoolean(key: string, fallback: boolean): boolean {
 
 function writeStoredBoolean(key: string, value: boolean): void {
   writeStorageValue(key, String(value));
-}
-
-function readStoredNumber(key: string, fallback: number, min: number, max: number): number {
-  if (typeof window === "undefined") return fallback;
-  const value = Number(readStorageValue(key));
-  return Number.isFinite(value) ? clamp(value, min, max) : fallback;
-}
-
-function writeStoredNumber(key: string, value: number): void {
-  writeStorageValue(key, String(Math.round(value)));
 }
 
 function readStoredString(key: string): string {
@@ -2965,25 +3280,6 @@ function writeStoredString(key: string, value: string): void {
     return;
   }
   writeStorageValue(key, value);
-}
-
-function readStoredViewport(): Viewport | undefined {
-  if (typeof window === "undefined") return undefined;
-  const raw = readStorageValue("viewport");
-  if (!raw) return undefined;
-  try {
-    const parsed = JSON.parse(raw) as Partial<Viewport>;
-    if (typeof parsed.x === "number" && typeof parsed.y === "number" && typeof parsed.zoom === "number") {
-      return { x: parsed.x, y: parsed.y, zoom: parsed.zoom };
-    }
-  } catch {
-    return undefined;
-  }
-  return undefined;
-}
-
-function writeStoredViewport(viewport: Viewport): void {
-  writeStorageValue("viewport", JSON.stringify(viewport));
 }
 
 function readStorageValue(key: string): string | null {
@@ -3005,6 +3301,44 @@ function writeStorageValue(key: string, value: string): void {
 function removeStorageValue(key: string): void {
   try {
     window.localStorage.removeItem(`${storagePrefix}${key}`);
+  } catch {
+    // Storage is best-effort; the dashboard remains fully usable without it.
+  }
+}
+
+function createLayoutStorageScope(value: string | undefined): string {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  return normalized.length > 0 ? stableHash(normalized) : "default";
+}
+
+function stableHash(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function readLayoutStorageValue(scope: string, key: string): string | null {
+  try {
+    return window.localStorage.getItem(`${layoutStoragePrefix}${scope}.${key}`);
+  } catch {
+    return null;
+  }
+}
+
+function writeLayoutStorageValue(scope: string, key: string, value: string): void {
+  try {
+    window.localStorage.setItem(`${layoutStoragePrefix}${scope}.${key}`, value);
+  } catch {
+    // Storage is best-effort; the dashboard remains fully usable without it.
+  }
+}
+
+function removeLayoutStorageValue(scope: string, key: string): void {
+  try {
+    window.localStorage.removeItem(`${layoutStoragePrefix}${scope}.${key}`);
   } catch {
     // Storage is best-effort; the dashboard remains fully usable without it.
   }
