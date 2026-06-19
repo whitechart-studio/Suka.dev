@@ -137,6 +137,24 @@ test("detectLocalAgents ignores matching tools outside the current repo", () => 
   assert.deepEqual(report.agents, []);
 });
 
+test("detectLocalAgents accepts agent cwd inside the selected repo", () => {
+  const nestedCwd = join(repoRoot, "apps", "dashboard");
+  const report = detectLocalAgents({
+    branch: "main",
+    changedFiles: [],
+    cwdForPid: () => nestedCwd,
+    processRows: [{
+      args: `codex --working-dir ${nestedCwd}`,
+      command: "codex",
+      pid: 84942
+    }],
+    repoRoot
+  });
+
+  assert.equal(report.agents.length, 1);
+  assert.equal(report.agents[0]?.cwd, nestedCwd);
+});
+
 test("detectLocalAgents falls back to command-line cwd when platform cwd is unavailable", () => {
   const report = detectLocalAgents({
     branch: "main",
@@ -154,6 +172,32 @@ test("detectLocalAgents falls back to command-line cwd when platform cwd is unav
   assert.equal(report.agents.length, 1);
   assert.equal(report.agents[0]?.tool, "codex");
   assert.equal(report.agents[0]?.cwd, repoRoot);
+});
+
+test("detectLocalAgents filters private local paths from changed files", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-local-agents-private-"));
+  try {
+    execFileSync("git", ["init"], { cwd: tempDir, stdio: "ignore" });
+    writeFileSync(join(tempDir, "visible.ts"), "visible\n", "utf8");
+    mkdirSync(join(tempDir, ".claude"));
+    writeFileSync(join(tempDir, ".claude", "settings.json"), "{}\n", "utf8");
+    writeFileSync(join(tempDir, ".env.local"), "SECRET=value\n", "utf8");
+
+    const report = detectLocalAgents({
+      cwdForPid: () => tempDir,
+      processRows: [{
+        args: `codex --working-dir ${tempDir}`,
+        command: "codex",
+        pid: 101
+      }],
+      repoRoot: tempDir
+    });
+
+    assert.deepEqual(report.changed_files, ["visible.ts"]);
+    assert.deepEqual(report.agents[0]?.current_files, ["visible.ts"]);
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
+  }
 });
 
 test("detectLocalAgents reports unsupported platform states without throwing", () => {

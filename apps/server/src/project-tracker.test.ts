@@ -32,7 +32,52 @@ test("project tracker publishes detected presence for the active project", () =>
   assert.equal(presence?.session_id, `project-tracking-${project.id}`);
   assert.equal(presence?.source?.kind, "detected");
   assert.equal(presence?.source?.detector, "process-cwd");
+  assert.equal(presence?.source?.cwd, ".");
+  assert.deepEqual(presence?.current_files, ["apps/server/src/project-tracker.ts"]);
   assert.equal(presence?.expires_at, "2026-06-18T10:05:30.000Z");
+  worker.stop();
+});
+
+test("project tracker publishes repo-relative cwd and filters private paths", () => {
+  const service = createSukaService();
+  const project = service.registerProject({
+    now: new Date("2026-06-18T10:00:00.000Z"),
+    path: process.cwd()
+  });
+  service.activateProject(project.id);
+  const worker = new ProjectTrackingWorker(service, {
+    detectLocalAgents: () => ({
+      agents: [{
+        agent_id: "codex-pid-102",
+        branch: "main",
+        command: "codex",
+        confidence: "high",
+        current_files: [
+          "apps/dashboard/src/main.tsx",
+          ".claude/settings.local.json",
+          ".env.local",
+          ".agent/skills/private.md"
+        ],
+        cwd: `${project.repo_root}/apps/dashboard`,
+        detection_source: "process-cwd",
+        pid: 102,
+        status: "detected",
+        tool: "codex"
+      }],
+      branch: "main",
+      changed_files: [],
+      generated_at: "2026-06-18T10:05:00.000Z",
+      repo_root: project.repo_root,
+      warnings: []
+    }),
+    now: () => new Date("2026-06-18T10:05:00.000Z")
+  });
+
+  worker.start();
+  const presence = service.getState().presence[0];
+
+  assert.equal(presence?.source?.cwd, "apps/dashboard");
+  assert.deepEqual(presence?.current_files, ["apps/dashboard/src/main.tsx"]);
   worker.stop();
 });
 

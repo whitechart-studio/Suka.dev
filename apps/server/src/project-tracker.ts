@@ -1,6 +1,7 @@
 import type { DetectedLocalAgent, DetectLocalAgentsOptions, LocalAgentDetectionReport } from "@suka/local-agents";
 import { detectLocalAgents } from "@suka/local-agents";
 import type { PresenceStatus } from "@suka/protocol";
+import { isAbsolute, relative, resolve } from "node:path";
 import type { SukaService } from "./service.js";
 import type { LocalProject } from "./state.js";
 
@@ -170,17 +171,40 @@ function buildTrackedPresence(
       kind: "detected",
       detector: agent.detection_source,
       pid: agent.pid,
-      cwd: agent.cwd,
+      cwd: relativeProjectPath(project.repo_root, agent.cwd),
       detected_at: now.toISOString()
     },
     repo: project.repo,
     branch: agent.branch ?? project.branch,
     task: "Detected local agent process",
     status: "online" satisfies PresenceStatus,
-    current_files: agent.current_files,
+    current_files: agent.current_files.filter(isPublicProjectPath),
     last_seen: now.toISOString(),
     expires_at: new Date(now.getTime() + ttlSeconds * 1000).toISOString()
   };
+}
+
+function relativeProjectPath(repoRoot: string, path: string): string {
+  const relativePath = relative(resolve(repoRoot), resolve(path));
+  if (relativePath.length === 0) {
+    return ".";
+  }
+  if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
+    return ".";
+  }
+  return relativePath.replaceAll("\\", "/");
+}
+
+function isPublicProjectPath(path: string): boolean {
+  const normalized = path.replaceAll("\\", "/");
+  const segments = normalized.split("/");
+  if (segments.some((segment) => segment === ".claude" || segment === ".agents" || segment === "node_modules")) {
+    return false;
+  }
+  if (normalized === ".env" || normalized.startsWith(".env.")) {
+    return false;
+  }
+  return !normalized.startsWith(".agent/skills/");
 }
 
 function trackingSessionId(project: LocalProject): string {
