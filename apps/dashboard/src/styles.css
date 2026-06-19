@@ -157,6 +157,16 @@
   background: rgba(248,250,252,0.9);
 }
 
+[data-theme="light"] .right-tabs {
+  background: #ffffff;
+  border-color: rgba(15,23,42,0.08);
+}
+
+[data-theme="light"] .right-tabs button.active {
+  background: rgba(79,70,229,0.1);
+  border-color: rgba(79,70,229,0.2);
+}
+
 [data-theme="light"] .agent-card,
 [data-theme="light"] .rail-card {
   background: #ffffff;
@@ -2690,10 +2700,77 @@ body.is-resizing-rail .rail-resize-handle::after {
 /* ── Right stack ────────────────────────────── */
 .right-stack {
   display: grid;
-  gap: 8px;
-  grid-template-rows: minmax(250px, 1.2fr) minmax(140px, 0.8fr) minmax(0, 1fr) minmax(0, 0.8fr);
+  gap: 7px;
+  grid-template-rows: auto minmax(0, 1fr);
   height: 100%;
   min-height: 0;
+}
+
+.right-tabs {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 3px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 4px;
+}
+
+.right-tabs button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--ink-3);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 10.5px;
+  font-weight: 700;
+  gap: 4px;
+  justify-content: center;
+  min-height: 30px;
+  min-width: 0;
+  padding: 0 5px;
+  transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
+}
+
+.right-tabs button.active {
+  background: rgba(99,102,241,0.16);
+  border-color: rgba(99,102,241,0.28);
+  color: var(--ink);
+}
+
+.right-tabs button:hover:not(.active) {
+  background: rgba(255,255,255,0.05);
+  color: var(--ink-2);
+}
+
+.right-tabs span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.right-tabs b {
+  background: rgba(255,255,255,0.1);
+  border-radius: 999px;
+  color: var(--ink-2);
+  flex: 0 0 auto;
+  font-size: 9.5px;
+  line-height: 1;
+  min-width: 16px;
+  padding: 3px 4px;
+  text-align: center;
+}
+
+.right-panel {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.right-panel > .rail-section {
+  border-bottom: 0;
+  height: 100%;
 }
 
 .section-title {

@@ -300,6 +300,8 @@ type AppSettings = {
   density: "default" | "compact";
 };
 
+type RightRailView = "truth" | "inspect" | "risk" | "activity";
+
 const defaultSettings: AppSettings = {
   theme: "dark",
   pollingInterval: 5,
@@ -375,6 +377,7 @@ function Dashboard(): React.ReactElement {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(() => readStoredSettings());
+  const [rightRailView, setRightRailView] = useState<RightRailView>(() => readStoredRightRailView());
   const [projects, setProjects] = useState<LocalProject[]>([]);
   const [activeProject, setActiveProject] = useState<LocalProject | undefined>();
   const [suggestedProject, setSuggestedProject] = useState<LocalProjectSuggestion | undefined>();
@@ -504,6 +507,10 @@ function Dashboard(): React.ReactElement {
   useEffect(() => {
     writeStoredSettings(settings);
   }, [settings]);
+
+  useEffect(() => {
+    writeStoredString("rightRailView", rightRailView);
+  }, [rightRailView]);
 
   const domainCatalog = repoMap.domains.length > 0 ? repoMap.domains : fallbackDomains;
   const model = useMemo(() => buildDomainModel(state, domainCatalog), [domainCatalog, state]);
@@ -1063,7 +1070,10 @@ function Dashboard(): React.ReactElement {
               nodeTypes={{ agent: AgentNode, domain: DomainNode }}
               nodes={nodes}
               onMoveEnd={(_, viewport) => writeStoredLayoutViewport(layoutScope, viewport)}
-              onNodeClick={(_, node) => setSelectedNodeId(node.id)}
+              onNodeClick={(_, node) => {
+                setSelectedNodeId(node.id);
+                setRightRailView("inspect");
+              }}
               onPaneClick={() => setSelectedNodeId("")}
               proOptions={{ hideAttribution: true }}
             >
@@ -1077,7 +1087,17 @@ function Dashboard(): React.ReactElement {
               <button aria-label="Zoom in" title="Zoom in" type="button" onClick={() => zoomIn({ duration: 160 })}><ZoomIn size={14} />In</button>
               <button aria-label="Fit graph" title="Fit graph" type="button" onClick={() => fitView({ duration: 200, padding: 0.16 })}><Scan size={14} />Fit</button>
               <button aria-label="Focus local neighborhood" title="Focus local neighborhood" type="button" onClick={() => fitView({ duration: 220, nodes: localFocusNodes(nodes, edges, selectedNodeId), padding: 0.28 })}><Orbit size={14} />Local</button>
-              <button aria-label="Focus risk" title="Focus risk" type="button" onClick={() => fitView({ duration: 220, nodes: nodes.filter((node) => node.data.state === "failing" || node.data.state === "claimed"), padding: 0.24 })}><Crosshair size={14} />Risk</button>
+              <button
+                aria-label="Focus risk"
+                title="Focus risk"
+                type="button"
+                onClick={() => {
+                  setRightRailView("risk");
+                  fitView({ duration: 220, nodes: nodes.filter((node) => node.data.state === "failing" || node.data.state === "claimed"), padding: 0.24 });
+                }}
+              >
+                <Crosshair size={14} />Risk
+              </button>
             </div>
           </div>
           {settings.showLegend ? (
@@ -1113,28 +1133,43 @@ function Dashboard(): React.ReactElement {
           />
           {rightOpen ? (
             <div className="right-stack">
-              <CurrentTruthPanel
-                briefs={state.briefs}
-                claims={state.claims}
-                decisions={state.decisions}
-                events={state.events}
-                insights={visibleConflictInsights}
+              <RightRailTabs
+                activityCount={state.events.length + state.presence.length}
+                riskCount={riskCount}
+                selected={rightRailView}
+                truthCount={state.claims.length + state.briefs.length + state.decisions.length}
+                onSelect={setRightRailView}
               />
-              <SelectionInspector
-                defaultAgentId={state.presence[0]?.agent_id ?? "local-agent"}
-                onCreateClaim={createClaim}
-                onReleaseClaim={releaseClaim}
-                releasingClaimId={releasingClaimId}
-                selection={selectedDetails}
-              />
-              <RiskQueue
-                insights={visibleConflictInsights}
-                model={model}
-                onAcknowledgeInsight={acknowledgeInsight}
-                onReleaseClaim={releaseClaim}
-                releasingClaimId={releasingClaimId}
-              />
-              <ActivityStream events={state.events} presence={state.presence} />
+              <div className="right-panel">
+                {rightRailView === "truth" ? (
+                  <CurrentTruthPanel
+                    briefs={state.briefs}
+                    claims={state.claims}
+                    decisions={state.decisions}
+                    events={state.events}
+                    insights={visibleConflictInsights}
+                  />
+                ) : null}
+                {rightRailView === "inspect" ? (
+                  <SelectionInspector
+                    defaultAgentId={state.presence[0]?.agent_id ?? "local-agent"}
+                    onCreateClaim={createClaim}
+                    onReleaseClaim={releaseClaim}
+                    releasingClaimId={releasingClaimId}
+                    selection={selectedDetails}
+                  />
+                ) : null}
+                {rightRailView === "risk" ? (
+                  <RiskQueue
+                    insights={visibleConflictInsights}
+                    model={model}
+                    onAcknowledgeInsight={acknowledgeInsight}
+                    onReleaseClaim={releaseClaim}
+                    releasingClaimId={releasingClaimId}
+                  />
+                ) : null}
+                {rightRailView === "activity" ? <ActivityStream events={state.events} presence={state.presence} /> : null}
+              </div>
             </div>
           ) : <CompactRisk count={riskCount} />}
         </aside>
@@ -2254,6 +2289,46 @@ function CompactRisk({ count }: { count: number }): React.ReactElement {
   return <div className="compact-risk"><TriangleAlert size={18} /><span>{count}</span></div>;
 }
 
+function RightRailTabs({
+  activityCount,
+  onSelect,
+  riskCount,
+  selected,
+  truthCount
+}: {
+  activityCount: number;
+  onSelect(view: RightRailView): void;
+  riskCount: number;
+  selected: RightRailView;
+  truthCount: number;
+}): React.ReactElement {
+  const tabs: Array<{ count: number; icon: React.ReactNode; label: string; view: RightRailView }> = [
+    { count: truthCount, icon: <ClipboardList size={13} />, label: "Truth", view: "truth" },
+    { count: 0, icon: <MousePointer2 size={13} />, label: "Inspect", view: "inspect" },
+    { count: riskCount, icon: <TriangleAlert size={13} />, label: "Risk", view: "risk" },
+    { count: activityCount, icon: <RadioTower size={13} />, label: "Activity", view: "activity" }
+  ];
+
+  return (
+    <div className="right-tabs" role="tablist" aria-label="Radar panels">
+      {tabs.map((tab) => (
+        <button
+          aria-selected={selected === tab.view}
+          className={selected === tab.view ? "active" : ""}
+          key={tab.view}
+          role="tab"
+          type="button"
+          onClick={() => onSelect(tab.view)}
+        >
+          {tab.icon}
+          <span>{tab.label}</span>
+          {tab.count > 0 ? <b>{tab.count}</b> : null}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function CurrentTruthPanel({
   briefs,
   claims,
@@ -2522,6 +2597,15 @@ function RiskQueue({
 
   return (
     <section className="rail-section">
+      <div className="section-title">
+        <h2><TriangleAlert size={14} /> Risk Queue</h2>
+        <Badge tone={insights.length > 0 || risky.length > 0 ? "risk" : "live"} icon={<Gauge size={13} />}>
+          {insights.length + risky.length}
+        </Badge>
+      </div>
+      {insights.length === 0 && risky.length === 0 ? (
+        <p className="empty">No risky domains or conflicts right now.</p>
+      ) : null}
       {insights.map((insight) => (
         <article className={`rail-card conflict-card ${insight.severity}`} key={insight.id}>
           <div className="rail-card-head">
@@ -3006,6 +3090,11 @@ function readStoredSettings(): AppSettings {
 
 function writeStoredSettings(value: AppSettings): void {
   writeStorageValue("settings", JSON.stringify(value));
+}
+
+function readStoredRightRailView(): RightRailView {
+  const value = readStoredString("rightRailView");
+  return value === "inspect" || value === "risk" || value === "activity" ? value : "truth";
 }
 
 function readStoredLayout(scope: string): WorkspaceLayout {
