@@ -323,6 +323,13 @@ const emptyTrackingStatus: ProjectTrackingStatus = {
   warnings: []
 };
 
+const DEFAULT_LEFT_RAIL_WIDTH = 276;
+const DEFAULT_RIGHT_RAIL_WIDTH = 340;
+const LEFT_RAIL_MIN_WIDTH = 220;
+const LEFT_RAIL_MAX_WIDTH = 420;
+const RIGHT_RAIL_MIN_WIDTH = 280;
+const RIGHT_RAIL_MAX_WIDTH = 560;
+
 type SelectedDetails =
   | { kind: "agent"; agent: PresencePointer }
   | { kind: "domain"; domain: DomainModel }
@@ -334,6 +341,8 @@ function Dashboard(): React.ReactElement {
   const [status, setStatus] = useState("connecting");
   const [leftOpen, setLeftOpen] = useState(() => readStoredBoolean("leftOpen", true));
   const [rightOpen, setRightOpen] = useState(() => readStoredBoolean("rightOpen", true));
+  const [leftRailWidth, setLeftRailWidth] = useState(() => readStoredNumber("leftRailWidth", DEFAULT_LEFT_RAIL_WIDTH, LEFT_RAIL_MIN_WIDTH, LEFT_RAIL_MAX_WIDTH));
+  const [rightRailWidth, setRightRailWidth] = useState(() => readStoredNumber("rightRailWidth", DEFAULT_RIGHT_RAIL_WIDTH, RIGHT_RAIL_MIN_WIDTH, RIGHT_RAIL_MAX_WIDTH));
   const [focusMode, setFocusMode] = useState(() => readStoredBoolean("focusMode", false));
   const [selectedNodeId, setSelectedNodeId] = useState(() => readStoredString("selectedNodeId"));
   const [releasingClaimId, setReleasingClaimId] = useState("");
@@ -355,6 +364,7 @@ function Dashboard(): React.ReactElement {
   const [projectError, setProjectError] = useState("");
   const [trackingBusy, setTrackingBusy] = useState(false);
   const viewportRestored = useRef(false);
+  const shellRef = useRef<HTMLElement | null>(null);
   const { fitView, setViewport, zoomIn, zoomOut } = useReactFlow();
 
   const loadState = useCallback(async () => {
@@ -681,6 +691,48 @@ function Dashboard(): React.ReactElement {
     setLandingOpen(true);
   }, []);
 
+  const startRailResize = useCallback((side: "left" | "right", event: React.PointerEvent<HTMLButtonElement>) => {
+    if (focusMode) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const shell = shellRef.current;
+    const shellBounds = shell?.getBoundingClientRect();
+
+    function onPointerMove(moveEvent: PointerEvent) {
+      if (shellBounds === undefined) return;
+      if (side === "left") {
+        const width = clamp(moveEvent.clientX - shellBounds.left - 8, LEFT_RAIL_MIN_WIDTH, LEFT_RAIL_MAX_WIDTH);
+        setLeftRailWidth(width);
+      } else {
+        const width = clamp(shellBounds.right - moveEvent.clientX - 8, RIGHT_RAIL_MIN_WIDTH, RIGHT_RAIL_MAX_WIDTH);
+        setRightRailWidth(width);
+      }
+    }
+
+    function onPointerUp() {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      document.body.classList.remove("is-resizing-rail");
+      window.setTimeout(() => fitView({ duration: 120, padding: focusMode ? 0.18 : 0.12 }), 0);
+    }
+
+    document.body.classList.add("is-resizing-rail");
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp, { once: true });
+  }, [fitView, focusMode]);
+
+  const resizeRailWithKeyboard = useCallback((side: "left" | "right", event: React.KeyboardEvent<HTMLButtonElement>) => {
+    const step = event.shiftKey ? 24 : 12;
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const direction = event.key === "ArrowRight" ? 1 : -1;
+    if (side === "left") {
+      setLeftRailWidth((width) => clamp(width + direction * step, LEFT_RAIL_MIN_WIDTH, LEFT_RAIL_MAX_WIDTH));
+    } else {
+      setRightRailWidth((width) => clamp(width - direction * step, RIGHT_RAIL_MIN_WIDTH, RIGHT_RAIL_MAX_WIDTH));
+    }
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => fitView({ duration: 180, padding: focusMode ? 0.18 : 0.12 }), 80);
     return () => window.clearTimeout(timer);
@@ -691,6 +743,11 @@ function Dashboard(): React.ReactElement {
     writeStoredBoolean("rightOpen", rightOpen);
     writeStoredBoolean("focusMode", focusMode);
   }, [focusMode, leftOpen, rightOpen]);
+
+  useEffect(() => {
+    writeStoredNumber("leftRailWidth", leftRailWidth);
+    writeStoredNumber("rightRailWidth", rightRailWidth);
+  }, [leftRailWidth, rightRailWidth]);
 
   useEffect(() => {
     writeStoredString("selectedNodeId", selectedNodeId);
@@ -744,6 +801,10 @@ function Dashboard(): React.ReactElement {
     !rightOpen ? "right-collapsed" : "",
     focusMode ? "focus-mode" : ""
   ].filter(Boolean).join(" ");
+  const shellStyle = {
+    "--left-rail-width": `${leftRailWidth}px`,
+    "--right-rail-width": `${rightRailWidth}px`
+  } as React.CSSProperties;
 
   if (showWelcome) {
     return (
@@ -870,7 +931,7 @@ function Dashboard(): React.ReactElement {
         ) : null}
       </header>
 
-      <main className={shellClass}>
+      <main className={shellClass} ref={shellRef} style={shellStyle}>
         <aside className="rail left-rail">
           <RailHeader
             count={state.presence.length}
@@ -889,6 +950,17 @@ function Dashboard(): React.ReactElement {
                 ))}
             </div>
           ) : <IconRail agents={state.presence} />}
+          {leftOpen ? (
+            <button
+              aria-label="Resize agents panel"
+              aria-orientation="vertical"
+              className="rail-resize-handle right"
+              title="Resize agents panel"
+              type="button"
+              onKeyDown={(event) => resizeRailWithKeyboard("left", event)}
+              onPointerDown={(event) => startRailResize("left", event)}
+            />
+          ) : null}
         </aside>
 
         <section className="canvas-shell">
@@ -964,6 +1036,17 @@ function Dashboard(): React.ReactElement {
         </section>
 
         <aside className="rail right-rail">
+          {rightOpen ? (
+            <button
+              aria-label="Resize radar panel"
+              aria-orientation="vertical"
+              className="rail-resize-handle left"
+              title="Resize radar panel"
+              type="button"
+              onKeyDown={(event) => resizeRailWithKeyboard("right", event)}
+              onPointerDown={(event) => startRailResize("right", event)}
+            />
+          ) : null}
           <RailHeader
             count={riskCount}
             icon={<Gauge size={14} />}
@@ -2870,6 +2953,16 @@ function writeStoredBoolean(key: string, value: boolean): void {
   writeStorageValue(key, String(value));
 }
 
+function readStoredNumber(key: string, fallback: number, min: number, max: number): number {
+  if (typeof window === "undefined") return fallback;
+  const value = Number(readStorageValue(key));
+  return Number.isFinite(value) ? clamp(value, min, max) : fallback;
+}
+
+function writeStoredNumber(key: string, value: number): void {
+  writeStorageValue(key, String(Math.round(value)));
+}
+
 function readStoredString(key: string): string {
   if (typeof window === "undefined") return "";
   return readStorageValue(key) ?? "";
@@ -2924,6 +3017,10 @@ function removeStorageValue(key: string): void {
   } catch {
     // Storage is best-effort; the dashboard remains fully usable without it.
   }
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 createRoot(document.getElementById("root")!).render(
