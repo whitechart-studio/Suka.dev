@@ -2216,18 +2216,25 @@ function AgentCard({ agent }: { agent: PresencePointer }): React.ReactElement {
   const identity = agentIdentity(agent);
   const Icon = identity.icon;
   const source = agentSourceLabel(agent);
+  const color = agentColor(agent.agent_id);
   return (
-    <article className="agent-card">
-      <div className="agent-top">
-        <span className="agent-avatar" style={{ background: agentColor(agent.agent_id) }}><Icon size={14} /></span>
-        <div>
+    <article className="agent-card" style={{ "--agent-color": color } as React.CSSProperties}>
+      <div className="agent-card-band">
+        <span className="agent-avatar solid"><Icon size={14} /></span>
+        <div className="agent-identity">
           <h3>{agent.agent_id}</h3>
-          <p>{identity.label} / {source} / {agent.branch ?? "none"}</p>
+          <p>{identity.label} / {source}</p>
         </div>
-        <Badge tone="live" icon={<Activity size={13} />}>{agent.status}</Badge>
+        <span className="agent-status-pill"><Activity size={12} />{agent.status}</span>
       </div>
-      <p className="task"><Route size={13} />{truncate(agent.task ?? "none", 58)}</p>
-      <PathList paths={agent.current_files ?? []} />
+      <div className="agent-card-body">
+        <div className="agent-meta-row">
+          <span><GitBranch size={12} />{truncate(agent.branch ?? "none", 22)}</span>
+          <span><Route size={12} />{agent.current_files?.length ?? 0} files</span>
+        </div>
+        <p className="task"><Route size={13} />{truncate(agent.task ?? "none", 58)}</p>
+        <PathList paths={agent.current_files ?? []} />
+      </div>
     </article>
   );
 }

@@ -2472,7 +2472,99 @@ body.is-resizing-rail .rail-resize-handle::after {
   transform: translateY(-1px);
 }
 
-.agent-top,
+.agent-card {
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.agent-card-band {
+  align-items: center;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--agent-color, #2563eb) 94%, #ffffff 6%), color-mix(in srgb, var(--agent-color, #2563eb) 72%, #020617 28%));
+  color: #fff;
+  display: flex;
+  gap: 8px;
+  min-height: 52px;
+  padding: 9px;
+}
+
+.agent-card-body {
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+}
+
+.agent-identity {
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-identity h3 {
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-identity p {
+  color: rgba(255,255,255,0.78);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 2px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-status-pill {
+  align-items: center;
+  background: rgba(255,255,255,0.14);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 700;
+  gap: 4px;
+  max-width: 82px;
+  min-height: 22px;
+  overflow: hidden;
+  padding: 0 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-meta-row {
+  display: grid;
+  gap: 5px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.agent-meta-row span {
+  align-items: center;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink-3);
+  display: inline-flex;
+  font-size: 10.5px;
+  font-weight: 600;
+  gap: 4px;
+  min-height: 24px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rail-card-head {
   align-items: center;
   display: flex;
@@ -2480,15 +2572,16 @@ body.is-resizing-rail .rail-resize-handle::after {
   justify-content: space-between;
 }
 
-.agent-top > div { flex: 1; min-width: 0; }
-
-.agent-top p,
 .task {
   align-items: center;
   color: var(--ink-3);
   display: flex;
   font-size: 11px;
   gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Agent avatars ──────────────────────────── */
@@ -2504,6 +2597,11 @@ body.is-resizing-rail .rail-resize-handle::after {
   justify-content: center;
   width: 26px;
   transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast);
+}
+
+.agent-avatar.solid {
+  background: rgba(255,255,255,0.18);
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.1), 0 6px 18px rgba(0,0,0,0.18);
 }
 
 .agent-avatar:hover {
