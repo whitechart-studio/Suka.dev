@@ -2306,15 +2306,15 @@ input::placeholder { color: var(--muted); }
 .app-shell {
   display: grid;
   gap: 8px;
-  grid-template-columns: 276px minmax(0, 1fr) 340px;
+  grid-template-columns: var(--left-rail-width, 276px) minmax(0, 1fr) var(--right-rail-width, 340px);
   height: calc(100dvh - 52px);
   min-height: 0;
   overflow: hidden;
   padding: 8px;
 }
 
-.app-shell.left-collapsed  { grid-template-columns: minmax(0, 1fr) 340px; }
-.app-shell.right-collapsed { grid-template-columns: 276px minmax(0, 1fr); }
+.app-shell.left-collapsed  { grid-template-columns: minmax(0, 1fr) var(--right-rail-width, 340px); }
+.app-shell.right-collapsed { grid-template-columns: var(--left-rail-width, 276px) minmax(0, 1fr); }
 .app-shell.left-collapsed.right-collapsed { grid-template-columns: minmax(0, 1fr); }
 
 .app-shell.left-collapsed .left-rail,
@@ -2342,6 +2342,11 @@ input::placeholder { color: var(--muted); }
 
 .app-shell.focus-mode .rail { display: none; }
 
+body.is-resizing-rail {
+  cursor: col-resize;
+  user-select: none;
+}
+
 /* ── Rails ──────────────────────────────────── */
 .rail,
 .canvas-shell {
@@ -2353,6 +2358,52 @@ input::placeholder { color: var(--muted); }
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  position: relative;
+}
+
+.rail-resize-handle {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  cursor: col-resize;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  position: absolute;
+  top: 0;
+  width: 10px;
+  z-index: 3;
+}
+
+.rail-resize-handle.left { left: -6px; }
+.rail-resize-handle.right { right: -6px; }
+
+.rail-resize-handle::after {
+  background: transparent;
+  border-radius: 999px;
+  content: "";
+  height: 46px;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  transition: background var(--dur-fast), box-shadow var(--dur-fast);
+  width: 3px;
+}
+
+.rail-resize-handle:hover,
+.rail-resize-handle:focus-visible {
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.rail-resize-handle:hover::after,
+.rail-resize-handle:focus-visible::after,
+body.is-resizing-rail .rail-resize-handle::after {
+  background: var(--ai);
+  box-shadow: 0 0 18px rgba(99,102,241,0.45);
 }
 
 .rail-header,
@@ -3378,6 +3429,8 @@ input::placeholder { color: var(--muted); }
   .app-shell.right-collapsed { grid-template-columns: 38px minmax(0, 1fr); }
   .app-shell.left-collapsed.right-collapsed { grid-template-columns: minmax(0, 1fr); }
   .app-shell.focus-mode { grid-template-columns: minmax(0, 1fr); padding: 5px; }
+
+  .rail-resize-handle { display: none; }
 
   /* Rails on mobile — icon only */
   .rail-header h2,
