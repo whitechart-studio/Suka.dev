@@ -263,11 +263,13 @@
   box-shadow: var(--shadow-lg);
 }
 
-[data-theme="light"] .canvas-toolbar button {
+[data-theme="light"] .canvas-toolbar button,
+[data-theme="light"] .canvas-template-select {
   color: var(--ink-2);
 }
 
-[data-theme="light"] .canvas-toolbar button:hover {
+[data-theme="light"] .canvas-toolbar button:hover,
+[data-theme="light"] .canvas-template-select:hover {
   background: var(--ai-dim);
   border-color: rgba(79,70,229,0.2);
   color: var(--ai);
@@ -3920,7 +3922,8 @@ body.is-resizing-rail .rail-resize-handle::after {
   z-index: var(--z-base);
 }
 
-.canvas-toolbar button {
+.canvas-toolbar button,
+.canvas-template-select {
   background: transparent;
   border-color: transparent;
   box-shadow: none;
@@ -3930,7 +3933,17 @@ body.is-resizing-rail .rail-resize-handle::after {
   padding: 4px 9px;
 }
 
-.canvas-toolbar button:hover {
+.canvas-template-select {
+  max-width: 102px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 800;
+  outline: none;
+}
+
+.canvas-toolbar button:hover,
+.canvas-template-select:hover {
   background: rgba(99,102,241,0.12);
   border-color: rgba(99,102,241,0.2);
   color: #a5b4fc;
@@ -4236,6 +4249,12 @@ body.is-resizing-rail .rail-resize-handle::after {
     min-height: 36px;
     min-width: 36px;
     padding: 0 5px;
+  }
+
+  .canvas-template-select {
+    max-width: 72px;
+    min-height: 36px;
+    padding: 0 6px;
   }
 
   .canvas-toolbar svg { flex: 0 0 auto; }

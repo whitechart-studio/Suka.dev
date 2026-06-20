@@ -271,6 +271,8 @@ type CustomCanvasZone = {
 
 type CustomZoneKind = "mission" | "ownership" | "risk" | "handoff" | "blocked" | "agent";
 
+type CanvasZoneTemplateId = "ownership-lanes" | "risk-control" | "handoff-board";
+
 type NodePositionMap = Record<string, { x: number; y: number }>;
 
 type SessionRoom = {
@@ -1014,6 +1016,14 @@ function Dashboard(): React.ReactElement {
     window.setTimeout(() => fitView({ duration: 220, padding: 0.18 }), 0);
   }, [fitView, layoutScope]);
 
+  const applyCustomZoneTemplate = useCallback((templateId: CanvasZoneTemplateId) => {
+    if (customZones.length > 0 && !window.confirm("Replace your current manual zones with this template?")) return;
+    const next = buildCustomZoneTemplate(templateId, Date.now());
+    setCustomZones(next);
+    writeStoredLayoutCustomZones(layoutScope, next);
+    window.setTimeout(() => fitView({ duration: 220, padding: 0.18 }), 0);
+  }, [customZones.length, fitView, layoutScope]);
+
   const createCustomZone = useCallback(() => {
     const index = customZones.length + 1;
     const zone: CustomCanvasZone = {
@@ -1291,6 +1301,22 @@ function Dashboard(): React.ReactElement {
               <button aria-label="Fit graph" title="Fit graph" type="button" onClick={() => fitView({ duration: 200, padding: 0.16 })}><Scan size={14} />Fit</button>
               <button aria-label="Focus local neighborhood" title="Focus local neighborhood" type="button" onClick={() => fitView({ duration: 220, nodes: localFocusNodes(nodes, edges, selectedNodeId), padding: 0.28 })}><Orbit size={14} />Local</button>
               <button aria-label="Create mission zone" title="Create mission zone" type="button" onClick={createCustomZone}><Plus size={14} />Zone</button>
+              <select
+                aria-label="Apply canvas template"
+                className="canvas-template-select"
+                defaultValue=""
+                title="Apply canvas template"
+                onChange={(event) => {
+                  const templateId = event.currentTarget.value as CanvasZoneTemplateId | "";
+                  if (templateId !== "") applyCustomZoneTemplate(templateId);
+                  event.currentTarget.value = "";
+                }}
+              >
+                <option disabled value="">Template</option>
+                <option value="ownership-lanes">Ownership lanes</option>
+                <option value="risk-control">Risk control</option>
+                <option value="handoff-board">Handoff board</option>
+              </select>
               <button aria-label="Reset canvas zones and arrangement" title="Reset canvas zones and arrangement" type="button" onClick={resetCanvasArrangement}><RefreshCw size={14} />Reset</button>
               <button
                 aria-label="Focus risk"
@@ -3359,6 +3385,122 @@ function missionZoneTone(index: number): string {
 }
 
 const customZoneKinds: CustomZoneKind[] = ["mission", "ownership", "risk", "handoff", "blocked", "agent"];
+
+function buildCustomZoneTemplate(templateId: CanvasZoneTemplateId, seed: number): CustomCanvasZone[] {
+  const makeZone = (
+    index: number,
+    zone: Omit<CustomCanvasZone, "id" | "tone">
+  ): CustomCanvasZone => ({
+    ...zone,
+    id: `template-${seed}-${index}`,
+    tone: missionZoneTone(index)
+  });
+
+  switch (templateId) {
+    case "risk-control":
+      return [
+        makeZone(0, {
+          height: 220,
+          kind: "ownership",
+          label: "Safe to Touch",
+          note: "Low-risk changes and cleanup work.",
+          width: 320,
+          x: 90,
+          y: 120
+        }),
+        makeZone(1, {
+          height: 240,
+          kind: "risk",
+          label: "Risk Watch",
+          note: "Schema, auth, infra, or shared contracts need review.",
+          width: 360,
+          x: 460,
+          y: 90
+        }),
+        makeZone(2, {
+          height: 220,
+          kind: "blocked",
+          label: "Do Not Touch",
+          note: "Active work or fragile areas. Claim before editing.",
+          width: 330,
+          x: 870,
+          y: 130
+        })
+      ];
+    case "handoff-board":
+      return [
+        makeZone(0, {
+          height: 210,
+          kind: "mission",
+          label: "Start Here",
+          note: "Read current truth and latest brief first.",
+          width: 300,
+          x: 80,
+          y: 110
+        }),
+        makeZone(1, {
+          height: 230,
+          kind: "ownership",
+          label: "In Progress",
+          note: "Owned work that needs continuity.",
+          width: 330,
+          x: 430,
+          y: 85
+        }),
+        makeZone(2, {
+          height: 220,
+          kind: "handoff",
+          label: "Handoff Ready",
+          note: "Brief written, next action clear.",
+          width: 330,
+          x: 805,
+          y: 110
+        }),
+        makeZone(3, {
+          height: 190,
+          kind: "blocked",
+          label: "Blocked",
+          note: "Needs human decision or external dependency.",
+          width: 300,
+          x: 430,
+          y: 380
+        })
+      ];
+    default:
+      return [
+        makeZone(0, {
+          height: 260,
+          kind: "agent",
+          label: "Codex Lane",
+          note: "Implementation, validation, and PR preparation.",
+          owner: "Codex",
+          width: 330,
+          x: 100,
+          y: 105
+        }),
+        makeZone(1, {
+          height: 260,
+          kind: "agent",
+          label: "Claude Lane",
+          note: "Parallel analysis or review work.",
+          owner: "Claude",
+          width: 330,
+          x: 480,
+          y: 105
+        }),
+        makeZone(2, {
+          height: 240,
+          kind: "ownership",
+          label: "Human Review",
+          note: "Final judgement, merge, and product direction.",
+          owner: "Human",
+          width: 330,
+          x: 860,
+          y: 125
+        })
+      ];
+  }
+}
 
 function readCustomZoneKind(value: unknown): CustomZoneKind {
   return customZoneKinds.includes(value as CustomZoneKind) ? value as CustomZoneKind : "mission";
