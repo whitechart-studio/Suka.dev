@@ -260,6 +260,7 @@ type CustomCanvasZone = {
   id: string;
   kind: CustomZoneKind;
   label: string;
+  note?: string;
   owner?: string;
   tone: string;
   x: number;
@@ -590,6 +591,22 @@ function Dashboard(): React.ReactElement {
     }));
   }, [customZones, updateCustomZones]);
 
+  const editCustomZoneNote = useCallback((zoneId: string) => {
+    const zone = customZones.find((item) => item.id === zoneId);
+    if (zone === undefined) return;
+    const nextNote = window.prompt("Add zone note", zone.note ?? "")?.trim();
+    if (nextNote === undefined) return;
+    updateCustomZones((current) => current.map((item) => {
+      if (item.id !== zoneId) return item;
+      if (nextNote.length === 0) {
+        const zoneWithoutNote = { ...item };
+        delete zoneWithoutNote.note;
+        return zoneWithoutNote;
+      }
+      return { ...item, note: nextNote.slice(0, 120) };
+    }));
+  }, [customZones, updateCustomZones]);
+
   const deleteCustomZone = useCallback((zoneId: string) => {
     const zone = customZones.find((item) => item.id === zoneId);
     if (zone !== undefined && !window.confirm(`Delete "${zone.label}" from this canvas?`)) return;
@@ -608,10 +625,11 @@ function Dashboard(): React.ReactElement {
       onDelete: deleteCustomZone,
       onOwner: assignCustomZoneOwner,
       onKind: cycleCustomZoneKind,
+      onNote: editCustomZoneNote,
       onRename: renameCustomZone,
       onResize: cycleCustomZoneSize
     }),
-    [assignCustomZoneOwner, customZones, cycleCustomZoneKind, cycleCustomZoneSize, deleteCustomZone, model, nodePositions, renameCustomZone, repoMap.edges, selectedNodeId, state]
+    [assignCustomZoneOwner, customZones, cycleCustomZoneKind, cycleCustomZoneSize, deleteCustomZone, editCustomZoneNote, model, nodePositions, renameCustomZone, repoMap.edges, selectedNodeId, state]
   );
   const conflictInsights = useMemo(() => buildConflictInsights(state), [state]);
   const visibleConflictInsights = useMemo(
@@ -2335,6 +2353,9 @@ function MissionZoneNode({ data }: any): React.ReactElement {
             <button aria-label={`Assign owner for ${data.label}`} className="nodrag nopan" title="Assign owner" type="button" onClick={(event) => { event.stopPropagation(); data.onOwner?.(); }}>
               <Users size={11} />
             </button>
+            <button aria-label={`Edit note for ${data.label}`} className="nodrag nopan" title="Edit note" type="button" onClick={(event) => { event.stopPropagation(); data.onNote?.(); }}>
+              <BookOpen size={11} />
+            </button>
             <button aria-label={`Rename ${data.label}`} className="nodrag nopan" title="Rename zone" type="button" onClick={(event) => { event.stopPropagation(); data.onRename?.(); }}>
               <Pencil size={11} />
             </button>
@@ -2349,6 +2370,7 @@ function MissionZoneNode({ data }: any): React.ReactElement {
       </div>
       <strong>{data.label}</strong>
       {data.owner ? <em>{data.owner}</em> : null}
+      {data.note ? <p>{data.note}</p> : null}
       <small>{data.custom ? `${data.kindLabel} / drag to organize` : `${data.count} areas`}</small>
     </div>
   );
@@ -3143,6 +3165,7 @@ function buildFlow(
   zoneActions: {
     onDelete(zoneId: string): void;
     onKind(zoneId: string): void;
+    onNote(zoneId: string): void;
     onOwner(zoneId: string): void;
     onRename(zoneId: string): void;
     onResize(zoneId: string): void;
@@ -3161,8 +3184,10 @@ function buildFlow(
         kind: zone.kind,
         kindLabel: customZoneKindLabel(zone.kind),
         label: zone.label,
+        note: zone.note,
         onDelete: () => zoneActions.onDelete(zone.id),
         onKind: () => zoneActions.onKind(zone.id),
+        onNote: () => zoneActions.onNote(zone.id),
         onOwner: () => zoneActions.onOwner(zone.id),
         onRename: () => zoneActions.onRename(zone.id),
         onResize: () => zoneActions.onResize(zone.id),
@@ -3359,6 +3384,12 @@ function readOptionalZoneOwner(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const owner = value.trim();
   return owner.length === 0 ? undefined : owner.slice(0, 40);
+}
+
+function readOptionalZoneNote(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const note = value.trim();
+  return note.length === 0 ? undefined : note.slice(0, 120);
 }
 
 function readNodePosition(nodePositions: NodePositionMap, nodeId: string, fallback: { x: number; y: number }): { x: number; y: number } {
@@ -3705,6 +3736,7 @@ function readStoredLayoutCustomZones(scope: string): CustomCanvasZone[] {
       if (typeof candidate.x !== "number" || typeof candidate.y !== "number") return [];
       if (typeof candidate.width !== "number" || typeof candidate.height !== "number") return [];
       if (![candidate.x, candidate.y, candidate.width, candidate.height].every(Number.isFinite)) return [];
+      const note = readOptionalZoneNote(candidate.note);
       const owner = readOptionalZoneOwner(candidate.owner);
       const zone: CustomCanvasZone = {
         height: clamp(Math.round(candidate.height), 120, 680),
@@ -3716,6 +3748,7 @@ function readStoredLayoutCustomZones(scope: string): CustomCanvasZone[] {
         x: Math.round(candidate.x),
         y: Math.round(candidate.y)
       };
+      if (note !== undefined) zone.note = note;
       if (owner !== undefined) zone.owner = owner;
       return [zone];
     });
