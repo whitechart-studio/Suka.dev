@@ -3054,15 +3054,26 @@ function ClaimActions({
 function ActivityStream({ events, presence }: { events: EventPointer[]; presence: PresencePointer[] }): React.ReactElement {
   const recentEvents = events.slice().sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at)).slice(0, 4);
   const recentPresence = presence.slice().sort((left, right) => Date.parse(right.last_seen ?? "") - Date.parse(left.last_seen ?? "")).slice(0, Math.max(0, 6 - recentEvents.length));
+  const overlapSignals = buildPresenceFileOverlaps(presence).slice(0, 2);
 
   return (
     <section className="rail-section activity-section">
       <div className="section-title">
         <h2><RadioTower size={14} /> Activity</h2>
-        <Badge tone={recentEvents.length + recentPresence.length > 0 ? "live" : "neutral"} icon={<Activity size={13} />}>
-          {recentEvents.length + recentPresence.length}
+        <Badge tone={recentEvents.length + recentPresence.length + overlapSignals.length > 0 ? "live" : "neutral"} icon={<Activity size={13} />}>
+          {recentEvents.length + recentPresence.length + overlapSignals.length}
         </Badge>
       </div>
+      {overlapSignals.map((signal) => (
+        <article className="rail-card activity-overlap-card" key={signal.path}>
+          <div className="rail-card-head">
+            <strong><TriangleAlert size={13} />Shared file overlap</strong>
+            <Badge tone="risk" icon={<Users size={13} />}>{signal.agents.length}</Badge>
+          </div>
+          <p>{signal.agents.map((agent) => agentIdentity(agent).label).join(" + ")} are active near the same file.</p>
+          <PathList paths={[signal.path]} />
+        </article>
+      ))}
       {recentEvents.map((event) => (
         <article className="rail-card" key={`${event.agent_id}:${event.created_at}:${event.summary}`}>
           <div className="rail-card-head">
@@ -3076,13 +3087,14 @@ function ActivityStream({ events, presence }: { events: EventPointer[]; presence
       {recentPresence.map((agent) => {
         const identity = agentIdentity(agent);
         const Icon = identity.icon;
+        const stale = isPresenceStale(agent);
         return (
-          <article className="rail-card" key={`presence:${agent.agent_id}:${agent.last_seen ?? ""}`}>
+          <article className={`rail-card activity-presence-card ${stale ? "stale" : ""}`} key={`presence:${agent.agent_id}:${agent.last_seen ?? ""}`}>
             <div className="rail-card-head">
               <strong><Icon size={13} />{truncate(agent.task ?? `${identity.label} active`, 54)}</strong>
-              <Badge tone="live" icon={<Activity size={13} />}>{agent.status}</Badge>
+              <Badge tone={stale ? "risk" : "live"} icon={<Activity size={13} />}>{stale ? "stale" : agent.status}</Badge>
             </div>
-            <p>{agent.agent_id} / {agent.last_seen ? relativeTime(agent.last_seen) : "active now"}</p>
+            <p>{formatPresenceActivityMeta(agent)}</p>
             <PathList paths={agent.current_files ?? []} />
           </article>
         );
@@ -3648,14 +3660,57 @@ function agentDomains(agent: PresencePointer, domains: Domain[]): string[] {
 function agentIdentity(agent: PresencePointer): { icon: React.ElementType; label: string; symbol: string } {
   const raw = [agent.agent_id, agent.tool, agent.task, agent.branch].filter(Boolean).join(" ").toLowerCase();
   if (raw.includes("codex")) return { icon: Sparkles, label: "Codex", symbol: "Cx" };
+  if (raw.includes("claude")) return { icon: Bot, label: "Claude Code", symbol: "Cl" };
   if (raw.includes("cursor")) return { icon: MousePointer2, label: "Cursor", symbol: "Cu" };
   if (raw.includes("copilot") || raw.includes("github")) return { icon: GitBranch, label: "GitHub Copilot", symbol: "Gh" };
   if (raw.includes("terminal") || raw.includes("cli") || raw.includes("shell")) return { icon: Terminal, label: "Terminal", symbol: "Sh" };
   return { icon: Code2, label: agent.tool, symbol: initials(agent.agent_id).slice(0, 2) };
 }
 
+function buildPresenceFileOverlaps(presence: PresencePointer[]): Array<{ agents: PresencePointer[]; path: string }> {
+  const byPath = new Map<string, PresencePointer[]>();
+  for (const agent of presence) {
+    for (const path of new Set(agent.current_files ?? [])) {
+      const trimmed = path.trim();
+      if (trimmed.length === 0) continue;
+      byPath.set(trimmed, [...(byPath.get(trimmed) ?? []), agent]);
+    }
+  }
+  return [...byPath.entries()]
+    .map(([path, agents]) => ({ agents: uniqueAgents(agents), path }))
+    .filter((signal) => signal.agents.length > 1)
+    .sort((left, right) => right.agents.length - left.agents.length || left.path.localeCompare(right.path));
+}
+
+function uniqueAgents(agents: PresencePointer[]): PresencePointer[] {
+  const seen = new Set<string>();
+  return agents.filter((agent) => {
+    const key = agent.agent_id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function isPresenceStale(agent: PresencePointer): boolean {
+  if (agent.status.toLowerCase().includes("stale") || agent.status.toLowerCase().includes("expired")) return true;
+  if (agent.last_seen === undefined) return false;
+  const lastSeen = Date.parse(agent.last_seen);
+  return Number.isFinite(lastSeen) && Date.now() - lastSeen > 2 * 60 * 1000;
+}
+
+function formatPresenceActivityMeta(agent: PresencePointer): string {
+  const source = agent.source?.kind === "detected"
+    ? `detected${agent.source.detector === undefined ? "" : ` via ${agent.source.detector}`}`
+    : "manual";
+  const seen = agent.last_seen ? relativeTime(agent.last_seen) : "active now";
+  const branch = agent.branch === undefined ? "" : ` / ${agent.branch}`;
+  return `${agent.agent_id} / ${source} / ${seen}${branch}`;
+}
+
 function agentSourceLabel(agent: PresencePointer): string {
-  return agent.source?.kind === "detected" ? "detected" : "manual";
+  if (agent.source?.kind !== "detected") return "manual";
+  return agent.source.detector === undefined ? "detected" : `detected / ${agent.source.detector}`;
 }
 
 function agentColor(agentId: string): string {

@@ -3125,6 +3125,20 @@ body.is-resizing-rail .rail-resize-handle::after {
 
 .activity-section { padding-top: 0; }
 
+.activity-overlap-card {
+  background:
+    linear-gradient(135deg, rgba(245,158,11,0.12), rgba(244,63,94,0.045)),
+    rgba(255,255,255,0.03);
+  border-color: rgba(245,158,11,0.24);
+}
+
+.activity-presence-card.stale {
+  background:
+    linear-gradient(135deg, rgba(244,63,94,0.1), rgba(148,163,184,0.035)),
+    rgba(255,255,255,0.03);
+  border-color: rgba(244,63,94,0.24);
+}
+
 .panel-empty {
   align-items: start;
   background: rgba(255,255,255,0.035);
