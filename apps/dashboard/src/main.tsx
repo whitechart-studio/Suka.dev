@@ -258,6 +258,7 @@ type WorkspaceLayout = {
 
 type CustomCanvasZone = {
   id: string;
+  kind: CustomZoneKind;
   label: string;
   tone: string;
   x: number;
@@ -265,6 +266,8 @@ type CustomCanvasZone = {
   width: number;
   height: number;
 };
+
+type CustomZoneKind = "mission" | "ownership" | "risk" | "handoff" | "blocked" | "agent";
 
 type NodePositionMap = Record<string, { x: number; y: number }>;
 
@@ -564,6 +567,12 @@ function Dashboard(): React.ReactElement {
     }));
   }, [updateCustomZones]);
 
+  const cycleCustomZoneKind = useCallback((zoneId: string) => {
+    updateCustomZones((current) => current.map((zone) => zone.id === zoneId
+      ? { ...zone, kind: nextCustomZoneKind(zone.kind) }
+      : zone));
+  }, [updateCustomZones]);
+
   const deleteCustomZone = useCallback((zoneId: string) => {
     const zone = customZones.find((item) => item.id === zoneId);
     if (zone !== undefined && !window.confirm(`Delete "${zone.label}" from this canvas?`)) return;
@@ -580,10 +589,11 @@ function Dashboard(): React.ReactElement {
   const { edges, nodes } = useMemo(
     () => buildFlow(model, state, selectedNodeId, repoMap.edges, nodePositions, customZones, {
       onDelete: deleteCustomZone,
+      onKind: cycleCustomZoneKind,
       onRename: renameCustomZone,
       onResize: cycleCustomZoneSize
     }),
-    [customZones, cycleCustomZoneSize, deleteCustomZone, model, nodePositions, renameCustomZone, repoMap.edges, selectedNodeId, state]
+    [customZones, cycleCustomZoneKind, cycleCustomZoneSize, deleteCustomZone, model, nodePositions, renameCustomZone, repoMap.edges, selectedNodeId, state]
   );
   const conflictInsights = useMemo(() => buildConflictInsights(state), [state]);
   const visibleConflictInsights = useMemo(
@@ -973,6 +983,7 @@ function Dashboard(): React.ReactElement {
     const zone: CustomCanvasZone = {
       height: 180,
       id: `zone-${Date.now()}`,
+      kind: "mission",
       label: `Mission Zone ${index}`,
       tone: missionZoneTone(index),
       width: 300,
@@ -2295,11 +2306,14 @@ function AgentNode({ data }: any): React.ReactElement {
 
 function MissionZoneNode({ data }: any): React.ReactElement {
   return (
-    <div className={`mission-zone-node ${data.tone} ${data.custom ? "custom" : ""}`}>
+    <div className={`mission-zone-node ${data.tone} ${data.custom ? "custom" : ""} ${data.custom ? `kind-${data.kind}` : ""}`}>
       <div className="mission-zone-title">
-        <span>{data.custom ? "custom zone" : "mission zone"}</span>
+        <span>{data.custom ? data.kindLabel : "mission zone"}</span>
         {data.custom ? (
           <div className="mission-zone-actions">
+            <button aria-label={`Change type for ${data.label}`} className="nodrag nopan" title="Change zone type" type="button" onClick={(event) => { event.stopPropagation(); data.onKind?.(); }}>
+              <ClipboardList size={11} />
+            </button>
             <button aria-label={`Rename ${data.label}`} className="nodrag nopan" title="Rename zone" type="button" onClick={(event) => { event.stopPropagation(); data.onRename?.(); }}>
               <Pencil size={11} />
             </button>
@@ -2313,7 +2327,7 @@ function MissionZoneNode({ data }: any): React.ReactElement {
         ) : null}
       </div>
       <strong>{data.label}</strong>
-      <small>{data.custom ? "Drag to organize work" : `${data.count} areas`}</small>
+      <small>{data.custom ? `${data.kindLabel} / drag to organize` : `${data.count} areas`}</small>
     </div>
   );
 }
@@ -3106,6 +3120,7 @@ function buildFlow(
   customZones: CustomCanvasZone[],
   zoneActions: {
     onDelete(zoneId: string): void;
+    onKind(zoneId: string): void;
     onRename(zoneId: string): void;
     onResize(zoneId: string): void;
   }
@@ -3120,8 +3135,11 @@ function buildFlow(
       data: {
         count: 0,
         custom: true,
+        kind: zone.kind,
+        kindLabel: customZoneKindLabel(zone.kind),
         label: zone.label,
         onDelete: () => zoneActions.onDelete(zone.id),
+        onKind: () => zoneActions.onKind(zone.id),
         onRename: () => zoneActions.onRename(zone.id),
         onResize: () => zoneActions.onResize(zone.id),
         tone: zone.tone
@@ -3288,6 +3306,28 @@ function missionZoneLabel(key: string): string {
 function missionZoneTone(index: number): string {
   const tones = ["blue", "teal", "violet", "amber", "slate"];
   return tones[index % tones.length] ?? "blue";
+}
+
+const customZoneKinds: CustomZoneKind[] = ["mission", "ownership", "risk", "handoff", "blocked", "agent"];
+
+function readCustomZoneKind(value: unknown): CustomZoneKind {
+  return customZoneKinds.includes(value as CustomZoneKind) ? value as CustomZoneKind : "mission";
+}
+
+function nextCustomZoneKind(kind: CustomZoneKind): CustomZoneKind {
+  const index = customZoneKinds.indexOf(kind);
+  return customZoneKinds[(index + 1) % customZoneKinds.length] ?? "mission";
+}
+
+function customZoneKindLabel(kind: CustomZoneKind): string {
+  switch (kind) {
+    case "ownership": return "Ownership zone";
+    case "risk": return "Risk zone";
+    case "handoff": return "Handoff zone";
+    case "blocked": return "Do-not-touch zone";
+    case "agent": return "Agent lane";
+    default: return "Mission zone";
+  }
 }
 
 function readNodePosition(nodePositions: NodePositionMap, nodeId: string, fallback: { x: number; y: number }): { x: number; y: number } {
@@ -3637,6 +3677,7 @@ function readStoredLayoutCustomZones(scope: string): CustomCanvasZone[] {
       return [{
         height: clamp(Math.round(candidate.height), 120, 680),
         id: candidate.id,
+        kind: readCustomZoneKind(candidate.kind),
         label: candidate.label.slice(0, 48),
         tone: candidate.tone,
         width: clamp(Math.round(candidate.width), 180, 900),
