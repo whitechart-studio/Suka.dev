@@ -337,7 +337,6 @@ type AppSettings = {
 };
 
 type RightRailView = "truth" | "inspect" | "risk" | "activity";
-type PanelDockPreset = "context" | "agents" | "radar" | "canvas" | "focus";
 
 const defaultSettings: AppSettings = {
   theme: "dark",
@@ -1061,27 +1060,6 @@ function Dashboard(): React.ReactElement {
     window.setTimeout(() => fitView({ duration: 180, padding: 0.18 }), 0);
   }, [customZones, fitView, layoutScope]);
 
-  const applyPanelDockPreset = useCallback((preset: PanelDockPreset) => {
-    setFocusMode(preset === "focus");
-    setLeftOpen(preset === "context" || preset === "agents");
-    setRightOpen(preset === "context" || preset === "radar");
-    if (preset === "context") {
-      setLeftRailWidth(DEFAULT_LEFT_RAIL_WIDTH);
-      setRightRailWidth(DEFAULT_RIGHT_RAIL_WIDTH);
-    }
-    window.setTimeout(() => fitView({ duration: 180, padding: preset === "focus" || preset === "canvas" ? 0.18 : 0.12 }), 0);
-  }, [fitView]);
-
-  const activePanelDockPreset: PanelDockPreset = focusMode
-    ? "focus"
-    : !leftOpen && !rightOpen
-      ? "canvas"
-      : leftOpen && !rightOpen
-        ? "agents"
-        : !leftOpen && rightOpen
-          ? "radar"
-          : "context";
-
   const shellClass = [
     "app-shell",
     !leftOpen ? "left-collapsed" : "",
@@ -1168,10 +1146,6 @@ function Dashboard(): React.ReactElement {
             onSelectFolder={() => void selectProjectFolder()}
             onStart={() => void startProjectTracking()}
             onStop={() => void stopProjectTracking()}
-          />
-          <PanelDockPresets
-            active={activePanelDockPreset}
-            onSelect={applyPanelDockPreset}
           />
           <button aria-label="Open team connection panel" className="top-icon-action labeled-action" title="Team" type="button" onClick={toggleTeamPanel}>
             <Link2 size={14} />
@@ -1351,7 +1325,7 @@ function Dashboard(): React.ReactElement {
                 <option value="risk-control">Risk control</option>
                 <option value="handoff-board">Handoff board</option>
               </select>
-              <button aria-label="Reset canvas zones and arrangement" title="Reset canvas zones and arrangement" type="button" onClick={resetCanvasArrangement}><RefreshCw size={14} />Reset</button>
+              <button aria-label="Reset canvas zones and arrangement" title="Reset canvas zones and arrangement" type="button" onClick={resetCanvasArrangement}><RefreshCw size={14} />Reset Canvas</button>
               <button
                 aria-label="Focus risk"
                 title="Focus risk"
@@ -1446,40 +1420,6 @@ function Dashboard(): React.ReactElement {
           ) : <CompactRisk count={riskCount} />}
         </aside>
       </main>
-    </div>
-  );
-}
-
-function PanelDockPresets({
-  active,
-  onSelect
-}: {
-  active: PanelDockPreset;
-  onSelect(preset: PanelDockPreset): void;
-}): React.ReactElement {
-  const presets: Array<{ icon: React.ReactNode; label: string; preset: PanelDockPreset }> = [
-    { icon: <Waypoints size={13} />, label: "Context panels", preset: "context" },
-    { icon: <PanelLeftOpen size={13} />, label: "Agents panel", preset: "agents" },
-    { icon: <PanelRightOpen size={13} />, label: "Radar panel", preset: "radar" },
-    { icon: <Maximize2 size={13} />, label: "Canvas only", preset: "canvas" },
-    { icon: <Minimize2 size={13} />, label: "Focus canvas", preset: "focus" }
-  ];
-
-  return (
-    <div className="panel-dock-presets" aria-label="Workspace panel dock presets" role="group">
-      {presets.map((item) => (
-        <button
-          aria-label={item.label}
-          aria-pressed={active === item.preset}
-          className={active === item.preset ? "active" : ""}
-          key={item.preset}
-          title={item.label}
-          type="button"
-          onClick={() => onSelect(item.preset)}
-        >
-          {item.icon}
-        </button>
-      ))}
     </div>
   );
 }
@@ -2268,7 +2208,7 @@ function SettingsPanel({
           </div>
           <button className="settings-reset-btn" type="button" onClick={onResetLayout}>
             <RefreshCw size={12} />
-            Reset
+            Reset Layout
           </button>
         </div>
       </div>
@@ -3298,7 +3238,6 @@ function buildFlow(
     domain.id,
     readNodePosition(nodePositions, domain.id, { x: domain.x, y: domain.y })
   ]));
-  const missionZones = buildMissionZones(model, domainPositions);
   const nodes: Node[] = [
     ...customZones.map((zone) => ({
       data: {
@@ -3327,24 +3266,6 @@ function buildFlow(
       },
       type: "zone",
       zIndex: 1
-    })),
-    ...missionZones.map((zone) => ({
-      data: {
-        custom: false,
-        count: zone.count,
-        label: zone.label,
-        tone: zone.tone
-      },
-      draggable: false,
-      id: zone.id,
-      position: zone.position,
-      selectable: false,
-      style: {
-        height: zone.height,
-        width: zone.width
-      },
-      type: "zone",
-      zIndex: 0
     })),
     ...model.map((domain) => ({
       id: domain.id,
@@ -3414,67 +3335,6 @@ function buildFlow(
   ];
 
   return { edges, nodes };
-}
-
-function buildMissionZones(model: DomainModel[], domainPositions: Map<string, { x: number; y: number }>): Array<{
-  count: number;
-  height: number;
-  id: string;
-  label: string;
-  position: { x: number; y: number };
-  tone: string;
-  width: number;
-}> {
-  const groups = new Map<string, DomainModel[]>();
-  for (const domain of model) {
-    const key = missionZoneKey(domain);
-    groups.set(key, [...(groups.get(key) ?? []), domain]);
-  }
-
-  return [...groups.entries()].map(([key, domains], index) => {
-    const bounds = zoneBounds(domains, domainPositions);
-    return {
-      count: domains.length,
-      height: bounds.height,
-      id: `zone:${key}`,
-      label: missionZoneLabel(key),
-      position: bounds.position,
-      tone: missionZoneTone(index),
-      width: bounds.width
-    };
-  }).sort((left, right) => left.label.localeCompare(right.label));
-}
-
-function zoneBounds(domains: DomainModel[], domainPositions: Map<string, { x: number; y: number }>): {
-  height: number;
-  position: { x: number; y: number };
-  width: number;
-} {
-  const marginX = 42;
-  const marginTop = 48;
-  const marginBottom = 34;
-  const nodeWidth = 136;
-  const nodeHeight = 82;
-  const positions = domains.map((domain) => domainPositions.get(domain.id) ?? { x: domain.x, y: domain.y });
-  const minX = Math.min(...positions.map((position) => position.x));
-  const minY = Math.min(...positions.map((position) => position.y));
-  const maxX = Math.max(...positions.map((position) => position.x + nodeWidth));
-  const maxY = Math.max(...positions.map((position) => position.y + nodeHeight));
-  return {
-    height: Math.max(138, maxY - minY + marginTop + marginBottom),
-    position: { x: minX - marginX, y: minY - marginTop },
-    width: Math.max(220, maxX - minX + marginX * 2)
-  };
-}
-
-function missionZoneKey(domain: Domain): string {
-  if (domain.kind && domain.kind.length > 0) return domain.kind;
-  const path = domain.path ?? domain.id;
-  return path.split(/[\\/]/).filter(Boolean)[0] ?? "workspace";
-}
-
-function missionZoneLabel(key: string): string {
-  return key.split(/[-_\s]/).filter(Boolean).map((part) => part[0]?.toUpperCase() + part.slice(1)).join(" ") || "Workspace";
 }
 
 function missionZoneTone(index: number): string {
@@ -3817,7 +3677,7 @@ function buildWorkspaceReadiness(input: {
   if (input.activeAgents > 0 && input.briefs > 0) return { label: "Ready for handoff", tone: "live" };
   if (input.activeAgents > 0) return { label: "Agents active, brief pending", tone: "risk" };
   if (input.tracking) return { label: "Tracking workspace", tone: "neutral" };
-  return { label: "Start tracking", tone: "neutral" };
+  return { label: "Idle workspace", tone: "neutral" };
 }
 
 function stateColor(domain: DomainModel): string {
