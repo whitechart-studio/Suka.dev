@@ -1,6 +1,6 @@
 # Suka.dev
 
-**Realtime coordination infrastructure for teams running multiple AI coding agents in the same codebase.**
+**Live handoff and coordination infrastructure for teams running multiple AI coding agents in the same codebase.**
 
 [![PR Gate](https://github.com/whitechart-studio/Suka.dev/actions/workflows/pr-gate.yml/badge.svg)](https://github.com/whitechart-studio/Suka.dev/actions/workflows/pr-gate.yml)
 [![CI/CD](https://github.com/whitechart-studio/Suka.dev/actions/workflows/main-ci-cd.yml/badge.svg)](https://github.com/whitechart-studio/Suka.dev/actions/workflows/main-ci-cd.yml)
@@ -10,21 +10,29 @@
 
 ![Suka.dev social preview](docs/assets/social-preview.png)
 
-Suka.dev is a local-first coordination layer for agentic software teams. It gives humans and AI coding agents a shared live room for presence, claims, conflict signals, repository domains, and accepted engineering decisions before parallel work collides.
+Suka.dev is a local-first coordination layer for agentic software teams. It gives humans, Codex, Claude Code, and future coding agents a shared live room for presence, ownership boundaries, conflict signals, repository domains, handoff briefs, and accepted engineering decisions before parallel work collides.
 
-It is not an AI code generator. It is the coordination plane around your coding agents.
+It is not an AI code generator. It is the operating layer around your coding agents: worktrees isolate code; Suka coordinates context, ownership, and intent.
 
 ## Product Preview
 
 ![Suka Operations Canvas](docs/assets/dashboard-canvas.png)
 
-The dashboard is designed around a canvas mental model: agents and domains are visible at the same time, claimed work is color-coded, and conflict signals stay close to the repository areas they affect.
+The dashboard is designed around a mission-control canvas. Agents, repository domains, claims, briefs, risks, and accepted decisions are visible together. The top bar tracks the active repo, the canvas shows the repo domain map, and the Current Truth rail answers what the next agent needs to know before touching code.
 
 ## Why This Exists
 
 AI-assisted engineering is becoming parallel. Codex may be editing a server route while Claude Code reviews the UI path that depends on it. Another agent may add tests, another may touch schema, and a human maintainer still needs to understand the operational state of the repository.
 
 Git shows what changed after the fact. Chat explains intent to humans. Suka gives agents and developers structured coordination data while the work is happening.
+
+## Current Workflow
+
+1. Start Suka locally or self-host it for a team.
+2. Open the dashboard and select a repository from the top `track repo` control.
+3. Let Suka detect local Codex and Claude Code sessions that are scoped to that repo.
+4. Publish explicit presence, claims, do-not-touch scopes, events, decisions, and handoff briefs from agents or scripts.
+5. Use Current Truth before starting work: who is active, what is owned, what changed recently, what is risky, and what the next agent should do.
 
 ## What Suka Coordinates
 
@@ -36,17 +44,23 @@ Git shows what changed after the fact. Chat explains intent to humans. Suka give
 | Conflicts | What work may collide? | API, path, domain, table, or env overlap |
 | Decisions | What should future agents remember? | Cleanup must be scoped by workspace, repo, or session |
 | Briefs | What should the next agent know? | Changed files, decisions, assumptions, risks, and next action |
+| Projects | Which repo is Suka tracking? | `/Users/team/work/suka` is the active local workspace |
+| Zones | How should the canvas be organized? | A user-created handoff zone groups backend risk and owner notes |
 
 Claims are advisory, not locks. Suka warns about risk without taking control away from developers.
 
 ## Core Capabilities
 
-- Realtime dashboard for active agents, claims, events, and decisions.
+- Realtime operations canvas for active agents, repo domains, claims, events, briefs, decisions, and risk signals.
+- Topbar repo tracking with recent folders, native folder selection, and live local-agent detection.
+- Current Truth rail for readiness, handoff briefs, ownership, recent changes, accepted decisions, and risky-to-touch areas.
+- Custom canvas zones so teams can organize the map around their own mental model.
 - Typed protocol for presence, claims, events, decisions, briefs, and project configuration.
 - Deterministic conflict engine for paths, APIs, domains, tables, and environment keys.
 - Local HTTP/WebSocket server with in-memory or file-backed persistence.
 - CLI for serving, publishing, checking conflicts, writing briefs, reminders, releasing claims, and scoped cleanup.
 - Scoped coordination context with `workspace_id`, `repo_id`, and `session_id`.
+- Local detection adapters for repo-scoped Codex and Claude Code activity.
 - Self-hostable foundation with Docker and CI gates.
 - Privacy-first posture: metadata over prompts, transcripts, code content, or raw terminal logs.
 
@@ -70,6 +84,8 @@ Open:
 ```text
 http://127.0.0.1:4366
 ```
+
+In the dashboard, use `track repo` in the top bar to select the repository you want Suka to watch. The UI supports a native folder picker where the local bridge is available, recent folders, and a manual path fallback.
 
 Run the verification gate:
 
@@ -138,7 +154,7 @@ node packages/cli/dist/bin.js agents detect \
   --publish
 ```
 
-Keep detected local agents visible while both tools are working:
+Keep detected local agents visible while both tools are working in that repo:
 
 ```bash
 node packages/cli/dist/bin.js agents watch \
@@ -210,6 +226,14 @@ node packages/cli/dist/bin.js brief write "Finished scoped cleanup API" \
   --next "Review dashboard Current Truth panel"
 ```
 
+Read the latest handoff for the current session:
+
+```bash
+node packages/cli/dist/bin.js brief read \
+  --server http://127.0.0.1:4366 \
+  --session current
+```
+
 View the connected team:
 
 ```bash
@@ -255,7 +279,8 @@ Packages:
 | `@suka/conflict-engine` | Deterministic conflict checks |
 | `@suka/server` | HTTP API, WebSocket realtime, persistence, cleanup |
 | `@suka/cli` | Developer and agent command-line interface |
-| `@suka/dashboard` | Operations canvas and realtime UI |
+| `@suka/local-agents` | Repo-scoped local process detection |
+| `@suka/dashboard` | Operations canvas, Current Truth rail, project tracking UI |
 
 ## Privacy Model
 
@@ -290,7 +315,7 @@ Suka is being built for:
 
 ## Project Status
 
-Suka.dev is pre-release infrastructure. The core protocol, conflict engine, server, CLI, dashboard, PR gates, and scoped cleanup foundation are in active development.
+Suka.dev is pre-release infrastructure. The protocol, conflict engine, server, CLI, dashboard, local-agent detection, project tracking, PR gates, and scoped cleanup foundation are in active development.
 
 No stable release is available yet.
 
