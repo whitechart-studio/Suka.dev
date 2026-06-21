@@ -1153,16 +1153,6 @@ function Dashboard(): React.ReactElement {
             <Link2 size={14} />
             <span>Team</span>
           </button>
-          <button
-            aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"}
-            className="top-icon-action labeled-action"
-            title={focusMode ? "Exit focus mode" : "Enter focus mode"}
-            type="button"
-            onClick={() => setFocusMode((value) => !value)}
-          >
-            {focusMode ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-            <span>{focusMode ? "Exit focus" : "Focus"}</span>
-          </button>
           <button aria-label="Refresh state" className="top-icon-action" title="Refresh state" type="button" onClick={() => void loadState()}>
             <RefreshCw size={14} />
           </button>
@@ -1310,6 +1300,15 @@ function Dashboard(): React.ReactElement {
               <button aria-label="Zoom in" title="Zoom in" type="button" onClick={() => zoomIn({ duration: 160 })}><ZoomIn size={14} />In</button>
               <button aria-label="Fit graph" title="Fit graph" type="button" onClick={() => fitView({ duration: 200, padding: 0.16 })}><Scan size={14} />Fit</button>
               <button aria-label="Focus local neighborhood" title="Focus local neighborhood" type="button" onClick={() => fitView({ duration: 220, nodes: localFocusNodes(nodes, edges, selectedNodeId), padding: 0.28 })}><Orbit size={14} />Local</button>
+              <button
+                aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"}
+                title={focusMode ? "Exit focus mode" : "Enter focus mode"}
+                type="button"
+                onClick={() => setFocusMode((value) => !value)}
+              >
+                {focusMode ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                {focusMode ? "Exit Focus" : "Focus"}
+              </button>
               <button aria-label="Create mission zone" title="Create mission zone" type="button" onClick={createCustomZone}><Plus size={14} />Zone</button>
               <select
                 aria-label="Apply canvas template"
