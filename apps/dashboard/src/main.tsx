@@ -283,6 +283,11 @@ type HandoffZoneSignal = {
   tone: "ready" | "stale" | "missing";
 };
 
+type WorkspaceReadiness = {
+  label: string;
+  tone: "live" | "risk" | "neutral";
+};
+
 type SessionRoom = {
   id: string;
   workspace_id: string;
@@ -332,7 +337,6 @@ type AppSettings = {
 };
 
 type RightRailView = "truth" | "inspect" | "risk" | "activity";
-type PanelDockPreset = "context" | "agents" | "radar" | "canvas" | "focus";
 
 const defaultSettings: AppSettings = {
   theme: "dark",
@@ -1050,27 +1054,6 @@ function Dashboard(): React.ReactElement {
     window.setTimeout(() => fitView({ duration: 180, padding: 0.18 }), 0);
   }, [customZones, fitView, layoutScope]);
 
-  const applyPanelDockPreset = useCallback((preset: PanelDockPreset) => {
-    setFocusMode(preset === "focus");
-    setLeftOpen(preset === "context" || preset === "agents");
-    setRightOpen(preset === "context" || preset === "radar");
-    if (preset === "context") {
-      setLeftRailWidth(DEFAULT_LEFT_RAIL_WIDTH);
-      setRightRailWidth(DEFAULT_RIGHT_RAIL_WIDTH);
-    }
-    window.setTimeout(() => fitView({ duration: 180, padding: preset === "focus" || preset === "canvas" ? 0.18 : 0.12 }), 0);
-  }, [fitView]);
-
-  const activePanelDockPreset: PanelDockPreset = focusMode
-    ? "focus"
-    : !leftOpen && !rightOpen
-      ? "canvas"
-      : leftOpen && !rightOpen
-        ? "agents"
-        : !leftOpen && rightOpen
-          ? "radar"
-          : "context";
-
   const shellClass = [
     "app-shell",
     !leftOpen ? "left-collapsed" : "",
@@ -1079,7 +1062,8 @@ function Dashboard(): React.ReactElement {
   ].filter(Boolean).join(" ");
   const shellStyle = {
     "--left-rail-width": `${leftRailWidth}px`,
-    "--right-rail-width": `${rightRailWidth}px`
+    "--right-rail-width": `${rightRailWidth}px`,
+    "--tracking-popover-right": rightOpen && !focusMode ? `${rightRailWidth + 20}px` : "12px"
   } as React.CSSProperties;
 
   if (showWelcome) {
@@ -1115,16 +1099,22 @@ function Dashboard(): React.ReactElement {
   }
 
   return (
-    <div className="suka-app" data-theme={settings.theme} data-density={settings.density}>
+    <div className="suka-app" data-theme={settings.theme} data-density={settings.density} style={shellStyle}>
       <header className="topbar">
         <div className="brand">
           <button aria-label="Back to landing" className="back-btn" type="button" onClick={exitToLanding}>
             <ArrowLeft size={15} />
           </button>
           <div className="brand-mark"><Waypoints size={15} /></div>
-          <div>
-            <h1>Suka Operations Canvas</h1>
-            <p>Realtime coordination for agentic work</p>
+          <div className="workspace-title">
+            <h1>
+              {displayName(activeProject?.name ?? repoMap.root ?? "workspace")}
+              <span className={`connection-dot ${status === "connected" ? "live" : status === "error" ? "error" : "neutral"}`} title={`Server ${status}`}>
+                <i className={`status-dot ${status === "connected" ? "live" : status === "error" ? "error" : "neutral"}`} />
+                <span>{status}</span>
+              </span>
+            </h1>
+            <p>{activeProject?.repo_root ?? "Local workspace"}</p>
           </div>
         </div>
         <div className="top-actions">
@@ -1135,7 +1125,6 @@ function Dashboard(): React.ReactElement {
           {activeSession !== undefined ? (
             <Badge tone="info" icon={<RadioTower size={12} />}>{activeSession.session_id}</Badge>
           ) : null}
-          <Badge tone={status === "connected" ? "live" : status === "error" ? "fail" : "neutral"} icon={<i className={`status-dot ${status === "connected" ? "live" : status === "error" ? "error" : "neutral"}`} />}>{status}</Badge>
           <ProjectTrackingControl
             activeProject={activeProject}
             busy={trackingBusy}
@@ -1149,25 +1138,17 @@ function Dashboard(): React.ReactElement {
             onStart={() => void startProjectTracking()}
             onStop={() => void stopProjectTracking()}
           />
-          <PanelDockPresets
-            active={activePanelDockPreset}
-            onSelect={applyPanelDockPreset}
-          />
-          <button aria-label="Open team connection panel" type="button" onClick={toggleTeamPanel}>
+          <button aria-label="Open team connection panel" className="top-action top-action-labeled" title="Team" type="button" onClick={toggleTeamPanel}>
             <Link2 size={14} />
-            Team
+            <span>Team</span>
           </button>
-          <button aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"} type="button" onClick={() => setFocusMode((value) => !value)}>
-            {focusMode ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-            {focusMode ? "Exit focus" : "Focus"}
-          </button>
-          <button aria-label="Refresh state" type="button" onClick={() => void loadState()}>
+          <button aria-label="Refresh state" className="top-action" title="Refresh state" type="button" onClick={() => void loadState()}>
             <RefreshCw size={14} />
           </button>
           <button
             aria-expanded={docsOpen}
             aria-label="Open docs"
-            className="docs-btn"
+            className="top-action"
             title="Docs (?)"
             type="button"
             onClick={() => setDocsOpen(v => !v)}
@@ -1177,7 +1158,7 @@ function Dashboard(): React.ReactElement {
           <button
             aria-expanded={settingsOpen}
             aria-label="Open settings"
-            className="settings-btn"
+            className="top-action settings-action"
             type="button"
             onClick={() => setSettingsOpen(true)}
           >
@@ -1308,6 +1289,15 @@ function Dashboard(): React.ReactElement {
               <button aria-label="Zoom in" title="Zoom in" type="button" onClick={() => zoomIn({ duration: 160 })}><ZoomIn size={14} />In</button>
               <button aria-label="Fit graph" title="Fit graph" type="button" onClick={() => fitView({ duration: 200, padding: 0.16 })}><Scan size={14} />Fit</button>
               <button aria-label="Focus local neighborhood" title="Focus local neighborhood" type="button" onClick={() => fitView({ duration: 220, nodes: localFocusNodes(nodes, edges, selectedNodeId), padding: 0.28 })}><Orbit size={14} />Local</button>
+              <button
+                aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"}
+                title={focusMode ? "Exit focus mode" : "Enter focus mode"}
+                type="button"
+                onClick={() => setFocusMode((value) => !value)}
+              >
+                {focusMode ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                {focusMode ? "Exit Focus" : "Focus"}
+              </button>
               <button aria-label="Create mission zone" title="Create mission zone" type="button" onClick={createCustomZone}><Plus size={14} />Zone</button>
               <select
                 aria-label="Apply canvas template"
@@ -1325,7 +1315,7 @@ function Dashboard(): React.ReactElement {
                 <option value="risk-control">Risk control</option>
                 <option value="handoff-board">Handoff board</option>
               </select>
-              <button aria-label="Reset canvas zones and arrangement" title="Reset canvas zones and arrangement" type="button" onClick={resetCanvasArrangement}><RefreshCw size={14} />Reset</button>
+              <button aria-label="Reset canvas zones and arrangement" title="Reset canvas zones and arrangement" type="button" onClick={resetCanvasArrangement}><RefreshCw size={14} />Reset Canvas</button>
               <button
                 aria-label="Focus risk"
                 title="Focus risk"
@@ -1366,7 +1356,7 @@ function Dashboard(): React.ReactElement {
             icon={<Gauge size={14} />}
             onToggle={() => setRightOpen((value) => !value)}
             open={rightOpen}
-            title="Radar"
+            title="Current Truth"
             toggleIcon={rightOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
             tone="risk"
           />
@@ -1420,40 +1410,6 @@ function Dashboard(): React.ReactElement {
           ) : <CompactRisk count={riskCount} />}
         </aside>
       </main>
-    </div>
-  );
-}
-
-function PanelDockPresets({
-  active,
-  onSelect
-}: {
-  active: PanelDockPreset;
-  onSelect(preset: PanelDockPreset): void;
-}): React.ReactElement {
-  const presets: Array<{ icon: React.ReactNode; label: string; preset: PanelDockPreset }> = [
-    { icon: <Waypoints size={13} />, label: "Context panels", preset: "context" },
-    { icon: <PanelLeftOpen size={13} />, label: "Agents panel", preset: "agents" },
-    { icon: <PanelRightOpen size={13} />, label: "Radar panel", preset: "radar" },
-    { icon: <Maximize2 size={13} />, label: "Canvas only", preset: "canvas" },
-    { icon: <Minimize2 size={13} />, label: "Focus canvas", preset: "focus" }
-  ];
-
-  return (
-    <div className="panel-dock-presets" aria-label="Workspace panel dock presets" role="group">
-      {presets.map((item) => (
-        <button
-          aria-label={item.label}
-          aria-pressed={active === item.preset}
-          className={active === item.preset ? "active" : ""}
-          key={item.preset}
-          title={item.label}
-          type="button"
-          onClick={() => onSelect(item.preset)}
-        >
-          {item.icon}
-        </button>
-      ))}
     </div>
   );
 }
@@ -2242,7 +2198,7 @@ function SettingsPanel({
           </div>
           <button className="settings-reset-btn" type="button" onClick={onResetLayout}>
             <RefreshCw size={12} />
-            Reset
+            Reset Layout
           </button>
         </div>
       </div>
@@ -2459,7 +2415,7 @@ function ProjectTrackingControl({
         type="button"
         onClick={() => setOpen((value) => !value)}
       >
-        <RadioTower size={14} />
+        <GitBranch size={14} />
         <span>{label}</span>
       </button>
       {open ? (
@@ -2571,17 +2527,23 @@ function AgentCard({ agent }: { agent: PresencePointer }): React.ReactElement {
   const Icon = identity.icon;
   const source = agentSourceLabel(agent);
   const color = agentColor(agent.agent_id);
+  const stale = isPresenceStale(agent);
+  const seen = agent.last_seen ? relativeTime(agent.last_seen) : "live now";
   return (
-    <article className="agent-card" style={{ "--agent-color": color } as React.CSSProperties}>
+    <article className={`agent-card ${stale ? "stale" : "live"}`} style={{ "--agent-color": color } as React.CSSProperties}>
       <div className="agent-card-band">
         <span className="agent-avatar solid"><Icon size={14} /></span>
         <div className="agent-identity">
           <h3>{agent.agent_id}</h3>
           <p>{identity.label} / {source}</p>
         </div>
-        <span className="agent-status-pill"><Activity size={12} />{agent.status}</span>
+        <span className="agent-status-pill"><Activity size={12} />{stale ? "stale" : agent.status}</span>
       </div>
       <div className="agent-card-body">
+        <div className="agent-card-signal">
+          <span><Timer size={12} />{seen}</span>
+          <span><HardDrive size={12} />{agent.source?.cwd ? "repo scoped" : source}</span>
+        </div>
         <div className="agent-meta-row">
           <span><GitBranch size={12} />{truncate(agent.branch ?? "none", 22)}</span>
           <span><Route size={12} />{agent.current_files?.length ?? 0} files</span>
@@ -2623,10 +2585,10 @@ function RadarSummary({
   return (
     <div className={`radar-summary ${mode}`}>
       <div className="radar-summary-main">
-        <span><Gauge size={13} />workspace radar</span>
-        <strong>{riskCount > 0 ? `${riskCount} items need attention` : activeAgents > 0 ? "Live workspace signal" : "Ready for tracking"}</strong>
+        <span><Gauge size={13} />current truth</span>
+        <strong>{riskCount > 0 ? `${riskCount} items need attention` : activeAgents > 0 ? "Live workspace signal" : "No live agents"}</strong>
       </div>
-      <div className="radar-summary-metrics" aria-label="Radar summary metrics">
+      <div className="radar-summary-metrics" aria-label="Current truth summary metrics">
         <span><Users size={12} />{activeAgents}</span>
         <span><ClipboardList size={12} />{truthCount}</span>
         <span><RadioTower size={12} />{activityCount}</span>
@@ -2656,7 +2618,7 @@ function RightRailTabs({
   ];
 
   return (
-    <div className="right-tabs" role="tablist" aria-label="Radar panels">
+    <div className="right-tabs" role="tablist" aria-label="Current truth panels">
       {tabs.map((tab) => (
         <button
           aria-selected={selected === tab.view}
@@ -2698,15 +2660,27 @@ function CurrentTruthPanel({
   const staleSignals = recentEvents
     .filter((event) => hasCriticalScope(event) || event.event_type.includes("failed"))
     .slice(0, 3);
+  const riskSignalCount = insights.length + activeBlockers.length + staleSignals.length;
+  const readiness = buildWorkspaceReadiness({
+    activeAgents,
+    briefs: briefs.length,
+    risks: riskSignalCount,
+    tracking: activeAgents > 0
+  });
 
   return (
     <section className="rail-section truth-section">
       <div className="section-title">
         <h2><ClipboardList size={14} /> Current Truth</h2>
-        <Badge tone={insights.length > 0 || activeBlockers.length > 0 ? "risk" : "live"} icon={<Gauge size={13} />}>
-          {insights.length + activeBlockers.length} risks
+        <Badge tone={riskSignalCount > 0 ? "risk" : "live"} icon={<Gauge size={13} />}>
+          {riskSignalCount} risks
         </Badge>
       </div>
+      <article className={`truth-command-card ${readiness.tone}`}>
+        <span><Gauge size={13} />workspace readiness</span>
+        <strong>{readiness.label}</strong>
+        <p>{activeAgents > 0 ? "Agents are broadcasting live context for this workspace." : "Start tracking or join a session to populate live agent context."}</p>
+      </article>
       <div className="truth-grid">
         <TruthStat label="agents" value={activeAgents} />
         <TruthStat label="owners" value={ownerCount} />
@@ -3224,7 +3198,6 @@ function buildFlow(
     domain.id,
     readNodePosition(nodePositions, domain.id, { x: domain.x, y: domain.y })
   ]));
-  const missionZones = buildMissionZones(model, domainPositions);
   const nodes: Node[] = [
     ...customZones.map((zone) => ({
       data: {
@@ -3253,24 +3226,6 @@ function buildFlow(
       },
       type: "zone",
       zIndex: 1
-    })),
-    ...missionZones.map((zone) => ({
-      data: {
-        custom: false,
-        count: zone.count,
-        label: zone.label,
-        tone: zone.tone
-      },
-      draggable: false,
-      id: zone.id,
-      position: zone.position,
-      selectable: false,
-      style: {
-        height: zone.height,
-        width: zone.width
-      },
-      type: "zone",
-      zIndex: 0
     })),
     ...model.map((domain) => ({
       id: domain.id,
@@ -3340,67 +3295,6 @@ function buildFlow(
   ];
 
   return { edges, nodes };
-}
-
-function buildMissionZones(model: DomainModel[], domainPositions: Map<string, { x: number; y: number }>): Array<{
-  count: number;
-  height: number;
-  id: string;
-  label: string;
-  position: { x: number; y: number };
-  tone: string;
-  width: number;
-}> {
-  const groups = new Map<string, DomainModel[]>();
-  for (const domain of model) {
-    const key = missionZoneKey(domain);
-    groups.set(key, [...(groups.get(key) ?? []), domain]);
-  }
-
-  return [...groups.entries()].map(([key, domains], index) => {
-    const bounds = zoneBounds(domains, domainPositions);
-    return {
-      count: domains.length,
-      height: bounds.height,
-      id: `zone:${key}`,
-      label: missionZoneLabel(key),
-      position: bounds.position,
-      tone: missionZoneTone(index),
-      width: bounds.width
-    };
-  }).sort((left, right) => left.label.localeCompare(right.label));
-}
-
-function zoneBounds(domains: DomainModel[], domainPositions: Map<string, { x: number; y: number }>): {
-  height: number;
-  position: { x: number; y: number };
-  width: number;
-} {
-  const marginX = 42;
-  const marginTop = 48;
-  const marginBottom = 34;
-  const nodeWidth = 136;
-  const nodeHeight = 82;
-  const positions = domains.map((domain) => domainPositions.get(domain.id) ?? { x: domain.x, y: domain.y });
-  const minX = Math.min(...positions.map((position) => position.x));
-  const minY = Math.min(...positions.map((position) => position.y));
-  const maxX = Math.max(...positions.map((position) => position.x + nodeWidth));
-  const maxY = Math.max(...positions.map((position) => position.y + nodeHeight));
-  return {
-    height: Math.max(138, maxY - minY + marginTop + marginBottom),
-    position: { x: minX - marginX, y: minY - marginTop },
-    width: Math.max(220, maxX - minX + marginX * 2)
-  };
-}
-
-function missionZoneKey(domain: Domain): string {
-  if (domain.kind && domain.kind.length > 0) return domain.kind;
-  const path = domain.path ?? domain.id;
-  return path.split(/[\\/]/).filter(Boolean)[0] ?? "workspace";
-}
-
-function missionZoneLabel(key: string): string {
-  return key.split(/[-_\s]/).filter(Boolean).map((part) => part[0]?.toUpperCase() + part.slice(1)).join(" ") || "Workspace";
 }
 
 function missionZoneTone(index: number): string {
@@ -3731,6 +3625,19 @@ function domainState(domain: DomainModel): string {
   if (domain.presence.length > 0) return "active";
   if (domain.decisions.length > 0) return "decision";
   return "clear";
+}
+
+function buildWorkspaceReadiness(input: {
+  activeAgents: number;
+  briefs: number;
+  risks: number;
+  tracking: boolean;
+}): WorkspaceReadiness {
+  if (input.risks > 0) return { label: `${input.risks} items need attention`, tone: "risk" };
+  if (input.activeAgents > 0 && input.briefs > 0) return { label: "Ready for handoff", tone: "live" };
+  if (input.activeAgents > 0) return { label: "Agents active, brief pending", tone: "risk" };
+  if (input.tracking) return { label: "Tracking workspace", tone: "neutral" };
+  return { label: "No live agents", tone: "neutral" };
 }
 
 function stateColor(domain: DomainModel): string {
