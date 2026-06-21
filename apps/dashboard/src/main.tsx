@@ -1112,9 +1112,8 @@ function Dashboard(): React.ReactElement {
           </button>
           <div className="brand-mark"><Waypoints size={15} /></div>
           <div className="workspace-title">
-            <span>Operations Canvas</span>
             <h1>{displayName(activeProject?.name ?? repoMap.root ?? "workspace")}</h1>
-            <p>{activeProject?.repo_root ?? repoMap.root ?? "Realtime coordination for agentic work"}</p>
+            <p>{activeProject?.repo_root ?? "Local workspace"}</p>
           </div>
         </div>
         <WorkspaceStatusHero
@@ -1133,7 +1132,10 @@ function Dashboard(): React.ReactElement {
           {activeSession !== undefined ? (
             <Badge tone="info" icon={<RadioTower size={12} />}>{activeSession.session_id}</Badge>
           ) : null}
-          <Badge tone={status === "connected" ? "live" : status === "error" ? "fail" : "neutral"} icon={<i className={`status-dot ${status === "connected" ? "live" : status === "error" ? "error" : "neutral"}`} />}>{status}</Badge>
+          <span className={`connection-dot ${status === "connected" ? "live" : status === "error" ? "error" : "neutral"}`} title={`Server ${status}`}>
+            <i className={`status-dot ${status === "connected" ? "live" : status === "error" ? "error" : "neutral"}`} />
+            <span>{status}</span>
+          </span>
           <ProjectTrackingControl
             activeProject={activeProject}
             busy={trackingBusy}
@@ -1366,7 +1368,7 @@ function Dashboard(): React.ReactElement {
             icon={<Gauge size={14} />}
             onToggle={() => setRightOpen((value) => !value)}
             open={rightOpen}
-            title="Radar"
+            title="Current Truth"
             toggleIcon={rightOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
             tone="risk"
           />
@@ -2626,10 +2628,10 @@ function RadarSummary({
   return (
     <div className={`radar-summary ${mode}`}>
       <div className="radar-summary-main">
-        <span><Gauge size={13} />workspace radar</span>
-        <strong>{riskCount > 0 ? `${riskCount} items need attention` : activeAgents > 0 ? "Live workspace signal" : "Ready for tracking"}</strong>
+        <span><Gauge size={13} />current truth</span>
+        <strong>{riskCount > 0 ? `${riskCount} items need attention` : activeAgents > 0 ? "Live workspace signal" : "Idle workspace"}</strong>
       </div>
-      <div className="radar-summary-metrics" aria-label="Radar summary metrics">
+      <div className="radar-summary-metrics" aria-label="Current truth summary metrics">
         <span><Users size={12} />{activeAgents}</span>
         <span><ClipboardList size={12} />{truthCount}</span>
         <span><RadioTower size={12} />{activityCount}</span>
@@ -2659,7 +2661,7 @@ function RightRailTabs({
   ];
 
   return (
-    <div className="right-tabs" role="tablist" aria-label="Radar panels">
+    <div className="right-tabs" role="tablist" aria-label="Current truth panels">
       {tabs.map((tab) => (
         <button
           aria-selected={selected === tab.view}
