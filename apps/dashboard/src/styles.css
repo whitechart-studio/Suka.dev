@@ -550,9 +550,12 @@ input::placeholder { color: var(--muted); }
 }
 
 .workspace-title h1 {
+  align-items: center;
   color: var(--ink);
+  display: flex;
   font-size: 13.5px;
   font-weight: 800;
+  gap: 6px;
   line-height: 1.1;
   margin: 0;
   overflow: hidden;
@@ -717,8 +720,8 @@ input::placeholder { color: var(--muted); }
   display: inline-flex;
   font-size: 0;
   justify-content: center;
-  min-height: 30px;
-  min-width: 22px;
+  min-height: 10px;
+  min-width: 10px;
 }
 
 .connection-dot span {
@@ -1412,17 +1415,11 @@ input::placeholder { color: var(--muted); }
 
 .status-dot.live {
   background: var(--teal);
-  box-shadow: 0 0 6px var(--teal);
-  animation: pulse-dot 2.4s ease-in-out infinite;
+  box-shadow: 0 0 5px rgba(45,212,191,0.65);
 }
 
 .status-dot.error { background: var(--rose); }
 .status-dot.neutral { background: var(--muted); }
-
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.6; transform: scale(0.8); }
-}
 
 /* ── Badges ─────────────────────────────────── */
 .badge {

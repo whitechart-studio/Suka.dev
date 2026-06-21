@@ -1112,7 +1112,13 @@ function Dashboard(): React.ReactElement {
           </button>
           <div className="brand-mark"><Waypoints size={15} /></div>
           <div className="workspace-title">
-            <h1>{displayName(activeProject?.name ?? repoMap.root ?? "workspace")}</h1>
+            <h1>
+              {displayName(activeProject?.name ?? repoMap.root ?? "workspace")}
+              <span className={`connection-dot ${status === "connected" ? "live" : status === "error" ? "error" : "neutral"}`} title={`Server ${status}`}>
+                <i className={`status-dot ${status === "connected" ? "live" : status === "error" ? "error" : "neutral"}`} />
+                <span>{status}</span>
+              </span>
+            </h1>
             <p>{activeProject?.repo_root ?? "Local workspace"}</p>
           </div>
         </div>
@@ -1132,10 +1138,6 @@ function Dashboard(): React.ReactElement {
           {activeSession !== undefined ? (
             <Badge tone="info" icon={<RadioTower size={12} />}>{activeSession.session_id}</Badge>
           ) : null}
-          <span className={`connection-dot ${status === "connected" ? "live" : status === "error" ? "error" : "neutral"}`} title={`Server ${status}`}>
-            <i className={`status-dot ${status === "connected" ? "live" : status === "error" ? "error" : "neutral"}`} />
-            <span>{status}</span>
-          </span>
           <ProjectTrackingControl
             activeProject={activeProject}
             busy={trackingBusy}
