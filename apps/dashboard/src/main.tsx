@@ -2660,10 +2660,11 @@ function CurrentTruthPanel({
   const staleSignals = recentEvents
     .filter((event) => hasCriticalScope(event) || event.event_type.includes("failed"))
     .slice(0, 3);
+  const riskSignalCount = insights.length + activeBlockers.length + staleSignals.length;
   const readiness = buildWorkspaceReadiness({
     activeAgents,
     briefs: briefs.length,
-    risks: insights.length + activeBlockers.length + staleSignals.length,
+    risks: riskSignalCount,
     tracking: activeAgents > 0
   });
 
@@ -2671,8 +2672,8 @@ function CurrentTruthPanel({
     <section className="rail-section truth-section">
       <div className="section-title">
         <h2><ClipboardList size={14} /> Current Truth</h2>
-        <Badge tone={insights.length > 0 || activeBlockers.length > 0 ? "risk" : "live"} icon={<Gauge size={13} />}>
-          {insights.length + activeBlockers.length} risks
+        <Badge tone={riskSignalCount > 0 ? "risk" : "live"} icon={<Gauge size={13} />}>
+          {riskSignalCount} risks
         </Badge>
       </div>
       <article className={`truth-command-card ${readiness.tone}`}>
