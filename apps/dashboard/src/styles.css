@@ -3711,6 +3711,34 @@ body.is-resizing-rail .rail-resize-handle::after {
   -webkit-line-clamp: 2;
 }
 
+.mission-zone-node.custom mark {
+  align-self: flex-start;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 4px 7px;
+  border: 1px solid rgba(96,165,250,0.24);
+  border-radius: 7px;
+  background: rgba(59,130,246,0.1);
+  color: #bfdbfe;
+  font-size: 0.64rem;
+  font-weight: 850;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mission-zone-node.handoff-missing mark {
+  border-color: rgba(244,63,94,0.28);
+  background: rgba(244,63,94,0.11);
+  color: #fda4af;
+}
+
+.mission-zone-node.handoff-stale mark {
+  border-color: rgba(245,158,11,0.3);
+  background: rgba(245,158,11,0.12);
+  color: #fbbf24;
+}
+
 .mission-zone-node.kind-ownership {
   background:
     linear-gradient(135deg, rgba(34,197,94,0.13), rgba(20,184,166,0.045)),
