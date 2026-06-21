@@ -2399,6 +2399,8 @@ function MissionZoneNode({ data }: any): React.ReactElement {
       {data.owner ? <em>{data.owner}</em> : null}
       {data.note ? <p>{data.note}</p> : null}
       {data.handoffSignal ? <mark>{data.handoffSignal.label}</mark> : null}
+      {data.handoffSignal?.summary ? <p className="handoff-brief-summary">{data.handoffSignal.summary}</p> : null}
+      {data.handoffSignal?.nextAction ? <small className="handoff-next-action">next: {data.handoffSignal.nextAction}</small> : null}
       <small>{data.custom ? `${data.kindLabel} / drag to organize` : `${data.count} areas`}</small>
     </div>
   );
@@ -3402,7 +3404,7 @@ function missionZoneTone(index: number): string {
 
 const customZoneKinds: CustomZoneKind[] = ["mission", "ownership", "risk", "handoff", "blocked", "agent"];
 
-function buildHandoffZoneSignal(briefs: BriefPointer[]): { label: string; tone: "ready" | "stale" | "missing" } {
+function buildHandoffZoneSignal(briefs: BriefPointer[]): { label: string; nextAction?: string; summary?: string; tone: "ready" | "stale" | "missing" } {
   const latestBrief = briefs
     .slice()
     .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))[0];
@@ -3411,9 +3413,19 @@ function buildHandoffZoneSignal(briefs: BriefPointer[]): { label: string; tone: 
   }
   const createdAt = Date.parse(latestBrief.created_at);
   if (!Number.isFinite(createdAt) || Date.now() - createdAt > 24 * 60 * 60 * 1000) {
-    return { label: "Brief may be stale", tone: "stale" };
+    return {
+      label: "Brief may be stale",
+      nextAction: truncate(latestBrief.next_action, 72),
+      summary: truncate(latestBrief.summary, 84),
+      tone: "stale"
+    };
   }
-  return { label: `Brief ready / ${relativeTime(latestBrief.created_at)}`, tone: "ready" };
+  return {
+    label: `Brief ready / ${relativeTime(latestBrief.created_at)}`,
+    nextAction: truncate(latestBrief.next_action, 72),
+    summary: truncate(latestBrief.summary, 84),
+    tone: "ready"
+  };
 }
 
 function buildCustomZoneTemplate(templateId: CanvasZoneTemplateId, seed: number): CustomCanvasZone[] {
