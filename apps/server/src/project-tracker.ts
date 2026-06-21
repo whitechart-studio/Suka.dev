@@ -159,6 +159,7 @@ function buildTrackedPresence(
   now: Date,
   ttlSeconds: number
 ): Record<string, unknown> {
+  const cwd = relativeProjectPath(project.repo_root, agent.cwd);
   return {
     type: "presence",
     id: createTrackedPresenceId(project, agent),
@@ -171,12 +172,12 @@ function buildTrackedPresence(
       kind: "detected",
       detector: agent.detection_source,
       pid: agent.pid,
-      cwd: relativeProjectPath(project.repo_root, agent.cwd),
+      cwd,
       detected_at: now.toISOString()
     },
     repo: project.repo,
     branch: agent.branch ?? project.branch,
-    task: "Detected local agent process",
+    task: `Detected ${agent.tool} in ${cwd}`,
     status: "online" satisfies PresenceStatus,
     current_files: agent.current_files.filter(isPublicProjectPath),
     last_seen: now.toISOString(),

@@ -4,6 +4,7 @@ import { platform } from "node:os";
 import { isAbsolute, relative, resolve } from "node:path";
 
 export type DetectedAgentTool = "codex" | "claude-code";
+export type DetectionSource = "process-cwd" | "args-cwd";
 
 export interface DetectedLocalAgent {
   agent_id: string;
@@ -12,7 +13,7 @@ export interface DetectedLocalAgent {
   confidence: "high" | "medium";
   current_files: string[];
   cwd: string;
-  detection_source: "process-cwd";
+  detection_source: DetectionSource;
   pid: number;
   status: "detected";
   tool: DetectedAgentTool;
@@ -84,7 +85,9 @@ function toAgentCandidate(
     return undefined;
   }
 
-  const cwd = row.cwd ?? cwdForPid(row.pid) ?? inferCwdFromArgs(row.args);
+  const processCwd = row.cwd ?? cwdForPid(row.pid);
+  const argsCwd = processCwd === undefined ? inferCwdFromArgs(row.args) : undefined;
+  const cwd = processCwd ?? argsCwd;
   if (cwd === undefined || !isInsidePath(repoRoot, cwd)) {
     return undefined;
   }
@@ -92,10 +95,10 @@ function toAgentCandidate(
   return {
     agent_id: `${tool}-pid-${row.pid}`,
     command: row.command,
-    confidence: "high",
+    confidence: processCwd === undefined ? "medium" : "high",
     current_files: changedFiles,
     cwd,
-    detection_source: "process-cwd",
+    detection_source: processCwd === undefined ? "args-cwd" : "process-cwd",
     pid: row.pid,
     status: "detected",
     tool,
