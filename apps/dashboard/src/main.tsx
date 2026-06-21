@@ -2369,7 +2369,7 @@ function AgentNode({ data }: any): React.ReactElement {
 
 function MissionZoneNode({ data }: any): React.ReactElement {
   return (
-    <div className={`mission-zone-node ${data.tone} ${data.custom ? "custom" : ""} ${data.custom ? `kind-${data.kind}` : ""}`}>
+    <div className={`mission-zone-node ${data.tone} ${data.custom ? "custom" : ""} ${data.custom ? `kind-${data.kind}` : ""} ${data.handoffSignal ? `handoff-${data.handoffSignal.tone}` : ""}`}>
       <div className="mission-zone-title">
         <span>{data.custom ? data.kindLabel : "mission zone"}</span>
         {data.custom ? (
@@ -2398,6 +2398,7 @@ function MissionZoneNode({ data }: any): React.ReactElement {
       <strong>{data.label}</strong>
       {data.owner ? <em>{data.owner}</em> : null}
       {data.note ? <p>{data.note}</p> : null}
+      {data.handoffSignal ? <mark>{data.handoffSignal.label}</mark> : null}
       <small>{data.custom ? `${data.kindLabel} / drag to organize` : `${data.count} areas`}</small>
     </div>
   );
@@ -3215,11 +3216,13 @@ function buildFlow(
     readNodePosition(nodePositions, domain.id, { x: domain.x, y: domain.y })
   ]));
   const missionZones = buildMissionZones(model, domainPositions);
+  const handoffSignal = buildHandoffZoneSignal(state.briefs);
   const nodes: Node[] = [
     ...customZones.map((zone) => ({
       data: {
         count: 0,
         custom: true,
+        handoffSignal: zone.kind === "handoff" ? handoffSignal : undefined,
         kind: zone.kind,
         kindLabel: customZoneKindLabel(zone.kind),
         label: zone.label,
@@ -3398,6 +3401,20 @@ function missionZoneTone(index: number): string {
 }
 
 const customZoneKinds: CustomZoneKind[] = ["mission", "ownership", "risk", "handoff", "blocked", "agent"];
+
+function buildHandoffZoneSignal(briefs: BriefPointer[]): { label: string; tone: "ready" | "stale" | "missing" } {
+  const latestBrief = briefs
+    .slice()
+    .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))[0];
+  if (latestBrief === undefined) {
+    return { label: "Brief needed before handoff", tone: "missing" };
+  }
+  const createdAt = Date.parse(latestBrief.created_at);
+  if (!Number.isFinite(createdAt) || Date.now() - createdAt > 24 * 60 * 60 * 1000) {
+    return { label: "Brief may be stale", tone: "stale" };
+  }
+  return { label: `Brief ready / ${relativeTime(latestBrief.created_at)}`, tone: "ready" };
+}
 
 function buildCustomZoneTemplate(templateId: CanvasZoneTemplateId, seed: number): CustomCanvasZone[] {
   const makeZone = (
