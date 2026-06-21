@@ -276,6 +276,13 @@ type CanvasZoneTemplateId = "ownership-lanes" | "risk-control" | "handoff-board"
 
 type NodePositionMap = Record<string, { x: number; y: number }>;
 
+type HandoffZoneSignal = {
+  label: string;
+  nextAction?: string;
+  summary?: string;
+  tone: "ready" | "stale" | "missing";
+};
+
 type SessionRoom = {
   id: string;
   workspace_id: string;
@@ -3218,13 +3225,12 @@ function buildFlow(
     readNodePosition(nodePositions, domain.id, { x: domain.x, y: domain.y })
   ]));
   const missionZones = buildMissionZones(model, domainPositions);
-  const handoffSignal = buildHandoffZoneSignal(state.briefs);
   const nodes: Node[] = [
     ...customZones.map((zone) => ({
       data: {
         count: 0,
         custom: true,
-        handoffSignal: zone.kind === "handoff" ? handoffSignal : undefined,
+        handoffSignal: zone.kind === "handoff" ? buildHandoffZoneSignal(state.briefs, zone) : undefined,
         kind: zone.kind,
         kindLabel: customZoneKindLabel(zone.kind),
         label: zone.label,
@@ -3404,15 +3410,15 @@ function missionZoneTone(index: number): string {
 
 const customZoneKinds: CustomZoneKind[] = ["mission", "ownership", "risk", "handoff", "blocked", "agent"];
 
-function buildHandoffZoneSignal(briefs: BriefPointer[]): { label: string; nextAction?: string; summary?: string; tone: "ready" | "stale" | "missing" } {
-  const latestBrief = briefs
-    .slice()
-    .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))[0];
+const handoffBriefStaleMs = 24 * 60 * 60 * 1000;
+
+function buildHandoffZoneSignal(briefs: BriefPointer[], zone?: CustomCanvasZone): HandoffZoneSignal {
+  const latestBrief = selectHandoffBrief(briefs, zone);
   if (latestBrief === undefined) {
     return { label: "Brief needed before handoff", tone: "missing" };
   }
   const createdAt = Date.parse(latestBrief.created_at);
-  if (!Number.isFinite(createdAt) || Date.now() - createdAt > 24 * 60 * 60 * 1000) {
+  if (!Number.isFinite(createdAt) || Date.now() - createdAt > handoffBriefStaleMs) {
     return {
       label: "Brief may be stale",
       nextAction: truncate(latestBrief.next_action, 72),
@@ -3426,6 +3432,64 @@ function buildHandoffZoneSignal(briefs: BriefPointer[]): { label: string; nextAc
     summary: truncate(latestBrief.summary, 84),
     tone: "ready"
   };
+}
+
+function selectHandoffBrief(briefs: BriefPointer[], zone?: CustomCanvasZone): BriefPointer | undefined {
+  const latestFirst = briefs
+    .slice()
+    .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at));
+  if (zone === undefined) return latestFirst[0];
+
+  const scored = latestFirst
+    .map((brief) => ({ brief, score: scoreBriefForZone(brief, zone) }))
+    .filter((item) => item.score > 0)
+    .sort((left, right) => {
+      if (left.score !== right.score) return right.score - left.score;
+      return Date.parse(right.brief.created_at) - Date.parse(left.brief.created_at);
+    });
+
+  return scored[0]?.brief ?? latestFirst[0];
+}
+
+function scoreBriefForZone(brief: BriefPointer, zone: CustomCanvasZone): number {
+  const zoneTokens = tokenizeHandoffText([zone.label, zone.note, zone.owner].filter(Boolean).join(" "));
+  if (zoneTokens.length === 0) return 0;
+
+  const text = tokenizeHandoffText([
+    brief.summary,
+    brief.next_action,
+    brief.agent_id,
+    brief.worktree,
+    ...brief.decisions_made,
+    ...brief.assumptions,
+    ...brief.skipped_work,
+    ...brief.risks,
+    ...brief.blockers
+  ].filter(Boolean).join(" "));
+  const textTokens = new Set(text);
+  const changedFiles = brief.changed_files.map((file) => file.toLowerCase());
+  const relatedRefs = [...brief.related_claims, ...brief.related_sessions].map((ref) => ref.toLowerCase());
+  const ownerTokens = tokenizeHandoffText(zone.owner ?? "");
+
+  let score = 0;
+  for (const token of zoneTokens) {
+    if (textTokens.has(token)) score += 2;
+    if (changedFiles.some((file) => file.includes(token))) score += 4;
+    if (relatedRefs.some((ref) => ref.includes(token))) score += 4;
+  }
+  for (const token of ownerTokens) {
+    if (brief.agent_id.toLowerCase().includes(token)) score += 5;
+  }
+  return score;
+}
+
+function tokenizeHandoffText(value: string): string[] {
+  const ignored = new Set(["and", "the", "for", "with", "work", "next", "ready", "handoff"]);
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9._/-]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3 && !ignored.has(token));
 }
 
 function buildCustomZoneTemplate(templateId: CanvasZoneTemplateId, seed: number): CustomCanvasZone[] {
