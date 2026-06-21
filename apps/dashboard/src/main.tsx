@@ -89,6 +89,7 @@ type PresencePointer = {
   branch?: string;
   task?: string;
   current_files?: string[];
+  expires_at?: string;
   last_seen?: string;
   repo_id?: string;
   session_id?: string;
@@ -3669,7 +3670,7 @@ function agentIdentity(agent: PresencePointer): { icon: React.ElementType; label
 
 function buildPresenceFileOverlaps(presence: PresencePointer[]): Array<{ agents: PresencePointer[]; path: string }> {
   const byPath = new Map<string, PresencePointer[]>();
-  for (const agent of presence) {
+  for (const agent of presence.filter((item) => !isPresenceStale(item))) {
     for (const path of new Set(agent.current_files ?? [])) {
       const trimmed = path.trim();
       if (trimmed.length === 0) continue;
@@ -3694,6 +3695,10 @@ function uniqueAgents(agents: PresencePointer[]): PresencePointer[] {
 
 function isPresenceStale(agent: PresencePointer): boolean {
   if (agent.status.toLowerCase().includes("stale") || agent.status.toLowerCase().includes("expired")) return true;
+  if (agent.expires_at !== undefined) {
+    const expiresAt = Date.parse(agent.expires_at);
+    if (Number.isFinite(expiresAt)) return Date.now() >= expiresAt;
+  }
   if (agent.last_seen === undefined) return false;
   const lastSeen = Date.parse(agent.last_seen);
   return Number.isFinite(lastSeen) && Date.now() - lastSeen > 2 * 60 * 1000;
