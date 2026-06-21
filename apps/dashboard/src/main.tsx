@@ -655,12 +655,6 @@ function Dashboard(): React.ReactElement {
   const selectedDetails = useMemo(() => resolveSelection(selectedNodeId, model, state), [model, selectedNodeId, state]);
   const hasLiveState = state.presence.length + state.claims.length + state.events.length + state.decisions.length + state.briefs.length > 0;
   const showWelcome = landingOpen || (!welcomeDismissed && !hasLiveState);
-  const workspaceReadiness = buildWorkspaceReadiness({
-    activeAgents: state.presence.length,
-    briefs: state.briefs.length,
-    risks: riskCount,
-    tracking: trackingStatus.running
-  });
 
   const releaseClaim = useCallback(async (claimId: string) => {
     setReleasingClaimId(claimId);
@@ -1122,14 +1116,6 @@ function Dashboard(): React.ReactElement {
             <p>{activeProject?.repo_root ?? "Local workspace"}</p>
           </div>
         </div>
-        <WorkspaceStatusHero
-          areas={domainCatalog.length}
-          readiness={workspaceReadiness}
-          risks={riskCount}
-          tracking={trackingStatus.running}
-          truthCount={state.claims.length + state.briefs.length + state.decisions.length}
-          agents={state.presence.length}
-        />
         <div className="top-actions">
           <Badge tone="info" icon={<HardDrive size={12} />}>local</Badge>
           <Badge tone={teamSummary.active_agents > 0 ? "live" : "neutral"} icon={<Users size={12} />}>
@@ -2538,37 +2524,6 @@ function RailHeader(props: {
   );
 }
 
-function WorkspaceStatusHero({
-  agents,
-  areas,
-  readiness,
-  risks,
-  tracking,
-  truthCount
-}: {
-  agents: number;
-  areas: number;
-  readiness: WorkspaceReadiness;
-  risks: number;
-  tracking: boolean;
-  truthCount: number;
-}): React.ReactElement {
-  return (
-    <section className={`workspace-status-hero ${readiness.tone}`} aria-label="Workspace status">
-      <div>
-        <span><Wifi size={12} />{tracking ? "live workspace" : "workspace state"}</span>
-        <strong>{readiness.label}</strong>
-      </div>
-      <dl>
-        <div><dt>agents</dt><dd>{agents}</dd></div>
-        <div><dt>truth</dt><dd>{truthCount}</dd></div>
-        <div><dt>risk</dt><dd>{risks}</dd></div>
-        <div><dt>areas</dt><dd>{areas}</dd></div>
-      </dl>
-    </section>
-  );
-}
-
 function AgentCard({ agent }: { agent: PresencePointer }): React.ReactElement {
   const identity = agentIdentity(agent);
   const Icon = identity.icon;
@@ -2633,7 +2588,7 @@ function RadarSummary({
     <div className={`radar-summary ${mode}`}>
       <div className="radar-summary-main">
         <span><Gauge size={13} />current truth</span>
-        <strong>{riskCount > 0 ? `${riskCount} items need attention` : activeAgents > 0 ? "Live workspace signal" : "Idle workspace"}</strong>
+        <strong>{riskCount > 0 ? `${riskCount} items need attention` : activeAgents > 0 ? "Live workspace signal" : "No live agents"}</strong>
       </div>
       <div className="radar-summary-metrics" aria-label="Current truth summary metrics">
         <span><Users size={12} />{activeAgents}</span>
@@ -3683,7 +3638,7 @@ function buildWorkspaceReadiness(input: {
   if (input.activeAgents > 0 && input.briefs > 0) return { label: "Ready for handoff", tone: "live" };
   if (input.activeAgents > 0) return { label: "Agents active, brief pending", tone: "risk" };
   if (input.tracking) return { label: "Tracking workspace", tone: "neutral" };
-  return { label: "Idle workspace", tone: "neutral" };
+  return { label: "No live agents", tone: "neutral" };
 }
 
 function stateColor(domain: DomainModel): string {
