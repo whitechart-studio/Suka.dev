@@ -1138,19 +1138,6 @@ function Dashboard(): React.ReactElement {
           {activeSession !== undefined ? (
             <Badge tone="info" icon={<RadioTower size={12} />}>{activeSession.session_id}</Badge>
           ) : null}
-          <ProjectTrackingControl
-            activeProject={activeProject}
-            busy={trackingBusy}
-            error={projectError}
-            path={projectPath}
-            projects={projects}
-            status={trackingStatus}
-            suggestedProject={suggestedProject}
-            onPathChange={setProjectPath}
-            onSelectFolder={() => void selectProjectFolder()}
-            onStart={() => void startProjectTracking()}
-            onStop={() => void stopProjectTracking()}
-          />
           <button aria-label="Open team connection panel" className="top-icon-action labeled-action" title="Team" type="button" onClick={toggleTeamPanel}>
             <Link2 size={14} />
             <span>Team</span>
@@ -1254,6 +1241,20 @@ function Dashboard(): React.ReactElement {
                 <span><FileClock size={12} />{state.briefs.length}</span>
               </div>
             </div>
+            <ProjectTrackingControl
+              activeProject={activeProject}
+              busy={trackingBusy}
+              error={projectError}
+              path={projectPath}
+              projects={projects}
+              status={trackingStatus}
+              suggestedProject={suggestedProject}
+              variant="canvas"
+              onPathChange={setProjectPath}
+              onSelectFolder={() => void selectProjectFolder()}
+              onStart={() => void startProjectTracking()}
+              onStop={() => void stopProjectTracking()}
+            />
             {!leftOpen ? (
               <button
                 aria-label="Show agents sidebar"
@@ -2397,7 +2398,8 @@ function ProjectTrackingControl({
   path,
   projects,
   status,
-  suggestedProject
+  suggestedProject,
+  variant = "header"
 }: {
   activeProject: LocalProject | undefined;
   busy: boolean;
@@ -2410,6 +2412,7 @@ function ProjectTrackingControl({
   projects: LocalProject[];
   status: ProjectTrackingStatus;
   suggestedProject: LocalProjectSuggestion | undefined;
+  variant?: "canvas" | "header";
 }): React.ReactElement {
   const [open, setOpen] = useState(false);
   const running = status.running;
@@ -2420,7 +2423,7 @@ function ProjectTrackingControl({
   const recentProjects = projects.slice(0, 4);
 
   return (
-    <div className="tracking-control">
+    <div className={`tracking-control ${variant === "canvas" ? "canvas-tracking-panel" : ""}`}>
       <button
         aria-expanded={open}
         aria-label="Open workspace tracking selector"
@@ -2553,7 +2556,7 @@ function WorkspaceStatusHero({
   return (
     <section className={`workspace-status-hero ${readiness.tone}`} aria-label="Workspace status">
       <div>
-        <span><Wifi size={12} />{tracking ? "tracking live" : "tracking idle"}</span>
+        <span><Wifi size={12} />{tracking ? "live workspace" : "workspace state"}</span>
         <strong>{readiness.label}</strong>
       </div>
       <dl>

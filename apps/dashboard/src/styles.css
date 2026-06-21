@@ -732,11 +732,28 @@ input::placeholder { color: var(--muted); }
   position: relative;
 }
 
+.canvas-tracking-panel {
+  position: absolute;
+  right: 14px;
+  top: 12px;
+  z-index: 6;
+}
+
 .tracking-trigger {
   background: linear-gradient(135deg, rgba(99,102,241,0.24), rgba(45,212,191,0.10));
   border-color: rgba(99,102,241,0.36);
   color: var(--ink);
   font-weight: 800;
+}
+
+.canvas-tracking-panel .tracking-trigger {
+  background:
+    linear-gradient(135deg, rgba(15,23,42,0.92), rgba(17,24,39,0.82)),
+    rgba(15,23,42,0.86);
+  border-color: rgba(99,102,241,0.32);
+  box-shadow: var(--shadow-lg);
+  min-height: 34px;
+  padding: 6px 11px;
 }
 
 .tracking-trigger:hover,
@@ -760,6 +777,11 @@ input::placeholder { color: var(--muted); }
   top: calc(100% + 8px);
   width: min(380px, calc(100vw - 24px));
   z-index: var(--z-overlay);
+}
+
+.canvas-tracking-panel .tracking-popover {
+  right: 0;
+  top: calc(100% + 10px);
 }
 
 .tracking-head {
@@ -4406,6 +4428,15 @@ body.is-resizing-rail .rail-resize-handle::after {
   .tracking-popover {
     right: -72px;
     width: calc(100vw - 12px);
+  }
+
+  .canvas-tracking-panel {
+    right: 8px;
+    top: 8px;
+  }
+
+  .canvas-tracking-panel .tracking-popover {
+    right: 0;
   }
 
   .tracking-popover button {
