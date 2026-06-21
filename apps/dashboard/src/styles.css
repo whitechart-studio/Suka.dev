@@ -609,9 +609,12 @@ input::placeholder { color: var(--muted); }
 .top-action,
 .tracking-trigger {
   align-items: center;
-  background: rgba(15,23,42,0.62);
-  border: 1px solid var(--line);
+  background: rgba(15,23,42,0.82);
+  backdrop-filter: blur(14px) saturate(1.35);
+  -webkit-backdrop-filter: blur(14px) saturate(1.35);
+  border: 1px solid rgba(148,163,184,0.18);
   border-radius: 7px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.18);
   color: var(--ink-2);
   cursor: pointer;
   display: inline-flex;
@@ -638,8 +641,9 @@ input::placeholder { color: var(--muted); }
 .top-action[aria-expanded="true"],
 .tracking-trigger:hover,
 .tracking-trigger[aria-expanded="true"] {
-  background: rgba(99,102,241,0.14);
-  border-color: rgba(99,102,241,0.35);
+  background: rgba(30,41,59,0.9);
+  border-color: rgba(99,102,241,0.38);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.24), 0 0 0 1px rgba(99,102,241,0.12);
   color: var(--ink);
 }
 
@@ -667,26 +671,33 @@ input::placeholder { color: var(--muted); }
 }
 
 .tracking-trigger {
-  background: linear-gradient(135deg, rgba(99,102,241,0.24), rgba(45,212,191,0.10));
-  border-color: rgba(99,102,241,0.36);
+  background:
+    linear-gradient(135deg, rgba(99,102,241,0.28), rgba(45,212,191,0.16)),
+    rgba(15,23,42,0.88);
+  border-color: rgba(99,102,241,0.42);
   color: var(--ink);
   font-weight: 800;
 }
 
 .tracking-popover {
-  background: var(--panel-glass);
-  backdrop-filter: blur(18px) saturate(1.35);
-  -webkit-backdrop-filter: blur(18px) saturate(1.35);
-  border: 1px solid var(--line-2);
-  border-radius: 10px;
-  box-shadow: var(--shadow-lg);
+  background:
+    linear-gradient(180deg, rgba(18,27,43,0.98), rgba(13,18,28,0.98)),
+    var(--panel);
+  backdrop-filter: blur(22px) saturate(1.45);
+  -webkit-backdrop-filter: blur(22px) saturate(1.45);
+  border: 1px solid rgba(148,163,184,0.2);
+  border-radius: 12px;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.58), 0 0 0 1px rgba(99,102,241,0.12);
   display: grid;
   gap: 12px;
+  isolation: isolate;
+  max-height: calc(100dvh - 64px);
+  overflow: auto;
   padding: 12px;
-  position: absolute;
-  right: 0;
-  top: calc(100% + 8px);
-  width: min(380px, calc(100vw - 24px));
+  position: fixed;
+  right: var(--tracking-popover-right, 12px);
+  top: 50px;
+  width: min(380px, calc(100vw - var(--tracking-popover-right, 12px) - 12px));
   z-index: var(--z-overlay);
 }
 
@@ -717,8 +728,8 @@ input::placeholder { color: var(--muted); }
 }
 
 .tracking-stats div {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--line);
+  background: rgba(15,23,42,0.72);
+  border: 1px solid rgba(148,163,184,0.15);
   border-radius: 8px;
   display: grid;
   gap: 2px;
@@ -746,8 +757,8 @@ input::placeholder { color: var(--muted); }
 
 .project-option {
   align-items: stretch;
-  background: rgba(255,255,255,0.035);
-  border-color: var(--line);
+  background: rgba(15,23,42,0.76);
+  border-color: rgba(148,163,184,0.16);
   display: grid;
   gap: 5px;
   justify-items: stretch;
@@ -759,17 +770,17 @@ input::placeholder { color: var(--muted); }
 
 .project-option:hover,
 .project-option.active {
-  background: rgba(99,102,241,0.12);
-  border-color: rgba(99,102,241,0.3);
+  background: rgba(49,46,129,0.72);
+  border-color: rgba(129,140,248,0.42);
 }
 
 .project-option.featured {
-  border-color: rgba(45,212,191,0.24);
+  border-color: rgba(45,212,191,0.34);
 }
 
 .tracking-folder-action {
-  background: rgba(45,212,191,0.13);
-  border-color: rgba(45,212,191,0.3);
+  background: rgba(13,148,136,0.32);
+  border-color: rgba(45,212,191,0.46);
   color: var(--ink);
   justify-content: center;
   min-height: 38px;
@@ -795,7 +806,14 @@ input::placeholder { color: var(--muted); }
 }
 
 .tracking-path input {
+  background: rgba(2,6,23,0.56);
+  border-color: rgba(148,163,184,0.2);
   width: 100%;
+}
+
+.tracking-popover code {
+  background: rgba(2,6,23,0.46);
+  border-color: rgba(148,163,184,0.18);
 }
 
 .tracking-error,
@@ -823,14 +841,14 @@ input::placeholder { color: var(--muted); }
 }
 
 .tracking-actions .primary-action {
-  background: rgba(45,212,191,0.14);
-  border-color: rgba(45,212,191,0.3);
+  background: rgba(13,148,136,0.32);
+  border-color: rgba(45,212,191,0.46);
   color: var(--ink);
 }
 
 .tracking-actions .danger-action {
-  background: var(--rose-dim);
-  border-color: rgba(244,63,94,0.28);
+  background: rgba(127,29,29,0.76);
+  border-color: rgba(244,63,94,0.42);
   color: var(--ink);
 }
 
@@ -4284,8 +4302,11 @@ body.is-resizing-rail .rail-resize-handle::after {
   .tracking-trigger span { display: none; }
 
   .tracking-popover {
-    right: -72px;
-    width: calc(100vw - 12px);
+    left: 6px;
+    max-height: calc(100dvh - 74px);
+    right: 6px;
+    top: 62px;
+    width: auto;
   }
 
   .tracking-popover button {

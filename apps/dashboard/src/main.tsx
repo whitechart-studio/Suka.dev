@@ -1062,7 +1062,8 @@ function Dashboard(): React.ReactElement {
   ].filter(Boolean).join(" ");
   const shellStyle = {
     "--left-rail-width": `${leftRailWidth}px`,
-    "--right-rail-width": `${rightRailWidth}px`
+    "--right-rail-width": `${rightRailWidth}px`,
+    "--tracking-popover-right": rightOpen && !focusMode ? `${rightRailWidth + 20}px` : "12px"
   } as React.CSSProperties;
 
   if (showWelcome) {
@@ -1098,7 +1099,7 @@ function Dashboard(): React.ReactElement {
   }
 
   return (
-    <div className="suka-app" data-theme={settings.theme} data-density={settings.density}>
+    <div className="suka-app" data-theme={settings.theme} data-density={settings.density} style={shellStyle}>
       <header className="topbar">
         <div className="brand">
           <button aria-label="Back to landing" className="back-btn" type="button" onClick={exitToLanding}>
