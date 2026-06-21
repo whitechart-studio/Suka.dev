@@ -345,12 +345,16 @@ function buildDetectedAgentPresencePointer(options: {
     },
     repo: readStringFlag(options.flags, "repo") ?? options.config?.repo ?? detectGitRepoName(),
     branch: options.agent.branch,
-    task: readStringFlag(options.flags, "task") ?? "Detected local agent process",
+    task: readStringFlag(options.flags, "task") ?? detectedAgentTask(options.agent.tool, options.agent.cwd),
     status: (readStringFlag(options.flags, "status") ?? "online") as PresenceStatus,
     current_files: options.agent.current_files,
     last_seen: options.now.toISOString(),
     expires_at: new Date(options.now.getTime() + options.ttlSeconds * 1000).toISOString()
   };
+}
+
+function detectedAgentTask(tool: string, cwd: string): string {
+  return `Detected ${tool} in ${cwd}`;
 }
 
 function formatLocalAgentDetection(report: LocalAgentWorkflowReport): string {

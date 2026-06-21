@@ -211,7 +211,7 @@ test("agents detect publishes detected presence when requested", async () => {
   });
   assert.equal(body.branch, "RS/agents-watch");
   assert.equal(body.status, "online");
-  assert.equal(body.task, "Detected local agent process");
+  assert.equal(body.task, "Detected codex in /repo/suka");
   assert.deepEqual(body.current_files, ["packages/cli/src/commands.ts"]);
   assert.equal(body.workspace_id, "workspace-local");
   assert.equal(body.repo_id, "repo-local");

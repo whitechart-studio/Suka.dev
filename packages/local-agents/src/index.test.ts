@@ -172,6 +172,8 @@ test("detectLocalAgents falls back to command-line cwd when platform cwd is unav
   assert.equal(report.agents.length, 1);
   assert.equal(report.agents[0]?.tool, "codex");
   assert.equal(report.agents[0]?.cwd, repoRoot);
+  assert.equal(report.agents[0]?.confidence, "medium");
+  assert.equal(report.agents[0]?.detection_source, "args-cwd");
 });
 
 test("detectLocalAgents filters private local paths from changed files", () => {

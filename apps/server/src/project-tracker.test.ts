@@ -33,6 +33,7 @@ test("project tracker publishes detected presence for the active project", () =>
   assert.equal(presence?.source?.kind, "detected");
   assert.equal(presence?.source?.detector, "process-cwd");
   assert.equal(presence?.source?.cwd, ".");
+  assert.equal(presence?.task, "Detected codex in .");
   assert.deepEqual(presence?.current_files, ["apps/server/src/project-tracker.ts"]);
   assert.equal(presence?.expires_at, "2026-06-18T10:05:30.000Z");
   worker.stop();
@@ -77,6 +78,7 @@ test("project tracker publishes repo-relative cwd and filters private paths", ()
   const presence = service.getState().presence[0];
 
   assert.equal(presence?.source?.cwd, "apps/dashboard");
+  assert.equal(presence?.task, "Detected codex in apps/dashboard");
   assert.deepEqual(presence?.current_files, ["apps/dashboard/src/main.tsx"]);
   worker.stop();
 });
