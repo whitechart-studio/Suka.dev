@@ -283,6 +283,11 @@ type HandoffZoneSignal = {
   tone: "ready" | "stale" | "missing";
 };
 
+type WorkspaceReadiness = {
+  label: string;
+  tone: "live" | "risk" | "neutral";
+};
+
 type SessionRoom = {
   id: string;
   workspace_id: string;
@@ -651,6 +656,12 @@ function Dashboard(): React.ReactElement {
   const selectedDetails = useMemo(() => resolveSelection(selectedNodeId, model, state), [model, selectedNodeId, state]);
   const hasLiveState = state.presence.length + state.claims.length + state.events.length + state.decisions.length + state.briefs.length > 0;
   const showWelcome = landingOpen || (!welcomeDismissed && !hasLiveState);
+  const workspaceReadiness = buildWorkspaceReadiness({
+    activeAgents: state.presence.length,
+    briefs: state.briefs.length,
+    risks: riskCount,
+    tracking: trackingStatus.running
+  });
 
   const releaseClaim = useCallback(async (claimId: string) => {
     setReleasingClaimId(claimId);
@@ -1122,11 +1133,20 @@ function Dashboard(): React.ReactElement {
             <ArrowLeft size={15} />
           </button>
           <div className="brand-mark"><Waypoints size={15} /></div>
-          <div>
-            <h1>Suka Operations Canvas</h1>
-            <p>Realtime coordination for agentic work</p>
+          <div className="workspace-title">
+            <span>Operations Canvas</span>
+            <h1>{displayName(activeProject?.name ?? repoMap.root ?? "workspace")}</h1>
+            <p>{activeProject?.repo_root ?? repoMap.root ?? "Realtime coordination for agentic work"}</p>
           </div>
         </div>
+        <WorkspaceStatusHero
+          areas={domainCatalog.length}
+          readiness={workspaceReadiness}
+          risks={riskCount}
+          tracking={trackingStatus.running}
+          truthCount={state.claims.length + state.briefs.length + state.decisions.length}
+          agents={state.presence.length}
+        />
         <div className="top-actions">
           <Badge tone="info" icon={<HardDrive size={12} />}>local</Badge>
           <Badge tone={teamSummary.active_agents > 0 ? "live" : "neutral"} icon={<Users size={12} />}>
@@ -2566,22 +2586,59 @@ function RailHeader(props: {
   );
 }
 
+function WorkspaceStatusHero({
+  agents,
+  areas,
+  readiness,
+  risks,
+  tracking,
+  truthCount
+}: {
+  agents: number;
+  areas: number;
+  readiness: WorkspaceReadiness;
+  risks: number;
+  tracking: boolean;
+  truthCount: number;
+}): React.ReactElement {
+  return (
+    <section className={`workspace-status-hero ${readiness.tone}`} aria-label="Workspace status">
+      <div>
+        <span><Wifi size={12} />{tracking ? "tracking live" : "tracking idle"}</span>
+        <strong>{readiness.label}</strong>
+      </div>
+      <dl>
+        <div><dt>agents</dt><dd>{agents}</dd></div>
+        <div><dt>truth</dt><dd>{truthCount}</dd></div>
+        <div><dt>risk</dt><dd>{risks}</dd></div>
+        <div><dt>areas</dt><dd>{areas}</dd></div>
+      </dl>
+    </section>
+  );
+}
+
 function AgentCard({ agent }: { agent: PresencePointer }): React.ReactElement {
   const identity = agentIdentity(agent);
   const Icon = identity.icon;
   const source = agentSourceLabel(agent);
   const color = agentColor(agent.agent_id);
+  const stale = isPresenceStale(agent);
+  const seen = agent.last_seen ? relativeTime(agent.last_seen) : "live now";
   return (
-    <article className="agent-card" style={{ "--agent-color": color } as React.CSSProperties}>
+    <article className={`agent-card ${stale ? "stale" : "live"}`} style={{ "--agent-color": color } as React.CSSProperties}>
       <div className="agent-card-band">
         <span className="agent-avatar solid"><Icon size={14} /></span>
         <div className="agent-identity">
           <h3>{agent.agent_id}</h3>
           <p>{identity.label} / {source}</p>
         </div>
-        <span className="agent-status-pill"><Activity size={12} />{agent.status}</span>
+        <span className="agent-status-pill"><Activity size={12} />{stale ? "stale" : agent.status}</span>
       </div>
       <div className="agent-card-body">
+        <div className="agent-card-signal">
+          <span><Timer size={12} />{seen}</span>
+          <span><HardDrive size={12} />{agent.source?.cwd ? "repo scoped" : source}</span>
+        </div>
         <div className="agent-meta-row">
           <span><GitBranch size={12} />{truncate(agent.branch ?? "none", 22)}</span>
           <span><Route size={12} />{agent.current_files?.length ?? 0} files</span>
@@ -2698,6 +2755,12 @@ function CurrentTruthPanel({
   const staleSignals = recentEvents
     .filter((event) => hasCriticalScope(event) || event.event_type.includes("failed"))
     .slice(0, 3);
+  const readiness = buildWorkspaceReadiness({
+    activeAgents,
+    briefs: briefs.length,
+    risks: insights.length + activeBlockers.length + staleSignals.length,
+    tracking: activeAgents > 0
+  });
 
   return (
     <section className="rail-section truth-section">
@@ -2707,6 +2770,11 @@ function CurrentTruthPanel({
           {insights.length + activeBlockers.length} risks
         </Badge>
       </div>
+      <article className={`truth-command-card ${readiness.tone}`}>
+        <span><Gauge size={13} />workspace readiness</span>
+        <strong>{readiness.label}</strong>
+        <p>{activeAgents > 0 ? "Agents are broadcasting live context for this workspace." : "Start tracking or join a session to populate live agent context."}</p>
+      </article>
       <div className="truth-grid">
         <TruthStat label="agents" value={activeAgents} />
         <TruthStat label="owners" value={ownerCount} />
@@ -3731,6 +3799,19 @@ function domainState(domain: DomainModel): string {
   if (domain.presence.length > 0) return "active";
   if (domain.decisions.length > 0) return "decision";
   return "clear";
+}
+
+function buildWorkspaceReadiness(input: {
+  activeAgents: number;
+  briefs: number;
+  risks: number;
+  tracking: boolean;
+}): WorkspaceReadiness {
+  if (input.risks > 0) return { label: `${input.risks} items need attention`, tone: "risk" };
+  if (input.activeAgents > 0 && input.briefs > 0) return { label: "Ready for handoff", tone: "live" };
+  if (input.activeAgents > 0) return { label: "Agents active, brief pending", tone: "risk" };
+  if (input.tracking) return { label: "Tracking workspace", tone: "neutral" };
+  return { label: "Start tracking", tone: "neutral" };
 }
 
 function stateColor(domain: DomainModel): string {

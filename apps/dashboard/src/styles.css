@@ -516,9 +516,10 @@ input::placeholder { color: var(--muted); }
   -webkit-backdrop-filter: blur(20px) saturate(1.6);
   border-bottom: 1px solid var(--line);
   box-shadow: 0 1px 0 rgba(0,0,0,0.5);
-  display: flex;
+  display: grid;
   flex: 0 0 auto;
-  justify-content: space-between;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 0.82fr) minmax(320px, 1.1fr) auto;
   min-height: 52px;
   padding: 0 14px;
   position: relative;
@@ -530,11 +531,43 @@ input::placeholder { color: var(--muted); }
   align-items: center;
   display: flex;
   gap: 10px;
+  min-width: 0;
 }
 
-.brand p {
+.workspace-title {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.workspace-title span {
+  color: var(--ai-2);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.workspace-title h1 {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.1;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-title p {
   color: var(--muted);
   font-size: 11px;
+  line-height: 1.25;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .brand-mark {
@@ -556,11 +589,102 @@ input::placeholder { color: var(--muted); }
   transform: scale(1.08) rotate(-3deg);
 }
 
+.workspace-status-hero {
+  align-items: center;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)),
+    rgba(15,23,42,0.38);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-xs);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(140px, 1fr) auto;
+  min-height: 38px;
+  min-width: 0;
+  padding: 6px 8px 6px 10px;
+}
+
+.workspace-status-hero.live {
+  background:
+    linear-gradient(135deg, rgba(20,184,166,0.14), rgba(59,130,246,0.06)),
+    rgba(15,23,42,0.38);
+  border-color: rgba(20,184,166,0.24);
+}
+
+.workspace-status-hero.risk {
+  background:
+    linear-gradient(135deg, rgba(245,158,11,0.14), rgba(225,29,72,0.06)),
+    rgba(15,23,42,0.38);
+  border-color: rgba(245,158,11,0.26);
+}
+
+.workspace-status-hero > div {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.workspace-status-hero span {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 9.5px;
+  font-weight: 800;
+  gap: 5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.workspace-status-hero strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-status-hero dl {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(4, minmax(38px, 1fr));
+  margin: 0;
+}
+
+.workspace-status-hero dl div {
+  background: rgba(255,255,255,0.045);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 7px;
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  padding: 4px 6px;
+}
+
+.workspace-status-hero dt {
+  color: var(--muted);
+  font-size: 8.8px;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.workspace-status-hero dd {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+  margin: 0;
+}
+
 /* ── Top actions ────────────────────────────── */
 .top-actions {
   align-items: center;
   display: flex;
   gap: 5px;
+  justify-content: flex-end;
+  min-width: 0;
 }
 
 .top-actions button {
@@ -2544,6 +2668,15 @@ body.is-resizing-rail .rail-resize-handle::after {
   padding: 0;
 }
 
+.agent-card.stale {
+  border-color: rgba(245,158,11,0.35);
+}
+
+.agent-card.stale .agent-card-band {
+  background:
+    linear-gradient(135deg, rgba(245,158,11,0.92), rgba(120,53,15,0.88));
+}
+
 .agent-card-band {
   align-items: center;
   background:
@@ -2559,6 +2692,30 @@ body.is-resizing-rail .rail-resize-handle::after {
   display: grid;
   gap: 7px;
   padding: 9px;
+}
+
+.agent-card-signal {
+  display: grid;
+  gap: 5px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.agent-card-signal span {
+  align-items: center;
+  background: rgba(255,255,255,0.045);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink-3);
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 700;
+  gap: 4px;
+  min-height: 23px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agent-identity {
@@ -2610,6 +2767,7 @@ body.is-resizing-rail .rail-resize-handle::after {
 
 .agent-status-pill svg,
 .agent-meta-row svg,
+.agent-card-signal svg,
 .task svg {
   flex: 0 0 auto;
 }
@@ -2697,6 +2855,10 @@ body.is-resizing-rail .rail-resize-handle::after {
   .agent-meta-row {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .agent-card-signal {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @container agent-card (max-width: 205px) {
@@ -2712,6 +2874,7 @@ body.is-resizing-rail .rail-resize-handle::after {
 
   .agent-identity h3 { font-size: 11.5px; }
   .agent-identity p,
+  .agent-card-signal span,
   .agent-meta-row span,
   .task { font-size: 10px; }
 }
@@ -2954,6 +3117,57 @@ body.is-resizing-rail .rail-resize-handle::after {
 }
 
 .truth-section { border-bottom: 0; }
+
+.truth-command-card {
+  background:
+    linear-gradient(135deg, rgba(99,102,241,0.12), rgba(45,212,191,0.05)),
+    rgba(255,255,255,0.025);
+  border: 1px solid rgba(99,102,241,0.18);
+  border-radius: 10px;
+  box-shadow: var(--shadow-xs);
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.truth-command-card.live {
+  background:
+    linear-gradient(135deg, rgba(20,184,166,0.14), rgba(59,130,246,0.05)),
+    rgba(255,255,255,0.025);
+  border-color: rgba(20,184,166,0.24);
+}
+
+.truth-command-card.risk {
+  background:
+    linear-gradient(135deg, rgba(245,158,11,0.14), rgba(225,29,72,0.05)),
+    rgba(255,255,255,0.025);
+  border-color: rgba(245,158,11,0.28);
+}
+
+.truth-command-card span {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 800;
+  gap: 5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.truth-command-card strong {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.truth-command-card p {
+  color: var(--ink-3);
+  font-size: 11px;
+  line-height: 1.35;
+  margin: 0;
+}
 
 /* ── Truth stats grid ───────────────────────── */
 .truth-grid {
@@ -4103,6 +4317,7 @@ body.is-resizing-rail .rail-resize-handle::after {
   body { font-size: 15px; } /* 16px effective with line-height */
 
   .topbar {
+    grid-template-columns: minmax(0, 1fr) auto;
     min-height: 56px;
     padding: 0 10px;
   }
@@ -4169,13 +4384,17 @@ body.is-resizing-rail .rail-resize-handle::after {
     width: 34px;
   }
 
-  .brand h1 {
+  .brand h1,
+  .workspace-title h1 {
     font-size: 14px;
     line-height: 1.05;
     max-width: 124px;
   }
 
   .brand p,
+  .workspace-title span,
+  .workspace-title p,
+  .workspace-status-hero,
   .top-actions .badge.info,
   .top-actions .badge.neutral {
     display: none;
