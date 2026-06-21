@@ -1173,15 +1173,21 @@ function Dashboard(): React.ReactElement {
             active={activePanelDockPreset}
             onSelect={applyPanelDockPreset}
           />
-          <button aria-label="Open team connection panel" type="button" onClick={toggleTeamPanel}>
+          <button aria-label="Open team connection panel" className="top-icon-action labeled-action" title="Team" type="button" onClick={toggleTeamPanel}>
             <Link2 size={14} />
-            Team
+            <span>Team</span>
           </button>
-          <button aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"} type="button" onClick={() => setFocusMode((value) => !value)}>
+          <button
+            aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"}
+            className="top-icon-action labeled-action"
+            title={focusMode ? "Exit focus mode" : "Enter focus mode"}
+            type="button"
+            onClick={() => setFocusMode((value) => !value)}
+          >
             {focusMode ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-            {focusMode ? "Exit focus" : "Focus"}
+            <span>{focusMode ? "Exit focus" : "Focus"}</span>
           </button>
-          <button aria-label="Refresh state" type="button" onClick={() => void loadState()}>
+          <button aria-label="Refresh state" className="top-icon-action" title="Refresh state" type="button" onClick={() => void loadState()}>
             <RefreshCw size={14} />
           </button>
           <button
