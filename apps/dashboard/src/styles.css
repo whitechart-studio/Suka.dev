@@ -601,29 +601,50 @@ input::placeholder { color: var(--muted); }
   min-width: 0;
 }
 
-.top-actions button {
-  min-height: 30px;
-  padding: 4px 8px;
-}
-
 .top-actions > .badge.info,
 .top-actions > .badge.neutral {
   display: none;
 }
 
-.top-icon-action {
+.top-action,
+.tracking-trigger {
+  align-items: center;
+  background: rgba(15,23,42,0.62);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink-2);
+  cursor: pointer;
+  display: inline-flex;
+  gap: 6px;
+  height: 34px;
   justify-content: center;
-  min-width: 32px;
-  padding: 4px 7px;
+  min-width: 34px;
+  padding: 0 9px;
+  transition: color var(--dur-fast), border-color var(--dur-fast), background var(--dur-fast), box-shadow var(--dur-fast);
 }
 
-.top-icon-action:not(.labeled-action) {
-  width: 32px;
+.top-action:not(.top-action-labeled) {
+  padding: 0;
+  width: 34px;
 }
 
-.top-icon-action.labeled-action span {
+.top-action span,
+.tracking-trigger span {
   font-size: 11px;
   font-weight: 700;
+}
+
+.top-action:hover,
+.top-action[aria-expanded="true"],
+.tracking-trigger:hover,
+.tracking-trigger[aria-expanded="true"] {
+  background: rgba(99,102,241,0.14);
+  border-color: rgba(99,102,241,0.35);
+  color: var(--ink);
+}
+
+.settings-action svg {
+  filter: drop-shadow(0 0 5px rgba(99,102,241,0.35));
 }
 
 .connection-dot {
@@ -641,14 +662,8 @@ input::placeholder { color: var(--muted); }
 }
 
 .tracking-control {
+  flex: 0 0 auto;
   position: relative;
-}
-
-.canvas-tracking-panel {
-  position: absolute;
-  right: 14px;
-  top: 12px;
-  z-index: 6;
 }
 
 .tracking-trigger {
@@ -656,22 +671,6 @@ input::placeholder { color: var(--muted); }
   border-color: rgba(99,102,241,0.36);
   color: var(--ink);
   font-weight: 800;
-}
-
-.canvas-tracking-panel .tracking-trigger {
-  background:
-    linear-gradient(135deg, rgba(15,23,42,0.92), rgba(17,24,39,0.82)),
-    rgba(15,23,42,0.86);
-  border-color: rgba(99,102,241,0.32);
-  box-shadow: var(--shadow-lg);
-  min-height: 34px;
-  padding: 6px 11px;
-}
-
-.tracking-trigger:hover,
-.tracking-trigger[aria-expanded="true"] {
-  background: rgba(99,102,241,0.18);
-  color: var(--ink);
 }
 
 .tracking-popover {
@@ -689,11 +688,6 @@ input::placeholder { color: var(--muted); }
   top: calc(100% + 8px);
   width: min(380px, calc(100vw - 24px));
   z-index: var(--z-overlay);
-}
-
-.canvas-tracking-panel .tracking-popover {
-  right: 0;
-  top: calc(100% + 10px);
 }
 
 .tracking-head {
@@ -856,53 +850,6 @@ input::placeholder { color: var(--muted); }
 }
 .back-btn:hover {
   background: var(--ai-dim);
-  color: var(--ai);
-}
-
-.settings-btn {
-  align-items: center;
-  background: rgba(99,102,241,0.08);
-  border: 1px solid rgba(99,102,241,0.24);
-  border-radius: 7px;
-  color: var(--ink-2);
-  cursor: pointer;
-  display: inline-flex;
-  height: 34px;
-  justify-content: center;
-  padding: 0;
-  transition: color var(--dur-fast), border-color var(--dur-fast), background var(--dur-fast), box-shadow var(--dur-fast);
-  width: 34px;
-}
-.settings-btn svg {
-  filter: drop-shadow(0 0 5px rgba(99,102,241,0.35));
-}
-.settings-btn:hover,
-.settings-btn[aria-expanded="true"] {
-  background: rgba(99,102,241,0.16);
-  border-color: rgba(99,102,241,0.45);
-  box-shadow: 0 0 0 1px rgba(99,102,241,0.18), 0 6px 18px rgba(99,102,241,0.16);
-  color: var(--ink);
-}
-
-/* ── Docs button ────────────────────────────── */
-.docs-btn {
-  align-items: center;
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  color: var(--ink-3);
-  cursor: pointer;
-  display: inline-flex;
-  height: 28px;
-  justify-content: center;
-  padding: 0;
-  transition: color var(--dur-fast), border-color var(--dur-fast), background var(--dur-fast);
-  width: 28px;
-}
-.docs-btn:hover,
-.docs-btn[aria-expanded="true"] {
-  background: var(--ai-dim);
-  border-color: rgba(99,102,241,0.35);
   color: var(--ai);
 }
 
@@ -4339,15 +4286,6 @@ body.is-resizing-rail .rail-resize-handle::after {
   .tracking-popover {
     right: -72px;
     width: calc(100vw - 12px);
-  }
-
-  .canvas-tracking-panel {
-    right: 8px;
-    top: 8px;
-  }
-
-  .canvas-tracking-panel .tracking-popover {
-    right: 0;
   }
 
   .tracking-popover button {

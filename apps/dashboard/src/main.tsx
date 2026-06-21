@@ -1124,17 +1124,30 @@ function Dashboard(): React.ReactElement {
           {activeSession !== undefined ? (
             <Badge tone="info" icon={<RadioTower size={12} />}>{activeSession.session_id}</Badge>
           ) : null}
-          <button aria-label="Open team connection panel" className="top-icon-action labeled-action" title="Team" type="button" onClick={toggleTeamPanel}>
+          <ProjectTrackingControl
+            activeProject={activeProject}
+            busy={trackingBusy}
+            error={projectError}
+            path={projectPath}
+            projects={projects}
+            status={trackingStatus}
+            suggestedProject={suggestedProject}
+            onPathChange={setProjectPath}
+            onSelectFolder={() => void selectProjectFolder()}
+            onStart={() => void startProjectTracking()}
+            onStop={() => void stopProjectTracking()}
+          />
+          <button aria-label="Open team connection panel" className="top-action top-action-labeled" title="Team" type="button" onClick={toggleTeamPanel}>
             <Link2 size={14} />
             <span>Team</span>
           </button>
-          <button aria-label="Refresh state" className="top-icon-action" title="Refresh state" type="button" onClick={() => void loadState()}>
+          <button aria-label="Refresh state" className="top-action" title="Refresh state" type="button" onClick={() => void loadState()}>
             <RefreshCw size={14} />
           </button>
           <button
             aria-expanded={docsOpen}
             aria-label="Open docs"
-            className="docs-btn"
+            className="top-action"
             title="Docs (?)"
             type="button"
             onClick={() => setDocsOpen(v => !v)}
@@ -1144,7 +1157,7 @@ function Dashboard(): React.ReactElement {
           <button
             aria-expanded={settingsOpen}
             aria-label="Open settings"
-            className="settings-btn"
+            className="top-action settings-action"
             type="button"
             onClick={() => setSettingsOpen(true)}
           >
@@ -1227,20 +1240,6 @@ function Dashboard(): React.ReactElement {
                 <span><FileClock size={12} />{state.briefs.length}</span>
               </div>
             </div>
-            <ProjectTrackingControl
-              activeProject={activeProject}
-              busy={trackingBusy}
-              error={projectError}
-              path={projectPath}
-              projects={projects}
-              status={trackingStatus}
-              suggestedProject={suggestedProject}
-              variant="canvas"
-              onPathChange={setProjectPath}
-              onSelectFolder={() => void selectProjectFolder()}
-              onStart={() => void startProjectTracking()}
-              onStop={() => void stopProjectTracking()}
-            />
             {!leftOpen ? (
               <button
                 aria-label="Show agents sidebar"
@@ -2384,8 +2383,7 @@ function ProjectTrackingControl({
   path,
   projects,
   status,
-  suggestedProject,
-  variant = "header"
+  suggestedProject
 }: {
   activeProject: LocalProject | undefined;
   busy: boolean;
@@ -2398,7 +2396,6 @@ function ProjectTrackingControl({
   projects: LocalProject[];
   status: ProjectTrackingStatus;
   suggestedProject: LocalProjectSuggestion | undefined;
-  variant?: "canvas" | "header";
 }): React.ReactElement {
   const [open, setOpen] = useState(false);
   const running = status.running;
@@ -2409,7 +2406,7 @@ function ProjectTrackingControl({
   const recentProjects = projects.slice(0, 4);
 
   return (
-    <div className={`tracking-control ${variant === "canvas" ? "canvas-tracking-panel" : ""}`}>
+    <div className="tracking-control">
       <button
         aria-expanded={open}
         aria-label="Open workspace tracking selector"
@@ -2417,7 +2414,7 @@ function ProjectTrackingControl({
         type="button"
         onClick={() => setOpen((value) => !value)}
       >
-        <RadioTower size={14} />
+        <GitBranch size={14} />
         <span>{label}</span>
       </button>
       {open ? (
