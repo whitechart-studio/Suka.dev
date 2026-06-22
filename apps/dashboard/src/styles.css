@@ -721,6 +721,43 @@ input::placeholder { color: var(--muted); }
   overflow-wrap: anywhere;
 }
 
+.tracking-state {
+  background: rgba(15,23,42,0.72);
+  border: 1px solid rgba(148,163,184,0.15);
+  border-radius: 9px;
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+}
+
+.tracking-state.live {
+  background: rgba(13,148,136,0.16);
+  border-color: rgba(45,212,191,0.34);
+}
+
+.tracking-state.ready {
+  background: rgba(49,46,129,0.32);
+  border-color: rgba(129,140,248,0.3);
+}
+
+.tracking-state.warn {
+  background: rgba(120,53,15,0.28);
+  border-color: rgba(245,158,11,0.36);
+}
+
+.tracking-state strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.tracking-state p,
+.tracking-empty {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+  margin: 0;
+}
+
 .tracking-stats {
   display: grid;
   gap: 6px;
@@ -3243,6 +3280,16 @@ body.is-resizing-rail .rail-resize-handle::after {
     linear-gradient(135deg, rgba(244,63,94,0.1), rgba(148,163,184,0.035)),
     rgba(255,255,255,0.03);
   border-color: rgba(244,63,94,0.24);
+}
+
+.activity-source-label {
+  color: var(--ink-3);
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin-top: -2px;
+  text-transform: uppercase;
 }
 
 .panel-empty {
