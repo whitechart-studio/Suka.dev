@@ -2725,6 +2725,31 @@ body.is-resizing-rail .rail-resize-handle::after {
   white-space: nowrap;
 }
 
+.agent-card-overlap {
+  align-items: center;
+  background:
+    linear-gradient(135deg, rgba(245,158,11,0.14), rgba(244,63,94,0.06)),
+    rgba(255,255,255,0.035);
+  border: 1px solid rgba(245,158,11,0.28);
+  border-radius: 6px;
+  color: #fbbf24;
+  display: inline-flex;
+  font-size: 10.5px;
+  font-weight: 800;
+  gap: 5px;
+  min-height: 25px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 8px;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.agent-card-overlap svg {
+  flex: 0 0 auto;
+}
+
 .rail-card-head {
   align-items: center;
   display: flex;
