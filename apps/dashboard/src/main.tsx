@@ -1137,6 +1137,10 @@ function Dashboard(): React.ReactElement {
             onSelectFolder={() => void selectProjectFolder()}
             onStart={() => void startProjectTracking()}
             onStop={() => void stopProjectTracking()}
+            onTrackPath={(value) => {
+              setProjectPath(value);
+              void startProjectTracking(value);
+            }}
           />
           <button aria-label="Open team connection panel" className="top-action top-action-labeled" title="Team" type="button" onClick={toggleTeamPanel}>
             <Link2 size={14} />
@@ -2381,6 +2385,7 @@ function ProjectTrackingControl({
   onSelectFolder,
   onStart,
   onStop,
+  onTrackPath,
   path,
   projects,
   status,
@@ -2393,6 +2398,7 @@ function ProjectTrackingControl({
   onSelectFolder(): void;
   onStart(): void;
   onStop(): void;
+  onTrackPath(value: string): void;
   path: string;
   projects: LocalProject[];
   status: ProjectTrackingStatus;
@@ -2404,6 +2410,23 @@ function ProjectTrackingControl({
     ? `${status.detected_agents} detected`
     : activeProject?.name ?? "track repo";
   const displayPath = activeProject?.path ?? path;
+  const hasPath = displayPath.trim().length > 0;
+  const hasWarning = status.warnings.length > 0;
+  const stateTone = hasWarning ? "warn" : running ? "live" : hasPath ? "ready" : "empty";
+  const stateTitle = hasWarning
+    ? "Tracking needs attention"
+    : running
+      ? "Tracking this repo"
+      : hasPath
+        ? "Ready to track"
+        : "Choose a repo folder";
+  const stateText = hasWarning
+    ? status.warnings[0]
+    : running
+      ? `${status.detected_agents} detected / ${status.published_presence} published every ${status.interval_seconds}s.`
+      : hasPath
+        ? "Start tracking to publish repo-scoped local agent presence into Current Truth."
+        : "Use the folder picker, recent folders, or a manual path to connect Suka to a repository.";
   const recentProjects = projects.slice(0, 4);
 
   return (
@@ -2430,6 +2453,11 @@ function ProjectTrackingControl({
             </Badge>
           </div>
 
+          <div className={`tracking-state ${stateTone}`}>
+            <strong>{stateTitle}</strong>
+            <p>{stateText}</p>
+          </div>
+
           <div className="tracking-stats">
             <div><strong>{status.detected_agents}</strong><span>detected</span></div>
             <div><strong>{status.published_presence}</strong><span>published</span></div>
@@ -2439,17 +2467,18 @@ function ProjectTrackingControl({
           {suggestedProject !== undefined ? (
             <button
               className="project-option featured"
+              disabled={busy}
               type="button"
-              onClick={() => onPathChange(suggestedProject.path)}
+              onClick={() => onTrackPath(suggestedProject.path)}
             >
-              <span><HardDrive size={13} /> Server folder</span>
+              <span><HardDrive size={13} /> Track server folder</span>
               <code>{suggestedProject.path}</code>
             </button>
           ) : null}
 
           <button className="tracking-folder-action" disabled={busy} type="button" onClick={onSelectFolder}>
             <FolderOpen size={14} />
-            Open folder
+            {busy ? "Opening folder..." : "Open folder"}
           </button>
 
           {recentProjects.length > 0 ? (
@@ -2458,21 +2487,25 @@ function ProjectTrackingControl({
               {recentProjects.map((project) => (
                 <button
                   className={project.id === activeProject?.id ? "project-option active" : "project-option"}
+                  disabled={busy}
                   key={project.id}
                   type="button"
-                  onClick={() => onPathChange(project.path)}
+                  onClick={() => onTrackPath(project.path)}
                 >
-                  <span><GitBranch size={13} /> {project.name}</span>
+                  <span><GitBranch size={13} /> Track {project.name}</span>
                   <code>{project.path}</code>
                 </button>
               ))}
             </div>
-          ) : null}
+          ) : (
+            <p className="tracking-empty">Recent folders will appear here after you track a repository.</p>
+          )}
 
           <label className="tracking-path">
             <span>Folder path</span>
             <input
               aria-label="Project folder path"
+              disabled={busy}
               placeholder="/Users/name/work/project"
               value={path}
               onChange={(event) => onPathChange(event.target.value)}
@@ -2480,7 +2513,6 @@ function ProjectTrackingControl({
           </label>
 
           {error.length > 0 ? <p className="tracking-error">{error}</p> : null}
-          {status.warnings.length > 0 ? <p className="tracking-warning">{status.warnings[0]}</p> : null}
 
           <div className="tracking-actions">
             <button type="button" onClick={() => setOpen(false)}>
@@ -2489,12 +2521,12 @@ function ProjectTrackingControl({
             {running ? (
               <button className="danger-action" disabled={busy} type="button" onClick={onStop}>
                 <X size={14} />
-                Stop tracking
+                {busy ? "Stopping..." : "Stop tracking"}
               </button>
             ) : (
-              <button className="primary-action" disabled={busy || path.trim().length === 0} type="button" onClick={onStart}>
+              <button className="primary-action" disabled={busy || (!hasPath && suggestedProject === undefined)} type="button" onClick={onStart}>
                 <RadioTower size={14} />
-                Track manual path
+                {busy ? "Starting..." : "Start tracking"}
               </button>
             )}
           </div>
