@@ -5,7 +5,6 @@
     "declarationMap": true,
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true,
-    "ignoreDeprecations": "6.0",
     "isolatedModules": true,
     "lib": ["ES2023"],
     "module": "NodeNext",
@@ -16,11 +15,10 @@
     "noImplicitReturns": true,
     "noUncheckedIndexedAccess": true,
     "outDir": "dist",
-    "baseUrl": ".",
     "paths": {
-      "@suka/protocol": ["packages/protocol/src/index.ts"],
-      "@suka/conflict-engine": ["packages/conflict-engine/src/index.ts"],
-      "@suka/local-agents": ["packages/local-agents/src/index.ts"]
+      "@suka/protocol": ["./packages/protocol/src/index.ts"],
+      "@suka/conflict-engine": ["./packages/conflict-engine/src/index.ts"],
+      "@suka/local-agents": ["./packages/local-agents/src/index.ts"]
     },
     "resolveJsonModule": true,
     "rootDir": "src",
