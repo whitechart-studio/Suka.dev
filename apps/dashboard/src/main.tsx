@@ -73,6 +73,11 @@ type SukaState = {
   briefs: BriefPointer[];
 };
 
+type PresenceOverlapSignal = {
+  agents: PresencePointer[];
+  path: string;
+};
+
 type PresencePointer = {
   id?: string;
   agent_id: string;
@@ -657,6 +662,18 @@ function Dashboard(): React.ReactElement {
   const hasLiveState = state.presence.length + state.claims.length + state.events.length + state.decisions.length + state.briefs.length > 0;
   const showWelcome = landingOpen || (!welcomeDismissed && !hasLiveState);
 
+  const inspectAgent = useCallback((agentId: string) => {
+    setSelectedNodeId(`agent:${agentId}`);
+    setRightOpen(true);
+    setRightRailView("inspect");
+  }, []);
+
+  const reviewAgentOverlap = useCallback((agentId: string) => {
+    setSelectedNodeId(`agent:${agentId}`);
+    setRightOpen(true);
+    setRightRailView("activity");
+  }, []);
+
   const releaseClaim = useCallback(async (claimId: string) => {
     setReleasingClaimId(claimId);
     try {
@@ -1214,7 +1231,12 @@ function Dashboard(): React.ReactElement {
               {state.presence.length === 0
                 ? <p className="empty">No active agents.</p>
                 : state.presence.map((agent) => (
-                  <AgentCard agent={agent} key={agent.agent_id} overlapPaths={presenceOverlapPaths(agent, presenceFileOverlaps)} />
+                  <AgentCard
+                    agent={agent}
+                    key={agent.agent_id}
+                    overlapPaths={presenceOverlapPaths(agent, presenceFileOverlaps)}
+                    onReviewOverlap={reviewAgentOverlap}
+                  />
                 ))}
             </div>
           ) : <IconRail agents={state.presence} />}
@@ -1409,7 +1431,7 @@ function Dashboard(): React.ReactElement {
                     releasingClaimId={releasingClaimId}
                   />
                 ) : null}
-                {rightRailView === "activity" ? <ActivityStream events={state.events} presence={state.presence} /> : null}
+                {rightRailView === "activity" ? <ActivityStream events={state.events} presence={state.presence} onInspectAgent={inspectAgent} /> : null}
               </div>
             </div>
           ) : <CompactRisk count={riskCount} />}
@@ -2555,7 +2577,15 @@ function RailHeader(props: {
   );
 }
 
-function AgentCard({ agent, overlapPaths }: { agent: PresencePointer; overlapPaths: string[] }): React.ReactElement {
+function AgentCard({
+  agent,
+  onReviewOverlap,
+  overlapPaths
+}: {
+  agent: PresencePointer;
+  onReviewOverlap(agentId: string): void;
+  overlapPaths: string[];
+}): React.ReactElement {
   const identity = agentIdentity(agent);
   const Icon = identity.icon;
   const source = agentSourceLabel(agent);
@@ -2583,10 +2613,17 @@ function AgentCard({ agent, overlapPaths }: { agent: PresencePointer; overlapPat
           <span><Route size={12} />{agent.current_files?.length ?? 0} files</span>
         </div>
         {sharedFileCount > 0 ? (
-          <div className="agent-card-overlap" title={overlapPaths.join(", ")}>
+          <button
+            aria-label={`Review ${sharedFileCount} shared file${sharedFileCount === 1 ? "" : "s"} for ${agent.agent_id}`}
+            className="agent-card-overlap"
+            title={overlapPaths.join(", ")}
+            type="button"
+            onClick={() => onReviewOverlap(agent.agent_id)}
+          >
             <TriangleAlert size={12} />
             <span>{sharedFileCount} shared file{sharedFileCount === 1 ? "" : "s"}</span>
-          </div>
+            <ChevronRight size={12} />
+          </button>
         ) : null}
         <p className="task"><Route size={13} />{truncate(agent.task ?? "none", 58)}</p>
         <PathList paths={agent.current_files ?? []} />
@@ -3076,7 +3113,15 @@ function ClaimActions({
   );
 }
 
-function ActivityStream({ events, presence }: { events: EventPointer[]; presence: PresencePointer[] }): React.ReactElement {
+function ActivityStream({
+  events,
+  onInspectAgent,
+  presence
+}: {
+  events: EventPointer[];
+  onInspectAgent(agentId: string): void;
+  presence: PresencePointer[];
+}): React.ReactElement {
   const recentEvents = events.slice().sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at)).slice(0, 4);
   const recentPresence = presence.slice().sort((left, right) => Date.parse(right.last_seen ?? "") - Date.parse(left.last_seen ?? "")).slice(0, Math.max(0, 6 - recentEvents.length));
   const overlapSignals = buildPresenceFileOverlaps(presence).slice(0, 2);
@@ -3097,6 +3142,18 @@ function ActivityStream({ events, presence }: { events: EventPointer[]; presence
           </div>
           <p>{signal.agents.map((agent) => agentIdentity(agent).label).join(" + ")} are active near the same file.</p>
           <PathList paths={[signal.path]} />
+          <div className="activity-overlap-actions">
+            {signal.agents.map((agent) => {
+              const identity = agentIdentity(agent);
+              const Icon = identity.icon;
+              return (
+                <button key={agent.agent_id} type="button" onClick={() => onInspectAgent(agent.agent_id)}>
+                  <Icon size={12} />
+                  {identity.label}
+                </button>
+              );
+            })}
+          </div>
         </article>
       ))}
       {recentEvents.map((event) => (
@@ -3730,7 +3787,7 @@ function agentIdentity(agent: PresencePointer): { icon: React.ElementType; label
   return { icon: Code2, label: agent.tool, symbol: initials(agent.agent_id).slice(0, 2) };
 }
 
-function buildPresenceFileOverlaps(presence: PresencePointer[]): Array<{ agents: PresencePointer[]; path: string }> {
+function buildPresenceFileOverlaps(presence: PresencePointer[]): PresenceOverlapSignal[] {
   const byPath = new Map<string, PresencePointer[]>();
   for (const agent of presence.filter((item) => !isPresenceStale(item))) {
     for (const path of new Set(agent.current_files ?? [])) {
@@ -3745,7 +3802,7 @@ function buildPresenceFileOverlaps(presence: PresencePointer[]): Array<{ agents:
     .sort((left, right) => right.agents.length - left.agents.length || left.path.localeCompare(right.path));
 }
 
-function presenceOverlapPaths(agent: PresencePointer, overlaps: Array<{ agents: PresencePointer[]; path: string }>): string[] {
+function presenceOverlapPaths(agent: PresencePointer, overlaps: PresenceOverlapSignal[]): string[] {
   return overlaps
     .filter((signal) => signal.agents.some((item) => item.agent_id === agent.agent_id))
     .map((signal) => signal.path);
