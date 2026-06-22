@@ -5,6 +5,7 @@
     "declarationMap": true,
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true,
+    "ignoreDeprecations": "6.0",
     "isolatedModules": true,
     "lib": ["ES2023"],
     "module": "NodeNext",
@@ -26,6 +27,7 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "ES2022",
+    "types": ["node"],
     "verbatimModuleSyntax": true
   }
 }
