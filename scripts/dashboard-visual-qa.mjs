@@ -79,6 +79,15 @@ try {
   await page.locator("button[aria-label=\"Show radar sidebar\"]").click();
   await page.waitForTimeout(150);
   const rightStoredAfterRestore = await page.evaluate(() => localStorage.getItem("suka.dashboard.rightOpen"));
+  const visibleAgentCards = await page.locator(".left-rail .agent-card").count();
+  await page.getByRole("tab", { name: /Activity/i }).click();
+  await page.waitForTimeout(150);
+  const activityPresenceCards = await page.locator(".right-panel .activity-presence-card").count();
+  const activityEmptyVisible = await page.locator(".right-panel").getByText("No recent activity").isVisible().catch(() => false);
+  const activityHasPresenceFallback = visibleAgentCards === 0 || (activityPresenceCards > 0 && !activityEmptyVisible);
+  if (!activityHasPresenceFallback) {
+    errors.push("Activity panel did not show presence fallback while agents were visible.");
+  }
   await page.screenshot({ fullPage: true, path: screenshots.selected });
 
   const mobile = await browser.newPage({
@@ -98,6 +107,9 @@ try {
 
   console.log(JSON.stringify({
     errors,
+    activityEmptyVisible,
+    activityHasPresenceFallback,
+    activityPresenceCards,
     exitReturnsToWelcome,
     inspectorHasServer: inspectorText.includes("Server") && inspectorText.includes("apps/server"),
     leftRailHiddenAfterCollapse,
@@ -112,6 +124,7 @@ try {
     rightStoredAfterRestore,
     screenshots,
     selectionStored,
+    visibleAgentCards,
     welcomeHasIdentity: welcomeText.includes("Suka.dev") && welcomeText.includes("Coordinate agents"),
     welcomeVisible
   }, null, 2));
