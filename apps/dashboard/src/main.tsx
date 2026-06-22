@@ -3111,6 +3111,7 @@ function ActivityStream({ events, presence }: { events: EventPointer[]; presence
               <strong><Icon size={13} />{truncate(agent.task ?? `${identity.label} active`, 54)}</strong>
               <Badge tone={stale ? "risk" : "live"} icon={<Activity size={13} />}>{stale ? "stale" : agent.status}</Badge>
             </div>
+            <small className="activity-source-label">{agent.source?.kind === "detected" ? "Detected agent activity" : "Manual presence activity"}</small>
             <p>{formatPresenceActivityMeta(agent)}</p>
             <PathList paths={agent.current_files ?? []} />
           </article>
