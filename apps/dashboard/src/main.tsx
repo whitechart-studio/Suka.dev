@@ -2611,9 +2611,9 @@ function AgentRailEmptyState({
         </div>
       </div>
       <div className="agent-empty-stats">
-        <span><strong>{status.detected_agents}</strong>detected</span>
-        <span><strong>{status.published_presence}</strong>published</span>
-        <span><strong>{status.interval_seconds}s</strong>refresh</span>
+        <span><strong>{status.detected_agents}</strong>{" "}detected</span>
+        <span><strong>{status.published_presence}</strong>{" "}published</span>
+        <span><strong>{status.interval_seconds}s</strong>{" "}refresh</span>
       </div>
       {!status.running && hasPath ? (
         <button className="agent-empty-action" disabled={busy} type="button" onClick={onStartTracking}>
