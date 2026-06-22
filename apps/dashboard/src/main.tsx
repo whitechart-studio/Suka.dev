@@ -1229,7 +1229,16 @@ function Dashboard(): React.ReactElement {
           {leftOpen ? (
             <div className="rail-body">
               {state.presence.length === 0
-                ? <p className="empty">No active agents.</p>
+                ? (
+                  <AgentRailEmptyState
+                    activeProject={activeProject}
+                    busy={trackingBusy}
+                    path={projectPath}
+                    status={trackingStatus}
+                    suggestedProject={suggestedProject}
+                    onStartTracking={() => void startProjectTracking()}
+                  />
+                )
                 : state.presence.map((agent) => (
                   <AgentCard
                     agent={agent}
@@ -2556,6 +2565,63 @@ function ProjectTrackingControl({
         </section>
       ) : null}
     </div>
+  );
+}
+
+function AgentRailEmptyState({
+  activeProject,
+  busy,
+  onStartTracking,
+  path,
+  status,
+  suggestedProject
+}: {
+  activeProject: LocalProject | undefined;
+  busy: boolean;
+  onStartTracking(): void;
+  path: string;
+  status: ProjectTrackingStatus;
+  suggestedProject: LocalProjectSuggestion | undefined;
+}): React.ReactElement {
+  const hasPath = (activeProject?.path ?? path).trim().length > 0 || suggestedProject !== undefined;
+  const hasWarnings = status.warnings.length > 0;
+  const title = hasWarnings
+    ? "Detector needs attention"
+    : status.running
+      ? "Watching for repo-scoped agents"
+      : hasPath
+        ? "Ready to detect agents"
+        : "Choose a repo to detect agents";
+  const body = hasWarnings
+    ? status.warnings[0]
+    : status.running
+      ? "Suka is tracking this repository. Codex, Claude Code, Cursor, and terminal agents appear here when their working directory is inside the selected repo."
+      : hasPath
+        ? "Start tracking to publish local agent presence into this rail and Current Truth."
+        : "Use Track Repo in the top bar to pick a workspace folder before detection starts.";
+  const tone = hasWarnings ? "warn" : status.running ? "live" : hasPath ? "ready" : "empty";
+
+  return (
+    <section className={`agent-empty-state ${tone}`} aria-label="Agent detection status">
+      <div className="agent-empty-head">
+        <span><Bot size={14} /></span>
+        <div>
+          <strong>{title}</strong>
+          <p>{body}</p>
+        </div>
+      </div>
+      <div className="agent-empty-stats">
+        <span><strong>{status.detected_agents}</strong>detected</span>
+        <span><strong>{status.published_presence}</strong>published</span>
+        <span><strong>{status.interval_seconds}s</strong>refresh</span>
+      </div>
+      {!status.running && hasPath ? (
+        <button className="agent-empty-action" disabled={busy} type="button" onClick={onStartTracking}>
+          <RadioTower size={13} />
+          {busy ? "Starting..." : "Start tracking"}
+        </button>
+      ) : null}
+    </section>
   );
 }
 
