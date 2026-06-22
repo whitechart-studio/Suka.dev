@@ -4040,8 +4040,22 @@ body.is-resizing-rail .rail-resize-handle::after {
   width: 36px;
   transition:
     transform var(--dur-base) var(--ease-spring),
-    box-shadow var(--dur-base);
-  animation: agent-pulse 3s ease-in-out infinite;
+    box-shadow var(--dur-base),
+    filter var(--dur-base),
+    opacity var(--dur-base);
+}
+
+.agent-node.active {
+  animation: agent-pulse 2.4s ease-in-out infinite;
+}
+
+.agent-node.idle {
+  opacity: 0.9;
+}
+
+.agent-node.stale {
+  filter: grayscale(0.3);
+  opacity: 0.52;
 }
 
 .agent-node:hover {
@@ -4053,9 +4067,35 @@ body.is-resizing-rail .rail-resize-handle::after {
   animation: none;
 }
 
+.react-flow__edge.agent-edge .react-flow__edge-path {
+  opacity: 0.56;
+  transition:
+    opacity var(--dur-base),
+    stroke-width var(--dur-base),
+    filter var(--dur-base);
+}
+
+.react-flow__edge.agent-edge.active .react-flow__edge-path {
+  animation: agent-edge-flow 0.9s linear infinite;
+  filter: drop-shadow(0 0 7px rgba(59,130,246,0.34));
+  opacity: 0.95;
+}
+
+.react-flow__edge.agent-edge.idle .react-flow__edge-path {
+  opacity: 0.5;
+}
+
+.react-flow__edge.agent-edge.stale .react-flow__edge-path {
+  opacity: 0.28;
+}
+
 @keyframes agent-pulse {
   0%, 100% { box-shadow: 0 4px 14px rgba(0,0,0,0.6), 0 0 18px color-mix(in srgb, var(--agent-color) 55%, transparent); }
   50% { box-shadow: 0 4px 14px rgba(0,0,0,0.6), 0 0 28px color-mix(in srgb, var(--agent-color) 75%, transparent); }
+}
+
+@keyframes agent-edge-flow {
+  to { stroke-dashoffset: -26; }
 }
 
 /* ── Canvas toolbar ─────────────────────────── */

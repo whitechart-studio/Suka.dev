@@ -2322,7 +2322,7 @@ function DomainNode({ data }: any): React.ReactElement {
 
 function AgentNode({ data }: any): React.ReactElement {
   return (
-    <div className="agent-node" style={{ "--agent-color": data.color } as React.CSSProperties}>
+    <div className={`agent-node ${data.motion}`} style={{ "--agent-color": data.color } as React.CSSProperties}>
       <Handle position={Position.Left} type="target" />
       <span>{data.symbol}</span>
       <Handle position={Position.Right} type="source" />
@@ -3247,6 +3247,7 @@ function buildFlow(
       const domain = model.find((item) => touchesDomain(item, [...(agent.current_files ?? []), agent.task ?? "", agent.branch ?? ""]));
       const domainPosition = domain ? domainPositions.get(domain.id) : undefined;
       const base = domainPosition ? { x: domainPosition.x + 122, y: domainPosition.y - 22 } : { x: 420 + index * 48, y: 230 };
+      const motion = agentWorkState(agent, state.events);
       return {
         id: `agent:${agent.agent_id}`,
         type: "agent",
@@ -3255,6 +3256,7 @@ function buildFlow(
         zIndex: 3,
         data: {
           color: agentColor(agent.agent_id),
+          motion,
           state: "agent",
           symbol: identity.symbol
         }
@@ -3282,16 +3284,22 @@ function buildFlow(
         }
       };
     }),
-    ...state.presence.flatMap((agent) => agentDomains(agent, model).map((domainId) => ({
-      id: `agent-edge:${agent.agent_id}:${domainId}`,
-      source: `agent:${agent.agent_id}`,
-      target: domainId,
-      style: {
-        stroke: agentColor(agent.agent_id),
-        strokeDasharray: "5 5",
-        strokeWidth: 1.2
-      }
-    })))
+    ...state.presence.flatMap((agent) => {
+      const motion = agentWorkState(agent, state.events);
+      const active = motion === "active";
+      return agentDomains(agent, model).map((domainId) => ({
+        animated: active,
+        className: `agent-edge ${motion}`,
+        id: `agent-edge:${agent.agent_id}:${domainId}`,
+        source: `agent:${agent.agent_id}`,
+        target: domainId,
+        style: {
+          stroke: agentColor(agent.agent_id),
+          strokeDasharray: active ? "7 6" : "5 7",
+          strokeWidth: active ? 1.8 : 1.15
+        }
+      }));
+    })
   ];
 
   return { edges, nodes };
@@ -3656,6 +3664,19 @@ function hasBlockedClaims(domain: DomainModel): boolean {
 function agentDomains(agent: PresencePointer, domains: Domain[]): string[] {
   const matched = domains.filter((domain) => touchesDomain(domain, [...(agent.current_files ?? []), agent.task ?? "", agent.branch ?? ""])).map((domain) => domain.id);
   return matched.length > 0 ? matched : domains[0]?.id ? [domains[0].id] : [];
+}
+
+function agentWorkState(agent: PresencePointer, events: EventPointer[]): "active" | "idle" | "stale" {
+  if (isPresenceStale(agent)) return "stale";
+  if ((agent.current_files ?? []).length > 0) return "active";
+  const status = agent.status.toLowerCase();
+  if (/\b(editing|working|writing|changing|running)\b/.test(status)) return "active";
+  const recentEvent = events.some((event) => (
+    event.agent_id === agent.agent_id &&
+    Date.now() - Date.parse(event.created_at) < 2 * 60 * 1000 &&
+    eventScopeValues(event).length > 0
+  ));
+  return recentEvent ? "active" : "idle";
 }
 
 function agentIdentity(agent: PresencePointer): { icon: React.ElementType; label: string; symbol: string } {
