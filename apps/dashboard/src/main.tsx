@@ -646,6 +646,7 @@ function Dashboard(): React.ReactElement {
     [assignCustomZoneOwner, customZones, cycleCustomZoneKind, cycleCustomZoneSize, deleteCustomZone, editCustomZoneNote, model, nodePositions, renameCustomZone, repoMap.edges, selectedNodeId, state]
   );
   const conflictInsights = useMemo(() => buildConflictInsights(state), [state]);
+  const presenceFileOverlaps = useMemo(() => buildPresenceFileOverlaps(state.presence), [state.presence]);
   const visibleConflictInsights = useMemo(
     () => conflictInsights.filter((insight) => !dismissedInsightIds.has(insight.id)),
     [conflictInsights, dismissedInsightIds]
@@ -1213,7 +1214,7 @@ function Dashboard(): React.ReactElement {
               {state.presence.length === 0
                 ? <p className="empty">No active agents.</p>
                 : state.presence.map((agent) => (
-                  <AgentCard agent={agent} key={agent.agent_id} />
+                  <AgentCard agent={agent} key={agent.agent_id} overlapPaths={presenceOverlapPaths(agent, presenceFileOverlaps)} />
                 ))}
             </div>
           ) : <IconRail agents={state.presence} />}
@@ -2554,13 +2555,14 @@ function RailHeader(props: {
   );
 }
 
-function AgentCard({ agent }: { agent: PresencePointer }): React.ReactElement {
+function AgentCard({ agent, overlapPaths }: { agent: PresencePointer; overlapPaths: string[] }): React.ReactElement {
   const identity = agentIdentity(agent);
   const Icon = identity.icon;
   const source = agentSourceLabel(agent);
   const color = agentColor(agent.agent_id);
   const stale = isPresenceStale(agent);
   const seen = agent.last_seen ? relativeTime(agent.last_seen) : "live now";
+  const sharedFileCount = overlapPaths.length;
   return (
     <article className={`agent-card ${stale ? "stale" : "live"}`} style={{ "--agent-color": color } as React.CSSProperties}>
       <div className="agent-card-band">
@@ -2580,6 +2582,12 @@ function AgentCard({ agent }: { agent: PresencePointer }): React.ReactElement {
           <span><GitBranch size={12} />{truncate(agent.branch ?? "none", 22)}</span>
           <span><Route size={12} />{agent.current_files?.length ?? 0} files</span>
         </div>
+        {sharedFileCount > 0 ? (
+          <div className="agent-card-overlap" title={overlapPaths.join(", ")}>
+            <TriangleAlert size={12} />
+            <span>{sharedFileCount} shared file{sharedFileCount === 1 ? "" : "s"}</span>
+          </div>
+        ) : null}
         <p className="task"><Route size={13} />{truncate(agent.task ?? "none", 58)}</p>
         <PathList paths={agent.current_files ?? []} />
       </div>
@@ -3735,6 +3743,12 @@ function buildPresenceFileOverlaps(presence: PresencePointer[]): Array<{ agents:
     .map(([path, agents]) => ({ agents: uniqueAgents(agents), path }))
     .filter((signal) => signal.agents.length > 1)
     .sort((left, right) => right.agents.length - left.agents.length || left.path.localeCompare(right.path));
+}
+
+function presenceOverlapPaths(agent: PresencePointer, overlaps: Array<{ agents: PresencePointer[]; path: string }>): string[] {
+  return overlaps
+    .filter((signal) => signal.agents.some((item) => item.agent_id === agent.agent_id))
+    .map((signal) => signal.path);
 }
 
 function uniqueAgents(agents: PresencePointer[]): PresencePointer[] {
