@@ -657,7 +657,9 @@ function Dashboard(): React.ReactElement {
     [conflictInsights, dismissedInsightIds]
   );
   const riskCount = visibleConflictInsights.length + model.filter((item) => item.failures.length > 0).length;
-  const radarSignalCount = riskCount + state.presence.length + state.claims.length + state.briefs.length + state.events.length + state.decisions.length;
+  const visiblePresenceFileOverlaps = presenceFileOverlaps.slice(0, 2);
+  const activityCount = state.events.length + state.presence.length + visiblePresenceFileOverlaps.length;
+  const radarSignalCount = riskCount + activityCount + state.claims.length + state.briefs.length + state.decisions.length;
   const selectedDetails = useMemo(() => resolveSelection(selectedNodeId, model, state), [model, selectedNodeId, state]);
   const hasLiveState = state.presence.length + state.claims.length + state.events.length + state.decisions.length + state.briefs.length > 0;
   const showWelcome = landingOpen || (!welcomeDismissed && !hasLiveState);
@@ -1400,12 +1402,12 @@ function Dashboard(): React.ReactElement {
             <div className="right-stack">
               <RadarSummary
                 activeAgents={state.presence.length}
-                activityCount={state.events.length + state.presence.length}
+                activityCount={activityCount}
                 riskCount={riskCount}
                 truthCount={state.claims.length + state.briefs.length + state.decisions.length}
               />
               <RightRailTabs
-                activityCount={state.events.length + state.presence.length}
+                activityCount={activityCount}
                 riskCount={riskCount}
                 selected={rightRailView}
                 truthCount={state.claims.length + state.briefs.length + state.decisions.length}
@@ -1440,7 +1442,14 @@ function Dashboard(): React.ReactElement {
                     releasingClaimId={releasingClaimId}
                   />
                 ) : null}
-                {rightRailView === "activity" ? <ActivityStream events={state.events} presence={state.presence} onInspectAgent={inspectAgent} /> : null}
+                {rightRailView === "activity" ? (
+                  <ActivityStream
+                    events={state.events}
+                    overlapSignals={visiblePresenceFileOverlaps}
+                    presence={state.presence}
+                    onInspectAgent={inspectAgent}
+                  />
+                ) : null}
               </div>
             </div>
           ) : <CompactRisk count={riskCount} />}
@@ -3182,15 +3191,16 @@ function ClaimActions({
 function ActivityStream({
   events,
   onInspectAgent,
+  overlapSignals,
   presence
 }: {
   events: EventPointer[];
   onInspectAgent(agentId: string): void;
+  overlapSignals: PresenceOverlapSignal[];
   presence: PresencePointer[];
 }): React.ReactElement {
   const recentEvents = events.slice().sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at)).slice(0, 4);
   const recentPresence = presence.slice().sort((left, right) => Date.parse(right.last_seen ?? "") - Date.parse(left.last_seen ?? "")).slice(0, Math.max(0, 6 - recentEvents.length));
-  const overlapSignals = buildPresenceFileOverlaps(presence).slice(0, 2);
 
   return (
     <section className="rail-section activity-section">
