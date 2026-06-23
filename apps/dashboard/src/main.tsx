@@ -1447,6 +1447,7 @@ function Dashboard(): React.ReactElement {
                 {rightRailView === "activity" ? (
                   <ActivityStream
                     events={state.events}
+                    hiddenOverlapCount={presenceFileOverlaps.length - visiblePresenceFileOverlaps.length}
                     overlapSignals={visiblePresenceFileOverlaps}
                     presence={state.presence}
                     onInspectAgent={inspectAgent}
@@ -3192,17 +3193,22 @@ function ClaimActions({
 
 function ActivityStream({
   events,
+  hiddenOverlapCount,
   onInspectAgent,
   overlapSignals,
   presence
 }: {
   events: EventPointer[];
+  hiddenOverlapCount: number;
   onInspectAgent(agentId: string): void;
   overlapSignals: PresenceOverlapSignal[];
   presence: PresencePointer[];
 }): React.ReactElement {
   const recentEvents = events.slice().sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at)).slice(0, 4);
   const recentPresence = presence.slice().sort((left, right) => Date.parse(right.last_seen ?? "") - Date.parse(left.last_seen ?? "")).slice(0, Math.max(0, 6 - recentEvents.length));
+  const hiddenActivityCount = Math.max(0, events.length - recentEvents.length)
+    + Math.max(0, presence.length - recentPresence.length)
+    + Math.max(0, hiddenOverlapCount);
 
   return (
     <section className="rail-section activity-section">
@@ -3260,6 +3266,12 @@ function ActivityStream({
           </article>
         );
       })}
+      {hiddenActivityCount > 0 ? (
+        <div className="activity-more-note">
+          <RadioTower size={13} />
+          <span>{hiddenActivityCount} older signal{hiddenActivityCount === 1 ? "" : "s"} hidden from this focused view</span>
+        </div>
+      ) : null}
       {recentEvents.length === 0 && recentPresence.length === 0 ? (
         <EmptyState icon={<RadioTower size={15} />} title="No recent activity" text="Detected agents, events, and session updates will appear here as the workspace changes." />
       ) : null}
