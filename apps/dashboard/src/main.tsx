@@ -657,8 +657,10 @@ function Dashboard(): React.ReactElement {
     [conflictInsights, dismissedInsightIds]
   );
   const riskCount = visibleConflictInsights.length + model.filter((item) => item.failures.length > 0).length;
-  const visiblePresenceFileOverlaps = presenceFileOverlaps.slice(0, 2);
-  const activityCount = state.events.length + state.presence.length + visiblePresenceFileOverlaps.length;
+  const visiblePresenceFileOverlaps = useMemo(() => presenceFileOverlaps.slice(0, 2), [presenceFileOverlaps]);
+  const visibleActivityEventCount = Math.min(state.events.length, 4);
+  const visibleActivityPresenceCount = Math.min(state.presence.length, Math.max(0, 6 - visibleActivityEventCount));
+  const activityCount = visibleActivityEventCount + visibleActivityPresenceCount + visiblePresenceFileOverlaps.length;
   const radarSignalCount = riskCount + activityCount + state.claims.length + state.briefs.length + state.decisions.length;
   const selectedDetails = useMemo(() => resolveSelection(selectedNodeId, model, state), [model, selectedNodeId, state]);
   const hasLiveState = state.presence.length + state.claims.length + state.events.length + state.decisions.length + state.briefs.length > 0;
