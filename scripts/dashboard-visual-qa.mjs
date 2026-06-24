@@ -16,6 +16,7 @@ const ledgerApi = new URL("/api/ledger", target);
 const cleanupApi = new URL("/api/cleanup", target);
 const screenshots = {
   desktop: "/private/tmp/suka-dashboard-desktop.png",
+  ledger: "/private/tmp/suka-dashboard-ledger.png",
   mobile: "/private/tmp/suka-dashboard-mobile.png",
   selected: "/private/tmp/suka-dashboard-selected.png",
   welcome: "/private/tmp/suka-dashboard-welcome.png"
@@ -44,10 +45,16 @@ try {
       affected_paths: ["apps/dashboard/src/main.tsx"],
       branch: "visual-ledger-feed",
       worktree: "/worktrees/suka/visual-ledger-feed",
+      evidence: ["visual qa seeded ledger entry", "dashboard inspector detail panel"],
       diff_stat: {
         files_changed: 1,
         additions: 12,
         deletions: 3
+      },
+      token_usage: {
+        input_tokens: 1200,
+        output_tokens: 480,
+        model: "visual-qa"
       },
       created_at: new Date().toISOString()
     }),
@@ -114,6 +121,25 @@ try {
   if (!ledgerFeedVisible || ledgerCardCount === 0) {
     errors.push("Activity panel did not render seeded Coding Ledger entries.");
   }
+  await page.getByRole("button", { name: "Open Coding Ledger" }).click();
+  await page.waitForSelector(".ledger-page", { timeout: 10_000 });
+  const ledgerPageVisible = await page.locator(".ledger-page").isVisible();
+  const ledgerEntryCount = await page.locator(".ledger-page .ledger-entry").count();
+  const ledgerDetailText = await page.locator(".ledger-detail").innerText();
+  const normalizedLedgerDetail = ledgerDetailText.toLowerCase();
+  const ledgerDetailHasSeed = normalizedLedgerDetail.includes("visual qa ledger entry rendered")
+    && normalizedLedgerDetail.includes("visual qa seeded ledger entry")
+    && normalizedLedgerDetail.includes("visual-ledger-feed");
+  if (!ledgerPageVisible || ledgerEntryCount === 0 || !ledgerDetailHasSeed) {
+    errors.push("Coding Ledger page did not render seeded entry detail.");
+  }
+  await page.screenshot({ fullPage: true, path: screenshots.ledger });
+  await page.getByRole("button", { name: "Back to canvas" }).click();
+  const ledgerReturnsToCanvas = await page.locator(".ledger-page").count() === 0
+    && await page.locator(".canvas-shell").isVisible();
+  if (!ledgerReturnsToCanvas) {
+    errors.push("Coding Ledger page did not return to canvas.");
+  }
   const activityPresenceCards = await page.locator(".right-panel .activity-presence-card").count();
   const activityEmptyVisible = await page.locator(".right-panel").getByText("No recent activity").isVisible().catch(() => false);
   const activityHasPresenceFallback = visibleAgentCards === 0 || (activityPresenceCards > 0 && !activityEmptyVisible);
@@ -143,7 +169,11 @@ try {
     activityHasPresenceFallback,
     activityPresenceCards,
     ledgerCardCount,
+    ledgerDetailHasSeed,
     ledgerFeedVisible,
+    ledgerEntryCount,
+    ledgerPageVisible,
+    ledgerReturnsToCanvas,
     exitReturnsToWelcome,
     inspectorHasServer: inspectorText.includes("Server") && inspectorText.includes("apps/server"),
     leftRailHiddenAfterCollapse,
