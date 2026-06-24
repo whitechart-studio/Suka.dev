@@ -3396,6 +3396,92 @@ body.is-resizing-rail .rail-resize-handle::after {
 
 .activity-section { padding-top: 0; }
 
+.activity-ledger-feed {
+  display: grid;
+  gap: 6px;
+}
+
+.activity-subtitle {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 10px;
+  font-weight: 800;
+  justify-content: space-between;
+  letter-spacing: 0.06em;
+  min-width: 0;
+  text-transform: uppercase;
+}
+
+.activity-subtitle span,
+.activity-subtitle small {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+  min-width: 0;
+}
+
+.activity-subtitle small {
+  color: var(--ink-3);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.ledger-activity-card {
+  background:
+    linear-gradient(135deg, rgba(45,212,191,0.09), rgba(99,102,241,0.045)),
+    rgba(255,255,255,0.032);
+  border-color: rgba(45,212,191,0.2);
+}
+
+.ledger-activity-card .rail-card-head {
+  align-items: flex-start;
+}
+
+.ledger-activity-card .rail-card-head strong {
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.ledger-activity-card p {
+  color: var(--ink-3);
+  font-size: 11px;
+  line-height: 1.35;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ledger-meta-grid {
+  display: grid;
+  gap: 5px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ledger-meta-grid span {
+  align-items: center;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink-3);
+  display: inline-flex;
+  font-size: 10.5px;
+  font-weight: 700;
+  gap: 4px;
+  min-height: 24px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ledger-meta-grid svg {
+  flex: 0 0 auto;
+}
+
 .activity-overlap-card {
   background:
     linear-gradient(135deg, rgba(245,158,11,0.12), rgba(244,63,94,0.045)),

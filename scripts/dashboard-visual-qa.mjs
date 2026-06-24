@@ -7,6 +7,13 @@ const requireFromBundle = process.env.PLAYWRIGHT_MODULE_DIR
 const { chromium } = requireFromBundle?.("playwright") ?? requireFromWorkspace("playwright");
 
 const target = process.env.SUKA_DASHBOARD_URL ?? "http://127.0.0.1:4366/";
+const visualContext = {
+  repo_id: "visual-repo",
+  session_id: "visual-session",
+  workspace_id: "visual-workspace"
+};
+const ledgerApi = new URL("/api/ledger", target);
+const cleanupApi = new URL("/api/cleanup", target);
 const screenshots = {
   desktop: "/private/tmp/suka-dashboard-desktop.png",
   mobile: "/private/tmp/suka-dashboard-mobile.png",
@@ -27,6 +34,26 @@ const browser = await chromium.launch({ headless: true });
 const errors = [];
 
 try {
+  await fetch(ledgerApi, {
+    body: JSON.stringify({
+      id: `visual_ledger_${Date.now()}`,
+      ...visualContext,
+      agent_id: "codex-visual",
+      event_type: "file_modified",
+      summary: "Visual QA ledger entry rendered.",
+      affected_paths: ["apps/dashboard/src/main.tsx"],
+      branch: "visual-ledger-feed",
+      worktree: "/worktrees/suka/visual-ledger-feed",
+      diff_stat: {
+        files_changed: 1,
+        additions: 12,
+        deletions: 3
+      },
+      created_at: new Date().toISOString()
+    }),
+    headers: { "content-type": "application/json" },
+    method: "POST"
+  });
   const page = await browser.newPage({ deviceScaleFactor: 1, viewport: { height: 940, width: 1440 } });
   page.on("pageerror", (error) => errors.push(String(error.message || error)));
   page.on("console", (message) => {
@@ -82,6 +109,11 @@ try {
   const visibleAgentCards = await page.locator(".left-rail .agent-card").count();
   await page.getByRole("tab", { name: /Activity/i }).click();
   await page.waitForTimeout(150);
+  const ledgerFeedVisible = await page.locator(".right-panel .activity-ledger-feed").isVisible().catch(() => false);
+  const ledgerCardCount = await page.locator(".right-panel .ledger-activity-card").count();
+  if (!ledgerFeedVisible || ledgerCardCount === 0) {
+    errors.push("Activity panel did not render seeded Coding Ledger entries.");
+  }
   const activityPresenceCards = await page.locator(".right-panel .activity-presence-card").count();
   const activityEmptyVisible = await page.locator(".right-panel").getByText("No recent activity").isVisible().catch(() => false);
   const activityHasPresenceFallback = visibleAgentCards === 0 || (activityPresenceCards > 0 && !activityEmptyVisible);
@@ -110,6 +142,8 @@ try {
     activityEmptyVisible,
     activityHasPresenceFallback,
     activityPresenceCards,
+    ledgerCardCount,
+    ledgerFeedVisible,
     exitReturnsToWelcome,
     inspectorHasServer: inspectorText.includes("Server") && inspectorText.includes("apps/server"),
     leftRailHiddenAfterCollapse,
@@ -129,5 +163,10 @@ try {
     welcomeVisible
   }, null, 2));
 } finally {
+  await fetch(cleanupApi, {
+    body: JSON.stringify(visualContext),
+    headers: { "content-type": "application/json" },
+    method: "POST"
+  }).catch(() => undefined);
   await browser.close();
 }
