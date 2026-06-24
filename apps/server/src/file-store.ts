@@ -1,6 +1,15 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { BriefPointer, ClaimPointer, CoordinationContext, DecisionPointer, EventPointer, PresencePointer } from "@suka/protocol";
+import {
+  validatePointer,
+  type BriefPointer,
+  type ClaimPointer,
+  type CoordinationContext,
+  type DecisionPointer,
+  type EventPointer,
+  type LedgerPointer,
+  type PresencePointer
+} from "@suka/protocol";
 import { MemorySukaStore, type SukaStore } from "./memory-store.js";
 import { createEmptyState, type LocalProject, type SukaCleanupResult, type SukaState } from "./state.js";
 
@@ -58,6 +67,11 @@ export class FileSukaStore implements SukaStore {
     this.#persist();
   }
 
+  appendLedger(pointer: LedgerPointer): void {
+    this.#store.appendLedger(pointer);
+    this.#persist();
+  }
+
   upsertProject(project: LocalProject): void {
     this.#store.upsertProject(project);
     this.#persist();
@@ -94,7 +108,8 @@ function hasRemovedPointers(result: SukaCleanupResult): boolean {
     result.removed.claims > 0 ||
     result.removed.events > 0 ||
     result.removed.decisions > 0 ||
-    result.removed.briefs > 0;
+    result.removed.briefs > 0 ||
+    result.removed.ledger > 0;
 }
 
 function loadState(path: string): SukaState {
@@ -111,6 +126,7 @@ function loadState(path: string): SukaState {
     events: Array.isArray(parsed.events) ? parsed.events : [],
     decisions: Array.isArray(parsed.decisions) ? parsed.decisions : [],
     briefs: Array.isArray(parsed.briefs) ? parsed.briefs : [],
+    ledger: Array.isArray(parsed.ledger) ? parsed.ledger.filter(isValidLedgerPointer) : [],
     projects: Array.isArray(parsed.projects) ? parsed.projects : []
   };
 
@@ -119,4 +135,9 @@ function loadState(path: string): SukaState {
   }
 
   return state;
+}
+
+function isValidLedgerPointer(value: unknown): value is LedgerPointer {
+  const result = validatePointer(value);
+  return result.ok && result.value.type === "ledger";
 }

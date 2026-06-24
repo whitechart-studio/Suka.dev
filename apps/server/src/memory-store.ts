@@ -1,4 +1,4 @@
-import type { BriefPointer, ClaimPointer, CoordinationContext, DecisionPointer, EventPointer, PresencePointer } from "@suka/protocol";
+import type { BriefPointer, ClaimPointer, CoordinationContext, DecisionPointer, EventPointer, LedgerPointer, PresencePointer } from "@suka/protocol";
 import { createEmptyState, type LocalProject, type SukaCleanupResult, type SukaState } from "./state.js";
 
 export interface SukaStore {
@@ -10,6 +10,7 @@ export interface SukaStore {
   appendEvent(pointer: EventPointer): void;
   upsertDecision(pointer: DecisionPointer): void;
   upsertBrief(pointer: BriefPointer): void;
+  appendLedger(pointer: LedgerPointer): void;
   upsertProject(project: LocalProject): void;
   setActiveProject(id: string | undefined): boolean;
   expire(now: Date): void;
@@ -25,6 +26,7 @@ export class MemorySukaStore implements SukaStore {
       events: [...initialState.events],
       decisions: [...initialState.decisions],
       briefs: [...initialState.briefs],
+      ledger: [...initialState.ledger],
       projects: [...initialState.projects],
       ...(initialState.active_project_id === undefined ? {} : { active_project_id: initialState.active_project_id })
     };
@@ -37,6 +39,7 @@ export class MemorySukaStore implements SukaStore {
       events: [...this.#state.events],
       decisions: [...this.#state.decisions],
       briefs: [...this.#state.briefs],
+      ledger: [...this.#state.ledger],
       projects: [...this.#state.projects],
       ...(this.#state.active_project_id === undefined ? {} : { active_project_id: this.#state.active_project_id })
     };
@@ -63,6 +66,7 @@ export class MemorySukaStore implements SukaStore {
     this.#state.events = this.#state.events.filter((event) => !matchesContext(event, context));
     this.#state.decisions = this.#state.decisions.filter((decision) => !matchesContext(decision, context));
     this.#state.briefs = this.#state.briefs.filter((brief) => !matchesContext(brief, context));
+    this.#state.ledger = this.#state.ledger.filter((entry) => !matchesContext(entry, context));
     const after = this.getState();
 
     return {
@@ -72,7 +76,8 @@ export class MemorySukaStore implements SukaStore {
         claims: before.claims.length - after.claims.length,
         events: before.events.length - after.events.length,
         decisions: before.decisions.length - after.decisions.length,
-        briefs: before.briefs.length - after.briefs.length
+        briefs: before.briefs.length - after.briefs.length,
+        ledger: before.ledger.length - after.ledger.length
       },
       state: after
     };
@@ -88,6 +93,10 @@ export class MemorySukaStore implements SukaStore {
 
   upsertBrief(pointer: BriefPointer): void {
     this.#state.briefs = upsertById(this.#state.briefs, pointer);
+  }
+
+  appendLedger(pointer: LedgerPointer): void {
+    this.#state.ledger = [...this.#state.ledger, pointer];
   }
 
   upsertProject(project: LocalProject): void {

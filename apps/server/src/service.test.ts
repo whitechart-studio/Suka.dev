@@ -162,6 +162,38 @@ test("checks recent events for stale-context warnings", () => {
   assert.deepEqual(warnings[0]?.pointers, ["ptr_event_api_change"]);
 });
 
+test("publishes ledger entries as append-only session history", () => {
+  const service = createSukaService();
+  const entry = {
+    type: "ledger",
+    id: "ptr_ledger_01",
+    workspace_id: "workspace-a",
+    repo_id: "repo-a",
+    session_id: "session-a",
+    agent_id: "codex-trent-01",
+    event_type: "file_modified",
+    summary: "Record dashboard update.",
+    affected_paths: ["apps/dashboard/src/main.tsx"],
+    branch: "main",
+    worktree: "/worktrees/suka/main",
+    created_at: "2026-06-24T10:00:00.000Z"
+  };
+
+  const first = service.publish(entry);
+  const second = service.publish({
+    ...entry,
+    summary: "Record follow-up dashboard update.",
+    created_at: "2026-06-24T10:01:00.000Z"
+  });
+
+  assert.equal(first.ok, true);
+  assert.equal(second.ok, true);
+  assert.deepEqual(service.listLedger().map((item) => item.summary), [
+    "Record dashboard update.",
+    "Record follow-up dashboard update."
+  ]);
+});
+
 test("cleans up pointers only inside provided coordination context", () => {
   const service = createSukaService();
   service.publish({
@@ -245,6 +277,20 @@ test("cleans up pointers only inside provided coordination context", () => {
     created_at: "2026-06-12T10:00:00.000Z"
   });
   service.publish({
+    type: "ledger",
+    id: "ptr_ledger_session_a",
+    workspace_id: "workspace-a",
+    repo_id: "repo-a",
+    session_id: "session-a",
+    agent_id: "codex-trent-01",
+    event_type: "file_modified",
+    summary: "Session A ledger should be cleanable.",
+    affected_paths: ["src/billing/webhook.ts"],
+    branch: "session-a",
+    worktree: "/worktrees/suka/session-a",
+    created_at: "2026-06-12T10:00:00.000Z"
+  });
+  service.publish({
     type: "claim",
     id: "ptr_claim_session_b",
     workspace_id: "workspace-a",
@@ -271,10 +317,12 @@ test("cleans up pointers only inside provided coordination context", () => {
     claims: 1,
     events: 1,
     decisions: 1,
-    briefs: 1
+    briefs: 1,
+    ledger: 1
   });
   assert.deepEqual(result.state.claims.map((claim) => claim.id), ["ptr_claim_session_b"]);
   assert.deepEqual(result.state.briefs, []);
+  assert.deepEqual(result.state.ledger, []);
 });
 
 test("rejects invalid pointers before persistence", () => {
