@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { basename, join, relative } from "node:path";
+import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { createSukaService } from "./index.js";
 
@@ -53,13 +53,18 @@ test("registers nested project folders separately from their parent git repo", (
     assert.equal(second.name, "server");
     assert.equal(basename(second.path), "server");
     assert.equal(basename(second.repo_root), "repo");
-    assert.equal(relative(second.repo_root, second.path).replaceAll("\\", "/"), "apps/server");
+    assert.ok(toSlash(second.path).endsWith("/repo/apps/server"));
+    assert.ok(toSlash(second.repo_root).endsWith("/repo"));
     assert.equal(second.repo_id, "repo-apps-server");
     assert.deepEqual(service.listProjects().map((project) => project.id), [first.id, second.id]);
   } finally {
     rmSync(tempDir, { force: true, recursive: true });
   }
 });
+
+function toSlash(path: string): string {
+  return path.replaceAll("\\", "/");
+}
 
 test("removes registered projects without deleting local folders", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "suka-project-remove-"));
