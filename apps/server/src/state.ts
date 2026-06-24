@@ -1,4 +1,4 @@
-import type { BriefPointer, ClaimPointer, CoordinationContext, DecisionPointer, EventPointer, PresencePointer } from "@suka/protocol";
+import type { BriefPointer, ClaimPointer, CoordinationContext, DecisionPointer, EventPointer, LedgerPointer, PresencePointer } from "@suka/protocol";
 
 export interface LocalProject {
   id: string;
@@ -20,6 +20,7 @@ export interface SukaState {
   events: EventPointer[];
   decisions: DecisionPointer[];
   briefs: BriefPointer[];
+  ledger: LedgerPointer[];
   projects: LocalProject[];
   active_project_id?: string;
 }
@@ -34,6 +35,7 @@ export interface SukaCleanupResult {
     events: number;
     decisions: number;
     briefs: number;
+    ledger: number;
   };
   state: SukaState;
 }
@@ -45,6 +47,7 @@ export function createEmptyState(): SukaState {
     events: [],
     decisions: [],
     briefs: [],
+    ledger: [],
     projects: []
   };
 }

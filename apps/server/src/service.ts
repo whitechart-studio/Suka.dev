@@ -4,6 +4,7 @@ import {
   type ClaimPointer,
   type DecisionPointer,
   type EventPointer,
+  type LedgerPointer,
   type Pointer,
   type PresencePointer,
   type CoordinationContext,
@@ -18,6 +19,7 @@ import { buildTeamSummary } from "./team.js";
 export interface SukaService {
   getState(): SukaState;
   getTeamSummary(): ReturnType<typeof buildTeamSummary>;
+  listLedger(): LedgerPointer[];
   listProjects(): LocalProject[];
   getActiveProject(): LocalProject | undefined;
   registerProject(input: LocalProjectInput): LocalProject;
@@ -37,6 +39,10 @@ export function createSukaService(store: SukaStore = new MemorySukaStore()): Suk
 
     getTeamSummary() {
       return buildTeamSummary(store.getState());
+    },
+
+    listLedger() {
+      return store.getState().ledger;
     },
 
     listProjects() {
@@ -127,6 +133,9 @@ function persistPointer(store: SukaStore, pointer: Pointer): void {
       return;
     case "brief":
       store.upsertBrief(pointer as BriefPointer);
+      return;
+    case "ledger":
+      store.appendLedger(pointer as LedgerPointer);
       return;
   }
 }

@@ -184,6 +184,13 @@ async function routeRequest(
     return;
   }
 
+  if (method === "GET" && url.pathname === "/api/ledger") {
+    writeJson(response, 200, {
+      data: service.listLedger()
+    });
+    return;
+  }
+
   if (method === "GET" && url.pathname === "/api/projects") {
     writeJson(response, 200, {
       data: service.listProjects()
@@ -301,6 +308,45 @@ async function routeRequest(
         error: {
           code: "validation_failed",
           message: "Brief validation failed.",
+          issues: result.issues
+        }
+      });
+      return;
+    }
+
+    writeJson(response, 201, {
+      data: result.value
+    });
+    realtime.broadcast({
+      data: result.value,
+      type: "pointer.published"
+    });
+    realtime.broadcast({
+      data: service.getTeamSummary(),
+      type: "team.updated"
+    });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/ledger") {
+    const body = await readJson(request);
+    if (isRecord(body) && body.type !== undefined && body.type !== "ledger") {
+      writeJson(response, 400, {
+        error: {
+          code: "invalid_ledger",
+          message: "Ledger endpoint only accepts ledger pointers."
+        }
+      });
+      return;
+    }
+
+    const pointer = isRecord(body) && body.type === undefined ? { ...body, type: "ledger" } : body;
+    const result = service.publish(pointer);
+    if (!result.ok) {
+      writeJson(response, 400, {
+        error: {
+          code: "validation_failed",
+          message: "Ledger validation failed.",
           issues: result.issues
         }
       });
