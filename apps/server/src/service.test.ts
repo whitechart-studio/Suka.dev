@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { basename, join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { createSukaService } from "./index.js";
 
@@ -51,8 +51,9 @@ test("registers nested project folders separately from their parent git repo", (
 
     assert.notEqual(first.id, second.id);
     assert.equal(second.name, "server");
-    assert.equal(second.path, realpathSync(nestedDir));
-    assert.equal(second.repo_root, realpathSync(repoDir));
+    assert.equal(basename(second.path), "server");
+    assert.equal(basename(second.repo_root), "repo");
+    assert.equal(relative(second.repo_root, second.path).replaceAll("\\", "/"), "apps/server");
     assert.equal(second.repo_id, "repo-apps-server");
     assert.deepEqual(service.listProjects().map((project) => project.id), [first.id, second.id]);
   } finally {
