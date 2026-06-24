@@ -508,6 +508,13 @@ input::placeholder { color: var(--muted); }
   background: var(--bg);
 }
 
+.suka-app.welcome-mode {
+  display: block;
+  height: 100%;
+  min-height: 100%;
+  overflow-y: auto;
+}
+
 /* ── Top bar ────────────────────────────────── */
 .topbar {
   align-items: center;
@@ -1217,6 +1224,44 @@ input::placeholder { color: var(--muted); }
   border-color: rgba(15,23,42,0.12);
 }
 
+.landing-docs {
+  background: rgba(10,14,22,0.98);
+  height: min(680px, calc(100dvh - 96px));
+  left: 50%;
+  margin: 0;
+  max-height: none;
+  max-width: 1040px;
+  min-height: 360px;
+  position: fixed;
+  right: auto;
+  top: 78px;
+  transform: translateX(-50%);
+  width: min(calc(100vw - 32px), 1040px);
+  z-index: calc(var(--z-overlay) + 8);
+}
+
+.landing-docs .docs-head {
+  background: rgba(15,23,42,0.92);
+}
+
+.landing-docs .docs-body {
+  min-height: 0;
+}
+
+.landing-docs .docs-nav {
+  flex-basis: 180px;
+}
+
+.landing-docs .docs-content {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow-y: auto;
+}
+
+.landing-docs .docs-section-title {
+  grid-column: 1 / -1;
+}
+
 /* ── Settings panel ─────────────────────────── */
 .settings-panel {
   background: var(--panel-glass);
@@ -1922,10 +1967,9 @@ input::placeholder { color: var(--muted); }
 
   background: #04080f;
   color: var(--ink);
-  display: grid;
-  grid-template-rows: auto 1fr auto auto;
-  height: 100dvh;
-  overflow-y: auto;
+  display: block;
+  min-height: 100dvh;
+  overflow-y: visible;
   position: relative;
 }
 
@@ -1989,7 +2033,7 @@ input::placeholder { color: var(--muted); }
   margin: 0 auto;
   max-width: 1240px;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
   padding: 40px 28px 44px;
   position: relative;
   width: 100%;
@@ -4950,22 +4994,31 @@ body.is-resizing-rail .rail-resize-handle::after {
   }
 
   /* Welcome */
-  .welcome-surface { height: 100dvh; overflow: auto; }
+  .welcome-surface { height: auto; min-height: 100dvh; overflow: visible; }
 
   .welcome-nav {
     align-items: stretch;
+    box-sizing: border-box;
     gap: 8px;
     min-height: auto;
     padding: 10px 14px;
     flex-direction: column;
   }
 
-  .welcome-nav-actions { justify-content: flex-end; }
+  .welcome-nav-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .welcome-nav-actions button {
+    flex: 1 1 150px;
+    justify-content: center;
+  }
 
   .welcome-panel {
     gap: 18px;
     grid-template-columns: minmax(0, 1fr);
-    padding: 14px 14px 28px;
+    padding: 22px 14px 28px;
   }
 
   .welcome-copy { align-content: start; gap: 14px; }
@@ -4982,6 +5035,81 @@ body.is-resizing-rail .rail-resize-handle::after {
   .welcome-actions button + button { display: none; }
   .welcome-command { display: none; }
   .welcome-launcher { max-width: none; padding: 12px; }
+
+  .welcome-features {
+    background: rgba(4,8,15,0.78);
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .feature-pill {
+    border-right: 0;
+    padding: 16px 24px;
+  }
+
+  .feature-pill:not(:last-child) {
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    border-right: 0;
+  }
+
+  .welcome-how {
+    padding: 28px 20px 34px;
+  }
+
+  .how-steps {
+    display: grid;
+    gap: 16px;
+    max-width: 520px;
+  }
+
+  .how-step {
+    padding: 0;
+  }
+
+  .how-arrow {
+    display: none;
+  }
+
+  .landing-docs {
+    border-radius: 12px;
+    height: calc(100dvh - 24px);
+    left: 8px;
+    margin: 0;
+    max-height: none;
+    min-height: 0;
+    right: 8px;
+    top: 12px;
+    transform: none;
+    width: auto;
+  }
+
+  .landing-docs .docs-body {
+    display: grid;
+    min-height: 0;
+  }
+
+  .landing-docs .docs-nav {
+    border-bottom: 1px solid var(--line);
+    border-right: 0;
+    flex: none;
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .landing-docs .docs-nav button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    width: auto;
+  }
+
+  .landing-docs .docs-content {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-x: hidden;
+  }
+
+  .landing-docs .docs-item-code-wrap {
+    min-width: 0;
+  }
+
   .launcher-head,
   .launcher-actions {
     align-items: stretch;
@@ -4990,7 +5118,8 @@ body.is-resizing-rail .rail-resize-handle::after {
   .launcher-actions button { justify-content: center; width: 100%; }
   .launcher-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
-  .welcome-preview { min-height: 360px; padding: 10px; }
+  .live-demo,
+  .welcome-preview { display: none; }
   .preview-map     { min-height: 210px; }
 
   .preview-node.primary    { left: 18px; top: 28px; width: 126px; }
