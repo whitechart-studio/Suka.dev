@@ -71,6 +71,7 @@ type SukaState = {
   events: EventPointer[];
   decisions: DecisionPointer[];
   briefs: BriefPointer[];
+  ledger: LedgerPointer[];
 };
 
 type PresenceOverlapSignal = {
@@ -111,6 +112,7 @@ type ClaimPointer = {
 };
 
 type EventPointer = {
+  id?: string;
   agent_id: string;
   event_type: string;
   summary: string;
@@ -122,6 +124,7 @@ type EventPointer = {
 };
 
 type DecisionPointer = {
+  id?: string;
   title: string;
   status: string;
   confidence?: string;
@@ -146,6 +149,33 @@ type BriefPointer = {
   related_sessions: string[];
   worktree?: string;
   created_at: string;
+};
+
+type LedgerPointer = {
+  id: string;
+  workspace_id: string;
+  repo_id: string;
+  session_id: string;
+  agent_id: string;
+  event_type: string;
+  summary: string;
+  affected_paths: string[];
+  branch: string;
+  worktree: string;
+  created_at: string;
+  evidence?: string[];
+  diff_stat?: {
+    files_changed: number;
+    additions: number;
+    deletions: number;
+  };
+  token_usage?: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens?: number;
+    estimated_cost_usd?: number;
+    model?: string;
+  };
 };
 
 type Scope = {
@@ -307,6 +337,7 @@ const emptyState: SukaState = {
   claims: [],
   decisions: [],
   events: [],
+  ledger: [],
   presence: []
 };
 
@@ -395,6 +426,7 @@ const RIGHT_RAIL_MAX_WIDTH = 560;
 const ACTIVITY_EVENT_LIMIT = 4;
 const ACTIVITY_TOTAL_LIMIT = 6;
 const ACTIVITY_OVERLAP_LIMIT = 2;
+const ACTIVITY_LEDGER_LIMIT = 4;
 
 type SelectedDetails =
   | { kind: "agent"; agent: PresencePointer }
@@ -531,6 +563,41 @@ function Dashboard(): React.ReactElement {
   }, [loadState, settings.pollingInterval]);
 
   useEffect(() => {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const socket = new WebSocket(`${protocol}//${window.location.host}/api/realtime`);
+    socket.onmessage = (event) => {
+      const message = parseRealtimeMessage(event.data);
+      if (message === undefined) return;
+      switch (message.type) {
+        case "state.bootstrap":
+        case "state.cleaned":
+        case "state.expired":
+          setState(normalizeState(message.data as Partial<SukaState>));
+          return;
+        case "pointer.published":
+          setState((current) => mergePublishedPointer(current, message.data));
+          return;
+        case "claim.released":
+          if (isRecord(message.data) && typeof message.data.id === "string") {
+            const releasedId = message.data.id;
+            setState((current) => ({
+              ...current,
+              claims: current.claims.filter((claim) => claim.id !== releasedId)
+            }));
+          }
+          return;
+        case "team.updated":
+          setTeamSummary(message.data as TeamConnectionSummary);
+          return;
+        default:
+          return;
+      }
+    };
+    socket.onerror = () => setStatus((current) => current === "connected" ? current : "error");
+    return () => socket.close();
+  }, []);
+
+  useEffect(() => {
     void loadRepoMap();
     const timer = window.setInterval(() => void loadRepoMap(), 30000);
     return () => window.clearInterval(timer);
@@ -661,15 +728,17 @@ function Dashboard(): React.ReactElement {
   );
   const riskCount = visibleConflictInsights.length + model.filter((item) => item.failures.length > 0).length;
   const visiblePresenceFileOverlaps = useMemo(() => presenceFileOverlaps.slice(0, ACTIVITY_OVERLAP_LIMIT), [presenceFileOverlaps]);
+  const visibleLedgerCount = Math.min(state.ledger.length, ACTIVITY_LEDGER_LIMIT);
   const visibleActivityEventCount = Math.min(state.events.length, ACTIVITY_EVENT_LIMIT);
   const visibleActivityPresenceCount = Math.min(state.presence.length, Math.max(0, ACTIVITY_TOTAL_LIMIT - visibleActivityEventCount));
   const hiddenActivityCount = Math.max(0, state.events.length - visibleActivityEventCount)
     + Math.max(0, state.presence.length - visibleActivityPresenceCount)
+    + Math.max(0, state.ledger.length - visibleLedgerCount)
     + Math.max(0, presenceFileOverlaps.length - visiblePresenceFileOverlaps.length);
-  const visibleActivityCount = visibleActivityEventCount + visibleActivityPresenceCount + visiblePresenceFileOverlaps.length;
+  const visibleActivityCount = visibleLedgerCount + visibleActivityEventCount + visibleActivityPresenceCount + visiblePresenceFileOverlaps.length;
   const radarSignalCount = riskCount + visibleActivityCount + state.claims.length + state.briefs.length + state.decisions.length;
   const selectedDetails = useMemo(() => resolveSelection(selectedNodeId, model, state), [model, selectedNodeId, state]);
-  const hasLiveState = state.presence.length + state.claims.length + state.events.length + state.decisions.length + state.briefs.length > 0;
+  const hasLiveState = state.presence.length + state.claims.length + state.events.length + state.decisions.length + state.briefs.length + state.ledger.length > 0;
   const showWelcome = landingOpen || (!welcomeDismissed && !hasLiveState);
 
   const inspectAgent = useCallback((agentId: string) => {
@@ -1454,6 +1523,7 @@ function Dashboard(): React.ReactElement {
                   <ActivityStream
                     events={state.events}
                     hiddenActivityCount={hiddenActivityCount}
+                    ledger={state.ledger}
                     overlapSignals={visiblePresenceFileOverlaps}
                     presence={state.presence}
                     onInspectAgent={inspectAgent}
@@ -3212,19 +3282,22 @@ function ClaimActions({
 function ActivityStream({
   events,
   hiddenActivityCount,
+  ledger,
   onInspectAgent,
   overlapSignals,
   presence
 }: {
   events: EventPointer[];
   hiddenActivityCount: number;
+  ledger: LedgerPointer[];
   onInspectAgent(agentId: string): void;
   overlapSignals: PresenceOverlapSignal[];
   presence: PresencePointer[];
 }): React.ReactElement {
+  const recentLedger = ledger.slice().sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at)).slice(0, ACTIVITY_LEDGER_LIMIT);
   const recentEvents = events.slice().sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at)).slice(0, ACTIVITY_EVENT_LIMIT);
   const recentPresence = presence.slice().sort((left, right) => Date.parse(right.last_seen ?? "") - Date.parse(left.last_seen ?? "")).slice(0, Math.max(0, ACTIVITY_TOTAL_LIMIT - recentEvents.length));
-  const visibleActivityCount = recentEvents.length + recentPresence.length + overlapSignals.length;
+  const visibleActivityCount = recentLedger.length + recentEvents.length + recentPresence.length + overlapSignals.length;
 
   return (
     <section className="rail-section activity-section">
@@ -3261,6 +3334,17 @@ function ActivityStream({
           </div>
         </article>
       ))}
+      {recentLedger.length > 0 ? (
+        <div className="activity-ledger-feed" aria-label="Recent coding ledger entries">
+          <div className="activity-subtitle">
+            <span><BookOpen size={13} /> Coding ledger</span>
+            <small>{recentLedger.length} recent</small>
+          </div>
+          {recentLedger.map((entry) => (
+            <LedgerActivityCard entry={entry} key={`${entry.id}:${entry.created_at}`} />
+          ))}
+        </div>
+      ) : null}
       {recentEvents.map((event) => (
         <article className="rail-card" key={`${event.agent_id}:${event.created_at}:${event.summary}`}>
           <div className="rail-card-head">
@@ -3294,9 +3378,30 @@ function ActivityStream({
         </div>
       ) : null}
       {visibleActivityCount === 0 ? (
-        <EmptyState icon={<RadioTower size={15} />} title="No recent activity" text="Detected agents, events, and session updates will appear here as the workspace changes." />
+        <EmptyState icon={<RadioTower size={15} />} title="No recent activity" text="Detected agents, ledger entries, events, and session updates will appear here as the workspace changes." />
       ) : null}
     </section>
+  );
+}
+
+function LedgerActivityCard({ entry }: { entry: LedgerPointer }): React.ReactElement {
+  const diff = formatLedgerDiff(entry);
+  const cost = formatLedgerCost(entry);
+  return (
+    <article className="rail-card ledger-activity-card">
+      <div className="rail-card-head">
+        <strong><BookOpen size={13} />{truncate(entry.summary, 56)}</strong>
+        <Badge tone={ledgerTone(entry.event_type)} icon={<Code2 size={13} />}>{eventLabel(entry.event_type)}</Badge>
+      </div>
+      <p>{agentLabel(entry.agent_id)} / {formatRelativeTime(entry.created_at)}</p>
+      <div className="ledger-meta-grid">
+        <span title={entry.branch}><GitBranch size={12} />{truncate(entry.branch, 28)}</span>
+        <span title={entry.worktree}><HardDrive size={12} />{truncate(formatWorktree(entry.worktree), 28)}</span>
+        {diff ? <span title={diff}><FileClock size={12} />{diff}</span> : null}
+        {cost ? <span title={cost}><Timer size={12} />{cost}</span> : null}
+      </div>
+      <PathList paths={entry.affected_paths} />
+    </article>
   );
 }
 
@@ -3324,8 +3429,61 @@ function normalizeState(state: Partial<SukaState>): SukaState {
     claims: Array.isArray(state.claims) ? state.claims : [],
     decisions: Array.isArray(state.decisions) ? state.decisions : [],
     events: Array.isArray(state.events) ? state.events : [],
+    ledger: Array.isArray(state.ledger) ? state.ledger : [],
     presence: Array.isArray(state.presence) ? state.presence : []
   };
+}
+
+type RealtimeDashboardMessage = {
+  data: unknown;
+  type: string;
+};
+
+function parseRealtimeMessage(value: unknown): RealtimeDashboardMessage | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!isRecord(parsed) || typeof parsed.type !== "string") return undefined;
+    return {
+      data: parsed.data,
+      type: parsed.type
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function mergePublishedPointer(state: SukaState, pointer: unknown): SukaState {
+  if (!isRecord(pointer) || typeof pointer.type !== "string") return state;
+  switch (pointer.type) {
+    case "presence":
+      return { ...state, presence: upsertPointer(state.presence, pointer as PresencePointer) };
+    case "claim":
+      return { ...state, claims: upsertPointer(state.claims, pointer as ClaimPointer) };
+    case "event":
+      return { ...state, events: [...state.events, pointer as EventPointer] };
+    case "decision":
+      return { ...state, decisions: upsertPointer(state.decisions, pointer as DecisionPointer) };
+    case "brief":
+      return { ...state, briefs: upsertPointer(state.briefs, pointer as BriefPointer) };
+    case "ledger":
+      return { ...state, ledger: [...state.ledger, pointer as LedgerPointer] };
+    default:
+      return state;
+  }
+}
+
+function upsertPointer<T extends { id?: string }>(items: T[], item: T): T[] {
+  if (item.id === undefined) return [...items, item];
+  const index = items.findIndex((candidate) => candidate.id === item.id);
+  if (index === -1) return [...items, item];
+  const next = [...items];
+  next[index] = item;
+  return next;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function buildDomainModel(state: SukaState, domains: Domain[]): DomainModel[] {
@@ -3968,6 +4126,45 @@ function initials(value: string): string {
 
 function truncate(value: string, maxLength: number): string {
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
+}
+
+function eventLabel(value: string): string {
+  return value.replaceAll("_", " ");
+}
+
+function agentLabel(agentId: string): string {
+  return agentIdentity({ agent_id: agentId, current_files: [], status: "online", tool: agentId }).label;
+}
+
+function ledgerTone(eventType: string): string {
+  if (eventType.includes("failed") || eventType.includes("conflict")) return "risk";
+  if (eventType.includes("completed") || eventType.includes("passed") || eventType.includes("accepted")) return "live";
+  return "neutral";
+}
+
+function formatLedgerDiff(entry: LedgerPointer): string | undefined {
+  if (entry.diff_stat === undefined) return undefined;
+  const { additions, deletions, files_changed: filesChanged } = entry.diff_stat;
+  return `${filesChanged} file${filesChanged === 1 ? "" : "s"} +${additions} -${deletions}`;
+}
+
+function formatLedgerCost(entry: LedgerPointer): string | undefined {
+  const usage = entry.token_usage;
+  if (usage === undefined) return undefined;
+  const tokens = usage.total_tokens ?? usage.input_tokens + usage.output_tokens;
+  if (usage.estimated_cost_usd !== undefined) {
+    return `${tokens.toLocaleString()} tok / $${usage.estimated_cost_usd.toFixed(3)}`;
+  }
+  return `${tokens.toLocaleString()} tok`;
+}
+
+function formatWorktree(worktree: string): string {
+  const parts = worktree.split("/").filter(Boolean);
+  return parts.at(-1) ?? worktree;
+}
+
+function formatRelativeTime(timestamp: string): string {
+  return relativeTime(timestamp);
 }
 
 function relativeTime(timestamp: string): string {
