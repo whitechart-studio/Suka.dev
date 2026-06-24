@@ -1164,7 +1164,7 @@ function Dashboard(): React.ReactElement {
 
   if (showWelcome) {
     return (
-      <div className="suka-app" data-theme={settings.theme} data-density={settings.density}>
+      <div className="suka-app welcome-mode" data-theme={settings.theme} data-density={settings.density}>
         <WelcomeSurface
           activeProject={activeProject}
           busy={trackingBusy}
@@ -1580,6 +1580,7 @@ function WelcomeSurface({
   trackingStatus: ProjectTrackingStatus;
 }): React.ReactElement {
   const workspaceName = connection.workspaceName.trim() || displayName(repoName);
+  const [guideOpen, setGuideOpen] = useState(false);
 
   return (
     <section className="welcome-surface" aria-label="Welcome to Suka">
@@ -1593,6 +1594,10 @@ function WelcomeSurface({
         </div>
         <div className="welcome-nav-actions">
           <Badge tone={status === "connected" ? "live" : "neutral"} icon={<Wifi size={13} />}>{status}</Badge>
+          <button type="button" onClick={() => setGuideOpen(true)}>
+            <BookOpen size={14} />
+            Start guide
+          </button>
           <button type="button" onClick={onDismiss}>
             <Network size={14} />
             Open canvas
@@ -1699,8 +1704,7 @@ function WelcomeSurface({
           </div>
         </div>
       </div>
-
-      <WelcomeDocs />
+      {guideOpen ? <WelcomeDocs onClose={() => setGuideOpen(false)} /> : null}
     </section>
   );
 }
@@ -2183,7 +2187,7 @@ const DOCS_SECTIONS = [
   }
 ] as const;
 
-function WelcomeDocs(): React.ReactElement {
+function WelcomeDocs({ onClose }: { onClose(): void }): React.ReactElement {
   const [activeSection, setActiveSection] = useState<string>("quickstart");
   const section = DOCS_SECTIONS.find(s => s.id === activeSection) ?? DOCS_SECTIONS[0];
   const [copied, setCopied] = useState("");
@@ -2202,6 +2206,7 @@ function WelcomeDocs(): React.ReactElement {
           <span>Start guide</span>
           <span className="docs-shortcut">CLI</span>
         </div>
+        <button aria-label="Close start guide" type="button" onClick={onClose}><X size={14} /></button>
       </div>
 
       <div className="docs-body">

@@ -81,10 +81,17 @@ try {
   await page.locator("button[aria-label=\"Back to landing\"]").click();
   await page.waitForSelector(".welcome-surface", { timeout: 10_000 });
   const exitReturnsToWelcome = await page.locator(".welcome-surface").isVisible();
-  const landingDocsVisible = await page.locator(".landing-docs").isVisible();
+  const landingGuideButtonVisible = await page.getByRole("button", { name: "Start guide" }).isVisible();
   const dashboardDocsButtonCount = await page.locator("button[aria-label=\"Open docs\"]").count();
-  if (!landingDocsVisible || dashboardDocsButtonCount !== 0) {
-    errors.push("Docs should render on the landing page and be absent from the dashboard topbar.");
+  if (!landingGuideButtonVisible || dashboardDocsButtonCount !== 0) {
+    errors.push("Start guide CTA should render on the landing page and docs should be absent from the dashboard topbar.");
+  }
+  await page.getByRole("button", { name: "Start guide" }).click();
+  const landingDocsVisible = await page.locator(".landing-docs").isVisible();
+  await page.getByRole("button", { name: "Close start guide" }).click();
+  const landingDocsClosed = await page.locator(".landing-docs").count() === 0;
+  if (!landingDocsVisible || !landingDocsClosed) {
+    errors.push("Landing Start guide CTA did not open and close the guide.");
   }
   await page.locator(".welcome-actions button").filter({ hasText: "Start local workspace" }).click();
   await page.waitForSelector(".react-flow__node", { timeout: 10_000 });
@@ -180,6 +187,8 @@ try {
     ledgerPageVisible,
     ledgerReturnsToCanvas,
     landingDocsVisible,
+    landingDocsClosed,
+    landingGuideButtonVisible,
     dashboardDocsButtonCount,
     exitReturnsToWelcome,
     inspectorHasServer: inspectorText.includes("Server") && inspectorText.includes("apps/server"),
