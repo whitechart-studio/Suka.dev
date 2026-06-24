@@ -115,12 +115,44 @@ export interface BriefPointer extends BasePointer {
   created_at: IsoTimestamp;
 }
 
+export interface LedgerDiffStat {
+  files_changed: number;
+  additions: number;
+  deletions: number;
+}
+
+export interface LedgerTokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens?: number;
+  estimated_cost_usd?: number;
+  model?: string;
+}
+
+export interface LedgerPointer extends BasePointer {
+  type: "ledger";
+  workspace_id: string;
+  repo_id: string;
+  session_id: string;
+  agent_id: AgentId;
+  event_type: EventType;
+  summary: string;
+  affected_paths: string[];
+  branch: string;
+  worktree: string;
+  created_at: IsoTimestamp;
+  evidence?: string[];
+  diff_stat?: LedgerDiffStat;
+  token_usage?: LedgerTokenUsage;
+}
+
 export type Pointer =
   | PresencePointer
   | ClaimPointer
   | EventPointer
   | DecisionPointer
-  | BriefPointer;
+  | BriefPointer
+  | LedgerPointer;
 
 export type ValidationIssueCode =
   | "invalid_type"
