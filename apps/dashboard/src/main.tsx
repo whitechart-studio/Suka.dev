@@ -454,6 +454,7 @@ function Dashboard(): React.ReactElement {
   const [landingOpen, setLandingOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
+  const [ledgerOpen, setLedgerOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(() => readStoredSettings());
   const [rightRailView, setRightRailView] = useState<RightRailView>(() => readStoredRightRailView());
   const [projects, setProjects] = useState<LocalProject[]>([]);
@@ -1243,6 +1244,21 @@ function Dashboard(): React.ReactElement {
             <Link2 size={14} />
             <span>Team</span>
           </button>
+          <button
+            aria-expanded={ledgerOpen}
+            aria-label="Open Coding Ledger"
+            className="top-action top-action-labeled"
+            title="Coding Ledger"
+            type="button"
+            onClick={() => {
+              setLedgerOpen(true);
+              setDocsOpen(false);
+              setSettingsOpen(false);
+            }}
+          >
+            <BookOpen size={14} />
+            <span>Ledger</span>
+          </button>
           <button aria-label="Refresh state" className="top-action" title="Refresh state" type="button" onClick={() => void loadState()}>
             <RefreshCw size={14} />
           </button>
@@ -1294,6 +1310,14 @@ function Dashboard(): React.ReactElement {
           />
         ) : null}
       </header>
+
+      {ledgerOpen ? (
+        <LedgerPage
+          activeProject={activeProject}
+          entries={state.ledger}
+          onClose={() => setLedgerOpen(false)}
+        />
+      ) : null}
 
       <main className={shellClass} ref={shellRef} style={shellStyle}>
         <aside className="rail left-rail">
@@ -3279,6 +3303,217 @@ function ClaimActions({
   );
 }
 
+function LedgerPage({
+  activeProject,
+  entries,
+  onClose
+}: {
+  activeProject: LocalProject | undefined;
+  entries: LedgerPointer[];
+  onClose(): void;
+}): React.ReactElement {
+  const [query, setQuery] = useState("");
+  const [agentFilter, setAgentFilter] = useState("all");
+  const [eventFilter, setEventFilter] = useState("all");
+  const [branchFilter, setBranchFilter] = useState("all");
+  const [sessionFilter, setSessionFilter] = useState("all");
+  const [selectedId, setSelectedId] = useState("");
+  const sortedEntries = useMemo(
+    () => entries.slice().sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at)),
+    [entries]
+  );
+  const agents = useMemo(() => uniqueSorted(sortedEntries.map((entry) => entry.agent_id)), [sortedEntries]);
+  const eventTypes = useMemo(() => uniqueSorted(sortedEntries.map((entry) => entry.event_type)), [sortedEntries]);
+  const branches = useMemo(() => uniqueSorted(sortedEntries.map((entry) => entry.branch)), [sortedEntries]);
+  const sessions = useMemo(() => uniqueSorted(sortedEntries.map((entry) => entry.session_id)), [sortedEntries]);
+  const filteredEntries = useMemo(() => sortedEntries.filter((entry) => (
+    (agentFilter === "all" || entry.agent_id === agentFilter)
+    && (eventFilter === "all" || entry.event_type === eventFilter)
+    && (branchFilter === "all" || entry.branch === branchFilter)
+    && (sessionFilter === "all" || entry.session_id === sessionFilter)
+    && ledgerMatchesQuery(entry, query)
+  )), [agentFilter, branchFilter, eventFilter, query, sessionFilter, sortedEntries]);
+
+  useEffect(() => {
+    if (filteredEntries.length === 0) {
+      setSelectedId("");
+      return;
+    }
+    if (!filteredEntries.some((entry) => entry.id === selectedId)) {
+      setSelectedId(filteredEntries[0]?.id ?? "");
+    }
+  }, [filteredEntries, selectedId]);
+
+  const selectedEntry = filteredEntries.find((entry) => entry.id === selectedId) ?? filteredEntries[0];
+  const totals = useMemo(() => ledgerTotals(filteredEntries), [filteredEntries]);
+  const noProject = activeProject === undefined;
+  const projectLabel = activeProject?.name ?? activeProject?.repo_root ?? "No tracked project selected";
+
+  return (
+    <section aria-label="Coding Ledger" aria-modal="true" className="ledger-page" role="dialog">
+      <div className="ledger-page-shell">
+        <header className="ledger-page-top">
+          <div className="ledger-title-row">
+            <button aria-label="Back to canvas" className="ledger-back" title="Back to canvas" type="button" onClick={onClose}>
+              <ArrowLeft size={15} />
+            </button>
+            <div className="ledger-title-copy">
+              <span><BookOpen size={14} /> Engineering ledger</span>
+              <h2>Coding Ledger</h2>
+              <p>{projectLabel}</p>
+            </div>
+          </div>
+          <div className="ledger-page-metrics" aria-label="Ledger summary">
+            <span><FileClock size={13} />{filteredEntries.length} entries</span>
+            <span><Code2 size={13} />{totals.files} files</span>
+            <span><Timer size={13} />{totals.tokens.toLocaleString()} tokens</span>
+          </div>
+        </header>
+
+        {noProject ? (
+          <div className="ledger-page-notice">
+            <HardDrive size={14} />
+            <span>Select or track a repository to anchor future ledger entries to a workspace.</span>
+          </div>
+        ) : null}
+
+        <div className="ledger-filter-bar" aria-label="Ledger filters">
+          <label>
+            <span>Search</span>
+            <input
+              aria-label="Search ledger entries"
+              placeholder="summary, path, evidence, worktree..."
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.currentTarget.value)}
+            />
+          </label>
+          <LedgerSelect label="Agent" value={agentFilter} values={agents} onChange={setAgentFilter} />
+          <LedgerSelect label="Event" value={eventFilter} values={eventTypes} onChange={setEventFilter} />
+          <LedgerSelect label="Branch" value={branchFilter} values={branches} onChange={setBranchFilter} />
+          <LedgerSelect label="Session" value={sessionFilter} values={sessions} onChange={setSessionFilter} />
+        </div>
+
+        {sortedEntries.length === 0 ? (
+          <EmptyState
+            icon={<BookOpen size={16} />}
+            title="No ledger entries yet"
+            text="When agents publish coding events, this page will show the timeline, evidence, changed files, cost, and session metadata."
+          />
+        ) : (
+          <div className="ledger-page-grid">
+            <section aria-label="Ledger timeline" className="ledger-list">
+              {filteredEntries.length === 0 ? (
+                <EmptyState icon={<Scan size={16} />} title="No matching entries" text="Clear a filter or search for a different branch, agent, session, or path." />
+              ) : filteredEntries.map((entry) => (
+                <button
+                  aria-pressed={entry.id === selectedEntry?.id}
+                  className={`ledger-entry ${entry.id === selectedEntry?.id ? "selected" : ""}`}
+                  key={entry.id}
+                  type="button"
+                  onClick={() => setSelectedId(entry.id)}
+                >
+                  <span className="ledger-entry-head">
+                    <strong>{truncate(entry.summary, 76)}</strong>
+                    <Badge tone={ledgerTone(entry.event_type)} icon={<Activity size={12} />}>{eventLabel(entry.event_type)}</Badge>
+                  </span>
+                  <span className="ledger-entry-meta">
+                    <span><Bot size={12} />{agentLabel(entry.agent_id)}</span>
+                    <span><GitBranch size={12} />{truncate(entry.branch, 32)}</span>
+                    <span><Timer size={12} />{formatRelativeTime(entry.created_at)}</span>
+                  </span>
+                  <span className="ledger-entry-paths">
+                    {entry.affected_paths.slice(0, 3).map((path) => <code key={path}>{path}</code>)}
+                  </span>
+                </button>
+              ))}
+            </section>
+
+            <LedgerDetail entry={selectedEntry} />
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function LedgerSelect({
+  label,
+  onChange,
+  value,
+  values
+}: {
+  label: string;
+  onChange(value: string): void;
+  value: string;
+  values: string[];
+}): React.ReactElement {
+  return (
+    <label>
+      <span>{label}</span>
+      <select aria-label={`${label} filter`} value={value} onChange={(event) => onChange(event.currentTarget.value)}>
+        <option value="all">All</option>
+        {values.map((item) => <option key={item} value={item}>{eventLabel(item)}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function LedgerDetail({ entry }: { entry: LedgerPointer | undefined }): React.ReactElement {
+  if (entry === undefined) {
+    return (
+      <aside className="ledger-detail">
+        <EmptyState icon={<BookOpen size={16} />} title="Select an entry" text="Choose a ledger entry to inspect evidence, changed paths, session, branch, and token usage." />
+      </aside>
+    );
+  }
+
+  const diff = formatLedgerDiff(entry);
+  const cost = formatLedgerCost(entry);
+
+  return (
+    <aside aria-label="Ledger entry detail" className="ledger-detail">
+      <div className="ledger-detail-head">
+        <Badge tone={ledgerTone(entry.event_type)} icon={<Code2 size={13} />}>{eventLabel(entry.event_type)}</Badge>
+        <span>{formatRelativeTime(entry.created_at)}</span>
+      </div>
+      <h3>{entry.summary}</h3>
+      <div className="ledger-detail-grid">
+        <span><Bot size={13} />{agentLabel(entry.agent_id)}</span>
+        <span><RadioTower size={13} />{entry.session_id}</span>
+        <span><GitBranch size={13} />{entry.branch}</span>
+        <span><HardDrive size={13} />{formatWorktree(entry.worktree)}</span>
+        <span><Network size={13} />{entry.workspace_id}</span>
+        <span><Route size={13} />{entry.repo_id}</span>
+        {diff ? <span><FileClock size={13} />{diff}</span> : null}
+        {cost ? <span><Timer size={13} />{cost}</span> : null}
+      </div>
+      <section className="ledger-detail-section">
+        <h4>Changed files</h4>
+        <PathList paths={entry.affected_paths} />
+      </section>
+      <section className="ledger-detail-section">
+        <h4>Evidence</h4>
+        {entry.evidence !== undefined && entry.evidence.length > 0 ? (
+          <ul className="ledger-evidence">
+            {entry.evidence.slice(0, 6).map((item) => <li key={item}>{item}</li>)}
+          </ul>
+        ) : <p className="empty">evidence: none</p>}
+      </section>
+      {entry.token_usage !== undefined ? (
+        <section className="ledger-detail-section">
+          <h4>Usage</h4>
+          <div className="ledger-usage-row">
+            <span>Input <strong>{entry.token_usage.input_tokens.toLocaleString()}</strong></span>
+            <span>Output <strong>{entry.token_usage.output_tokens.toLocaleString()}</strong></span>
+            {entry.token_usage.model !== undefined ? <span>Model <strong>{entry.token_usage.model}</strong></span> : null}
+          </div>
+        </section>
+      ) : null}
+    </aside>
+  );
+}
+
 function ActivityStream({
   events,
   hiddenActivityCount,
@@ -4165,6 +4400,35 @@ function formatWorktree(worktree: string): string {
 
 function formatRelativeTime(timestamp: string): string {
   return relativeTime(timestamp);
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean))).sort((left, right) => left.localeCompare(right));
+}
+
+function ledgerMatchesQuery(entry: LedgerPointer, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (needle.length === 0) return true;
+  return [
+    entry.summary,
+    entry.agent_id,
+    entry.session_id,
+    entry.branch,
+    entry.worktree,
+    entry.event_type,
+    ...entry.affected_paths,
+    ...(entry.evidence ?? [])
+  ].some((value) => value.toLowerCase().includes(needle));
+}
+
+function ledgerTotals(entries: LedgerPointer[]): { files: number; tokens: number } {
+  const files = new Set(entries.flatMap((entry) => entry.affected_paths.filter(Boolean))).size;
+  const tokens = entries.reduce((sum, entry) => {
+    const usage = entry.token_usage;
+    if (usage === undefined) return sum;
+    return sum + (usage.total_tokens ?? usage.input_tokens + usage.output_tokens);
+  }, 0);
+  return { files, tokens };
 }
 
 function relativeTime(timestamp: string): string {
