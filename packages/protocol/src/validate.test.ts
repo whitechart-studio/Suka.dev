@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { TeamConnectionSummary } from "./index.js";
+import type { LedgerPointer, TeamConnectionSummary } from "./index.js";
 import { validatePointer } from "./index.js";
 
 test("accepts a valid presence pointer", () => {
@@ -258,6 +258,86 @@ test("rejects malformed brief pointers", () => {
     assert.ok(result.issues.some((issue) => issue.path === "summary" && issue.code === "invalid_type"));
     assert.ok(result.issues.some((issue) => issue.path === "changed_files" && issue.code === "invalid_type"));
     assert.ok(result.issues.some((issue) => issue.path === "next_action" && issue.code === "missing_field"));
+    assert.ok(result.issues.some((issue) => issue.path === "created_at" && issue.code === "invalid_timestamp"));
+  }
+});
+
+test("accepts a valid coding ledger pointer", () => {
+  const pointer = {
+    type: "ledger",
+    id: "ptr_ledger_01",
+    workspace_id: "workspace-a",
+    repo_id: "repo-a",
+    session_id: "session-a",
+    agent_id: "codex-trent-01",
+    event_type: "file_modified",
+    summary: "Agent updated dashboard activity count semantics.",
+    affected_paths: ["apps/dashboard/src/main.tsx"],
+    branch: "RS/activity-count-polish-bundle",
+    worktree: "/worktrees/suka/activity-count-polish",
+    evidence: ["pr:157", "commit:b71d1ff"],
+    diff_stat: {
+      files_changed: 1,
+      additions: 52,
+      deletions: 31
+    },
+    token_usage: {
+      input_tokens: 1200,
+      output_tokens: 480,
+      total_tokens: 1680,
+      estimated_cost_usd: 0.03,
+      model: "gpt-5"
+    },
+    created_at: "2026-06-24T09:00:00.000Z"
+  } satisfies LedgerPointer;
+
+  const result = validatePointer(pointer);
+
+  assert.equal(result.ok, true);
+});
+
+test("rejects malformed coding ledger pointers", () => {
+  const result = validatePointer({
+    type: "ledger",
+    id: "ptr_ledger_invalid",
+    workspace_id: "",
+    repo_id: 123,
+    agent_id: "",
+    event_type: "unknown_event",
+    summary: "",
+    affected_paths: "apps/dashboard/src/main.tsx",
+    branch: "",
+    worktree: "",
+    evidence: ["pr:157", 157],
+    diff_stat: {
+      files_changed: -1,
+      additions: "52",
+      deletions: 31
+    },
+    token_usage: {
+      output_tokens: -10,
+      total_tokens: 1.5,
+      estimated_cost_usd: -0.01,
+      model: ""
+    },
+    created_at: "not-a-date"
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(result.issues.some((issue) => issue.path === "workspace_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "repo_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "session_id" && issue.code === "missing_field"));
+    assert.ok(result.issues.some((issue) => issue.path === "event_type" && issue.code === "invalid_value"));
+    assert.ok(result.issues.some((issue) => issue.path === "affected_paths" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "evidence" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "diff_stat.files_changed" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "diff_stat.additions" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "token_usage.input_tokens" && issue.code === "missing_field"));
+    assert.ok(result.issues.some((issue) => issue.path === "token_usage.output_tokens" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "token_usage.total_tokens" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "token_usage.estimated_cost_usd" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "token_usage.model" && issue.code === "invalid_type"));
     assert.ok(result.issues.some((issue) => issue.path === "created_at" && issue.code === "invalid_timestamp"));
   }
 });

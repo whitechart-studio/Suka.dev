@@ -11,6 +11,7 @@ import type {
   ClaimPointer,
   DecisionPointer,
   EventPointer,
+  LedgerPointer,
   Pointer,
   PointerScope,
   PresenceSourceKind,
@@ -52,6 +53,8 @@ export function validatePointer(value: unknown): ValidationResult<Pointer> {
       return validateDecisionPointer(value);
     case "brief":
       return validateBriefPointer(value);
+    case "ledger":
+      return validateLedgerPointer(value);
     default:
       return fail([
         {
@@ -184,6 +187,31 @@ export function validateBriefPointer(value: unknown): ValidationResult<BriefPoin
   return issues.length === 0 ? ok(value as unknown as BriefPointer) : fail(issues);
 }
 
+export function validateLedgerPointer(value: unknown): ValidationResult<LedgerPointer> {
+  const issues: MutableIssueList = [];
+  if (!isRecord(value)) {
+    return failObject();
+  }
+
+  requireString(value, "id", issues);
+  requireString(value, "workspace_id", issues);
+  requireString(value, "repo_id", issues);
+  requireString(value, "session_id", issues);
+  requireLiteral(value, "type", "ledger", issues);
+  requireString(value, "agent_id", issues);
+  requireEnum(value, "event_type", EVENT_TYPES, issues);
+  requireString(value, "summary", issues);
+  requireStringArray(value, "affected_paths", issues);
+  requireString(value, "branch", issues);
+  requireString(value, "worktree", issues);
+  optionalStringArray(value, "evidence", issues);
+  optionalLedgerDiffStat(value, issues);
+  optionalLedgerTokenUsage(value, issues);
+  requireTimestamp(value, "created_at", issues);
+
+  return issues.length === 0 ? ok(value as unknown as LedgerPointer) : fail(issues);
+}
+
 function optionalPresenceSource(record: Record<string, unknown>, issues: MutableIssueList): void {
   const value = record.source;
   if (value === undefined) {
@@ -211,6 +239,46 @@ function optionalPresenceSource(record: Record<string, unknown>, issues: Mutable
       message: "source.detector is required for detected presence."
     });
   }
+}
+
+function optionalLedgerDiffStat(record: Record<string, unknown>, issues: MutableIssueList): void {
+  const value = record.diff_stat;
+  if (value === undefined) {
+    return;
+  }
+  if (!isRecord(value)) {
+    issues.push({
+      code: "invalid_type",
+      path: "diff_stat",
+      message: "diff_stat must be an object when provided."
+    });
+    return;
+  }
+
+  requireNonNegativeInteger(value, "files_changed", issues, "diff_stat.files_changed");
+  requireNonNegativeInteger(value, "additions", issues, "diff_stat.additions");
+  requireNonNegativeInteger(value, "deletions", issues, "diff_stat.deletions");
+}
+
+function optionalLedgerTokenUsage(record: Record<string, unknown>, issues: MutableIssueList): void {
+  const value = record.token_usage;
+  if (value === undefined) {
+    return;
+  }
+  if (!isRecord(value)) {
+    issues.push({
+      code: "invalid_type",
+      path: "token_usage",
+      message: "token_usage must be an object when provided."
+    });
+    return;
+  }
+
+  requireNonNegativeInteger(value, "input_tokens", issues, "token_usage.input_tokens");
+  requireNonNegativeInteger(value, "output_tokens", issues, "token_usage.output_tokens");
+  optionalNonNegativeInteger(value, "total_tokens", issues, "token_usage.total_tokens");
+  optionalNonNegativeNumber(value, "estimated_cost_usd", issues, "token_usage.estimated_cost_usd");
+  optionalNonEmptyString(value, "model", issues, "token_usage.model");
 }
 
 function requireScope(record: Record<string, unknown>, key: string, issues: MutableIssueList): void {
@@ -295,12 +363,52 @@ function optionalPositiveInteger(record: Record<string, unknown>, key: string, i
   }
 }
 
+function requireNonNegativeInteger(record: Record<string, unknown>, key: string, issues: MutableIssueList, path = key): void {
+  if (!Number.isInteger(record[key]) || Number(record[key]) < 0) {
+    issues.push({
+      code: record[key] === undefined ? "missing_field" : "invalid_type",
+      path,
+      message: `${path} must be a non-negative integer.`
+    });
+  }
+}
+
+function optionalNonNegativeInteger(record: Record<string, unknown>, key: string, issues: MutableIssueList, path = key): void {
+  if (record[key] !== undefined && (!Number.isInteger(record[key]) || Number(record[key]) < 0)) {
+    issues.push({
+      code: "invalid_type",
+      path,
+      message: `${path} must be a non-negative integer when provided.`
+    });
+  }
+}
+
+function optionalNonNegativeNumber(record: Record<string, unknown>, key: string, issues: MutableIssueList, path = key): void {
+  if (record[key] !== undefined && (typeof record[key] !== "number" || !Number.isFinite(record[key]) || record[key] < 0)) {
+    issues.push({
+      code: "invalid_type",
+      path,
+      message: `${path} must be a non-negative number when provided.`
+    });
+  }
+}
+
 function requireStringArray(record: Record<string, unknown>, key: string, issues: MutableIssueList): void {
   if (!isStringArray(record[key])) {
     issues.push({
       code: record[key] === undefined ? "missing_field" : "invalid_type",
       path: key,
       message: `${key} must be an array of strings.`
+    });
+  }
+}
+
+function optionalStringArray(record: Record<string, unknown>, key: string, issues: MutableIssueList): void {
+  if (record[key] !== undefined && !isStringArray(record[key])) {
+    issues.push({
+      code: "invalid_type",
+      path: key,
+      message: `${key} must be an array of strings when provided.`
     });
   }
 }
