@@ -12,6 +12,7 @@ export interface SukaStore {
   upsertBrief(pointer: BriefPointer): void;
   appendLedger(pointer: LedgerPointer): void;
   upsertProject(project: LocalProject): void;
+  removeProject(id: string): LocalProject | undefined;
   setActiveProject(id: string | undefined): boolean;
   expire(now: Date): void;
 }
@@ -101,6 +102,24 @@ export class MemorySukaStore implements SukaStore {
 
   upsertProject(project: LocalProject): void {
     this.#state.projects = upsertById(this.#state.projects, project);
+  }
+
+  removeProject(id: string): LocalProject | undefined {
+    const project = this.#state.projects.find((item) => item.id === id);
+    if (project === undefined) {
+      return undefined;
+    }
+
+    this.#state.projects = this.#state.projects.filter((item) => item.id !== id);
+    if (this.#state.active_project_id === id) {
+      const fallback = this.#state.projects[0];
+      if (fallback === undefined) {
+        delete this.#state.active_project_id;
+      } else {
+        this.#state.active_project_id = fallback.id;
+      }
+    }
+    return project;
   }
 
   setActiveProject(id: string | undefined): boolean {

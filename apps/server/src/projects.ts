@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { realpathSync, statSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { basename, isAbsolute, relative, resolve } from "node:path";
 import type { LocalProject } from "./state.js";
 
 export interface LocalProjectInput {
@@ -25,11 +25,11 @@ export function inspectLocalProject(input: LocalProjectInput): LocalProjectMetad
   const normalizedRepoRoot = normalizeExistingDirectory(repoRoot);
   const repo = gitRepoName(normalizedRepoRoot) ?? basename(normalizedRepoRoot);
   const branch = gitOutput(normalizedRepoRoot, ["branch", "--show-current"]);
-  const repoId = slug(repo);
+  const repoId = slug(projectScopedRepoId(repo, normalizedRepoRoot, projectPath));
 
   return {
-    name: basename(normalizedRepoRoot),
-    path: normalizedRepoRoot,
+    name: basename(projectPath),
+    path: projectPath,
     repo,
     repo_id: repoId,
     repo_root: normalizedRepoRoot,
@@ -49,7 +49,7 @@ export function buildLocalProjectFromMetadata(
   existing?: LocalProject
 ): LocalProject {
   const timestamp = (input.now ?? new Date()).toISOString();
-  const id = existing?.id ?? `project_${hashId(metadata.repo_root)}`;
+  const id = existing?.id ?? `project_${hashId(metadata.path)}`;
 
   return {
     id,
@@ -93,6 +93,14 @@ function gitOutput(cwd: string, args: string[]): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function projectScopedRepoId(repo: string, repoRoot: string, projectPath: string): string {
+  const relativePath = relative(repoRoot, projectPath).replaceAll("\\", "/");
+  if (relativePath.length === 0 || relativePath.startsWith("..") || isAbsolute(relativePath)) {
+    return repo;
+  }
+  return `${repo}/${relativePath}`;
 }
 
 function slug(value: string): string {

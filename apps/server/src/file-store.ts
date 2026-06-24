@@ -77,6 +77,14 @@ export class FileSukaStore implements SukaStore {
     this.#persist();
   }
 
+  removeProject(id: string): LocalProject | undefined {
+    const project = this.#store.removeProject(id);
+    if (project !== undefined) {
+      this.#persist();
+    }
+    return project;
+  }
+
   setActiveProject(id: string | undefined): boolean {
     const changed = this.#store.setActiveProject(id);
     if (changed) {

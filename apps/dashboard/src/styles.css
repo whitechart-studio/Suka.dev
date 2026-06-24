@@ -805,10 +805,35 @@ input::placeholder { color: var(--muted); }
   width: 100%;
 }
 
+.project-row {
+  align-items: stretch;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) 34px;
+}
+
 .project-option:hover,
-.project-option.active {
+.project-option.active,
+.project-row.active .project-option {
   background: rgba(49,46,129,0.72);
   border-color: rgba(129,140,248,0.42);
+}
+
+.project-remove-action {
+  align-items: center;
+  background: rgba(127,29,29,0.28);
+  border-color: rgba(248,113,113,0.28);
+  color: var(--ink-2);
+  display: flex;
+  justify-content: center;
+  min-height: 100%;
+  padding: 0;
+}
+
+.project-remove-action:hover:not(:disabled) {
+  background: rgba(153,27,27,0.48);
+  border-color: rgba(248,113,113,0.48);
+  color: var(--ink);
 }
 
 .project-option.featured {

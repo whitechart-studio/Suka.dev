@@ -31,6 +31,10 @@ export interface RepoMap {
   root: string;
 }
 
+export interface RepoMapOptions {
+  climbToWorkspaceRoot?: boolean;
+}
+
 const ignoredNames = new Set([
   ".git",
   ".turbo",
@@ -54,8 +58,8 @@ type DomainCandidate = {
 
 type PackageManifestIndex = Map<string, unknown>;
 
-export async function buildRepoMap(root = process.cwd()): Promise<RepoMap> {
-  const workspaceRoot = await findWorkspaceRoot(root);
+export async function buildRepoMap(root = process.cwd(), options: RepoMapOptions = {}): Promise<RepoMap> {
+  const workspaceRoot = options.climbToWorkspaceRoot === false ? resolve(root) : await findWorkspaceRoot(root);
   const candidates = await discoverDomains(workspaceRoot);
   const manifests = await packageManifestIndex(workspaceRoot, candidates.map((candidate) => candidate.path));
   const domains = await Promise.all(candidates.map(async (candidate, index) => {

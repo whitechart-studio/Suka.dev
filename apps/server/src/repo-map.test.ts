@@ -73,6 +73,24 @@ test("repo map includes domain package, route, and test metadata", async () => {
   }
 });
 
+test("repo map can stay scoped to a selected child folder", async () => {
+  const root = await mkdtemp(join(tmpdir(), "suka-repo-map-child-"));
+  try {
+    await mkdir(join(root, "apps", "dashboard", "src"), { recursive: true });
+    await mkdir(join(root, "Quorexx", "src"), { recursive: true });
+    await writeFile(join(root, "apps", "dashboard", "src", "index.ts"), "export const dashboard = true;\n");
+    await writeFile(join(root, "Quorexx", "src", "index.ts"), "export const quorexx = true;\n");
+
+    const map = await buildRepoMap(join(root, "Quorexx"), { climbToWorkspaceRoot: false });
+
+    assert.equal(map.root, "Quorexx");
+    assert.ok(map.domains.some((domain) => domain.path === "src"));
+    assert.ok(!map.domains.some((domain) => domain.path === "apps/dashboard"));
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
 async function writeJson(path: string, value: unknown): Promise<void> {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
 }
