@@ -392,6 +392,9 @@ const LEFT_RAIL_MIN_WIDTH = 220;
 const LEFT_RAIL_MAX_WIDTH = 420;
 const RIGHT_RAIL_MIN_WIDTH = 340;
 const RIGHT_RAIL_MAX_WIDTH = 560;
+const ACTIVITY_EVENT_LIMIT = 4;
+const ACTIVITY_TOTAL_LIMIT = 6;
+const ACTIVITY_OVERLAP_LIMIT = 2;
 
 type SelectedDetails =
   | { kind: "agent"; agent: PresencePointer }
@@ -657,11 +660,14 @@ function Dashboard(): React.ReactElement {
     [conflictInsights, dismissedInsightIds]
   );
   const riskCount = visibleConflictInsights.length + model.filter((item) => item.failures.length > 0).length;
-  const visiblePresenceFileOverlaps = useMemo(() => presenceFileOverlaps.slice(0, 2), [presenceFileOverlaps]);
-  const visibleActivityEventCount = Math.min(state.events.length, 4);
-  const visibleActivityPresenceCount = Math.min(state.presence.length, Math.max(0, 6 - visibleActivityEventCount));
-  const activityCount = visibleActivityEventCount + visibleActivityPresenceCount + visiblePresenceFileOverlaps.length;
-  const radarSignalCount = riskCount + activityCount + state.claims.length + state.briefs.length + state.decisions.length;
+  const visiblePresenceFileOverlaps = useMemo(() => presenceFileOverlaps.slice(0, ACTIVITY_OVERLAP_LIMIT), [presenceFileOverlaps]);
+  const visibleActivityEventCount = Math.min(state.events.length, ACTIVITY_EVENT_LIMIT);
+  const visibleActivityPresenceCount = Math.min(state.presence.length, Math.max(0, ACTIVITY_TOTAL_LIMIT - visibleActivityEventCount));
+  const hiddenActivityCount = Math.max(0, state.events.length - visibleActivityEventCount)
+    + Math.max(0, state.presence.length - visibleActivityPresenceCount)
+    + Math.max(0, presenceFileOverlaps.length - visiblePresenceFileOverlaps.length);
+  const visibleActivityCount = visibleActivityEventCount + visibleActivityPresenceCount + visiblePresenceFileOverlaps.length;
+  const radarSignalCount = riskCount + visibleActivityCount + state.claims.length + state.briefs.length + state.decisions.length;
   const selectedDetails = useMemo(() => resolveSelection(selectedNodeId, model, state), [model, selectedNodeId, state]);
   const hasLiveState = state.presence.length + state.claims.length + state.events.length + state.decisions.length + state.briefs.length > 0;
   const showWelcome = landingOpen || (!welcomeDismissed && !hasLiveState);
@@ -1404,15 +1410,15 @@ function Dashboard(): React.ReactElement {
             <div className="right-stack">
               <RadarSummary
                 activeAgents={state.presence.length}
-                activityCount={activityCount}
                 riskCount={riskCount}
                 truthCount={state.claims.length + state.briefs.length + state.decisions.length}
+                visibleActivityCount={visibleActivityCount}
               />
               <RightRailTabs
-                activityCount={activityCount}
                 riskCount={riskCount}
                 selected={rightRailView}
                 truthCount={state.claims.length + state.briefs.length + state.decisions.length}
+                visibleActivityCount={visibleActivityCount}
                 onSelect={setRightRailView}
               />
               <div className="right-panel">
@@ -1447,7 +1453,7 @@ function Dashboard(): React.ReactElement {
                 {rightRailView === "activity" ? (
                   <ActivityStream
                     events={state.events}
-                    hiddenOverlapCount={presenceFileOverlaps.length - visiblePresenceFileOverlaps.length}
+                    hiddenActivityCount={hiddenActivityCount}
                     overlapSignals={visiblePresenceFileOverlaps}
                     presence={state.presence}
                     onInspectAgent={inspectAgent}
@@ -2417,8 +2423,20 @@ function MissionZoneNode({ data }: any): React.ReactElement {
   );
 }
 
-function Badge({ children, icon, tone }: { children: React.ReactNode; icon: React.ReactNode; tone: string }): React.ReactElement {
-  return <span className={`badge ${tone}`}>{icon}{children}</span>;
+function Badge({
+  ariaLabel,
+  children,
+  icon,
+  title,
+  tone
+}: {
+  ariaLabel?: string;
+  children: React.ReactNode;
+  icon: React.ReactNode;
+  title?: string;
+  tone: string;
+}): React.ReactElement {
+  return <span aria-label={ariaLabel} className={`badge ${tone}`} title={title}>{icon}{children}</span>;
 }
 
 function ProjectTrackingControl({
@@ -2727,14 +2745,14 @@ function CompactRisk({ count }: { count: number }): React.ReactElement {
 
 function RadarSummary({
   activeAgents,
-  activityCount,
   riskCount,
-  truthCount
+  truthCount,
+  visibleActivityCount
 }: {
   activeAgents: number;
-  activityCount: number;
   riskCount: number;
   truthCount: number;
+  visibleActivityCount: number;
 }): React.ReactElement {
   const mode = riskCount > 0 ? "attention" : activeAgents > 0 ? "live" : "idle";
   return (
@@ -2744,32 +2762,32 @@ function RadarSummary({
         <strong>{riskCount > 0 ? `${riskCount} items need attention` : activeAgents > 0 ? "Live workspace signal" : "No live agents"}</strong>
       </div>
       <div className="radar-summary-metrics" aria-label="Current truth summary metrics">
-        <span><Users size={12} />{activeAgents}</span>
-        <span><ClipboardList size={12} />{truthCount}</span>
-        <span><RadioTower size={12} />{activityCount}</span>
+        <span aria-label={`${activeAgents} active agents`} title="Active agents"><Users size={12} />{activeAgents}</span>
+        <span aria-label={`${truthCount} accepted truth pointers`} title="Accepted truth pointers"><ClipboardList size={12} />{truthCount}</span>
+        <span aria-label={`${visibleActivityCount} visible activity signals`} title="Visible activity signals"><RadioTower size={12} />{visibleActivityCount}</span>
       </div>
     </div>
   );
 }
 
 function RightRailTabs({
-  activityCount,
   onSelect,
   riskCount,
   selected,
-  truthCount
+  truthCount,
+  visibleActivityCount
 }: {
-  activityCount: number;
   onSelect(view: RightRailView): void;
   riskCount: number;
   selected: RightRailView;
   truthCount: number;
+  visibleActivityCount: number;
 }): React.ReactElement {
   const tabs: Array<{ count: number; hint: string; icon: React.ReactNode; label: string; view: RightRailView }> = [
     { count: truthCount, hint: "state", icon: <ClipboardList size={13} />, label: "Truth", view: "truth" },
     { count: 0, hint: "selection", icon: <MousePointer2 size={13} />, label: "Inspect", view: "inspect" },
     { count: riskCount, hint: "conflicts", icon: <TriangleAlert size={13} />, label: "Risk", view: "risk" },
-    { count: activityCount, hint: "timeline", icon: <RadioTower size={13} />, label: "Activity", view: "activity" }
+    { count: visibleActivityCount, hint: "visible", icon: <RadioTower size={13} />, label: "Activity", view: "activity" }
   ];
 
   return (
@@ -3193,29 +3211,32 @@ function ClaimActions({
 
 function ActivityStream({
   events,
-  hiddenOverlapCount,
+  hiddenActivityCount,
   onInspectAgent,
   overlapSignals,
   presence
 }: {
   events: EventPointer[];
-  hiddenOverlapCount: number;
+  hiddenActivityCount: number;
   onInspectAgent(agentId: string): void;
   overlapSignals: PresenceOverlapSignal[];
   presence: PresencePointer[];
 }): React.ReactElement {
-  const recentEvents = events.slice().sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at)).slice(0, 4);
-  const recentPresence = presence.slice().sort((left, right) => Date.parse(right.last_seen ?? "") - Date.parse(left.last_seen ?? "")).slice(0, Math.max(0, 6 - recentEvents.length));
-  const hiddenActivityCount = Math.max(0, events.length - recentEvents.length)
-    + Math.max(0, presence.length - recentPresence.length)
-    + Math.max(0, hiddenOverlapCount);
+  const recentEvents = events.slice().sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at)).slice(0, ACTIVITY_EVENT_LIMIT);
+  const recentPresence = presence.slice().sort((left, right) => Date.parse(right.last_seen ?? "") - Date.parse(left.last_seen ?? "")).slice(0, Math.max(0, ACTIVITY_TOTAL_LIMIT - recentEvents.length));
+  const visibleActivityCount = recentEvents.length + recentPresence.length + overlapSignals.length;
 
   return (
     <section className="rail-section activity-section">
       <div className="section-title">
         <h2><RadioTower size={14} /> Activity</h2>
-        <Badge tone={recentEvents.length + recentPresence.length + overlapSignals.length > 0 ? "live" : "neutral"} icon={<Activity size={13} />}>
-          {recentEvents.length + recentPresence.length + overlapSignals.length}
+        <Badge
+          tone={visibleActivityCount > 0 ? "live" : "neutral"}
+          ariaLabel={`${visibleActivityCount} visible activity signals`}
+          icon={<Activity size={13} />}
+          title={hiddenActivityCount > 0 ? `${hiddenActivityCount} older activity signals hidden` : "Visible activity signals"}
+        >
+          {visibleActivityCount}
         </Badge>
       </div>
       {overlapSignals.map((signal) => (
@@ -3267,12 +3288,12 @@ function ActivityStream({
         );
       })}
       {hiddenActivityCount > 0 ? (
-        <div className="activity-more-note">
+        <div className="activity-more-note" aria-label={`${hiddenActivityCount} older activity signals hidden from this focused view`}>
           <RadioTower size={13} />
           <span>{hiddenActivityCount} older signal{hiddenActivityCount === 1 ? "" : "s"} hidden from this focused view</span>
         </div>
       ) : null}
-      {recentEvents.length === 0 && recentPresence.length === 0 ? (
+      {visibleActivityCount === 0 ? (
         <EmptyState icon={<RadioTower size={15} />} title="No recent activity" text="Detected agents, events, and session updates will appear here as the workspace changes." />
       ) : null}
     </section>
