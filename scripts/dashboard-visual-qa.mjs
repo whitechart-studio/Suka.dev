@@ -81,6 +81,11 @@ try {
   await page.locator("button[aria-label=\"Back to landing\"]").click();
   await page.waitForSelector(".welcome-surface", { timeout: 10_000 });
   const exitReturnsToWelcome = await page.locator(".welcome-surface").isVisible();
+  const landingDocsVisible = await page.locator(".landing-docs").isVisible();
+  const dashboardDocsButtonCount = await page.locator("button[aria-label=\"Open docs\"]").count();
+  if (!landingDocsVisible || dashboardDocsButtonCount !== 0) {
+    errors.push("Docs should render on the landing page and be absent from the dashboard topbar.");
+  }
   await page.locator(".welcome-actions button").filter({ hasText: "Start local workspace" }).click();
   await page.waitForSelector(".react-flow__node", { timeout: 10_000 });
 
@@ -174,6 +179,8 @@ try {
     ledgerEntryCount,
     ledgerPageVisible,
     ledgerReturnsToCanvas,
+    landingDocsVisible,
+    dashboardDocsButtonCount,
     exitReturnsToWelcome,
     inspectorHasServer: inspectorText.includes("Server") && inspectorText.includes("apps/server"),
     leftRailHiddenAfterCollapse,

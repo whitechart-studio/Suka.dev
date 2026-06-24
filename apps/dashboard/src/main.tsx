@@ -453,7 +453,6 @@ function Dashboard(): React.ReactElement {
   const [welcomeDismissed, setWelcomeDismissed] = useState(() => readStoredBoolean("welcomeDismissed", false));
   const [landingOpen, setLandingOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [docsOpen, setDocsOpen] = useState(false);
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(() => readStoredSettings());
   const [rightRailView, setRightRailView] = useState<RightRailView>(() => readStoredRightRailView());
@@ -1088,8 +1087,7 @@ function Dashboard(): React.ReactElement {
     function onKey(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
-      if (e.key === "?") setDocsOpen(v => !v);
-      if (e.key === "Escape") { setDocsOpen(false); setSettingsOpen(false); }
+      if (e.key === "Escape") { setLedgerOpen(false); setSettingsOpen(false); }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -1252,7 +1250,6 @@ function Dashboard(): React.ReactElement {
             type="button"
             onClick={() => {
               setLedgerOpen(true);
-              setDocsOpen(false);
               setSettingsOpen(false);
             }}
           >
@@ -1261,16 +1258,6 @@ function Dashboard(): React.ReactElement {
           </button>
           <button aria-label="Refresh state" className="top-action" title="Refresh state" type="button" onClick={() => void loadState()}>
             <RefreshCw size={14} />
-          </button>
-          <button
-            aria-expanded={docsOpen}
-            aria-label="Open docs"
-            className="top-action"
-            title="Docs (?)"
-            type="button"
-            onClick={() => setDocsOpen(v => !v)}
-          >
-            <BookOpen size={14} />
           </button>
           <button
             aria-expanded={settingsOpen}
@@ -1295,9 +1282,6 @@ function Dashboard(): React.ReactElement {
             onSelectSession={setActiveSessionId}
             onUpdate={setTeamConnection}
           />
-        ) : null}
-        {docsOpen ? (
-          <DocsPanel onClose={() => setDocsOpen(false)} />
         ) : null}
         {settingsOpen ? (
           <SettingsPanel
@@ -1715,6 +1699,8 @@ function WelcomeSurface({
           </div>
         </div>
       </div>
+
+      <WelcomeDocs />
     </section>
   );
 }
@@ -2197,7 +2183,7 @@ const DOCS_SECTIONS = [
   }
 ] as const;
 
-function DocsPanel({ onClose }: { onClose(): void }): React.ReactElement {
+function WelcomeDocs(): React.ReactElement {
   const [activeSection, setActiveSection] = useState<string>("quickstart");
   const section = DOCS_SECTIONS.find(s => s.id === activeSection) ?? DOCS_SECTIONS[0];
   const [copied, setCopied] = useState("");
@@ -2209,14 +2195,13 @@ function DocsPanel({ onClose }: { onClose(): void }): React.ReactElement {
   }
 
   return (
-    <div className="docs-panel" role="dialog" aria-label="Documentation">
+    <section className="docs-panel landing-docs" aria-label="Suka documentation">
       <div className="docs-head">
         <div className="docs-head-left">
           <BookOpen size={14} />
-          <span>Docs</span>
-          <span className="docs-shortcut">?</span>
+          <span>Start guide</span>
+          <span className="docs-shortcut">CLI</span>
         </div>
-        <button aria-label="Close docs" type="button" onClick={onClose}><X size={14} /></button>
       </div>
 
       <div className="docs-body">
@@ -2256,7 +2241,7 @@ function DocsPanel({ onClose }: { onClose(): void }): React.ReactElement {
           ))}
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 

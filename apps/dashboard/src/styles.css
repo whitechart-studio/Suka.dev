@@ -1217,6 +1217,40 @@ input::placeholder { color: var(--muted); }
   border-color: rgba(15,23,42,0.12);
 }
 
+.landing-docs {
+  height: auto;
+  margin: 18px auto 0;
+  max-height: none;
+  max-width: 1120px;
+  min-height: 360px;
+  position: relative;
+  right: auto;
+  top: auto;
+  width: min(100%, 1120px);
+}
+
+.landing-docs .docs-head {
+  background: rgba(255,255,255,0.025);
+}
+
+.landing-docs .docs-body {
+  min-height: 318px;
+}
+
+.landing-docs .docs-nav {
+  flex-basis: 180px;
+}
+
+.landing-docs .docs-content {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow-y: visible;
+}
+
+.landing-docs .docs-section-title {
+  grid-column: 1 / -1;
+}
+
 /* ── Settings panel ─────────────────────────── */
 .settings-panel {
   background: var(--panel-glass);
@@ -4982,6 +5016,41 @@ body.is-resizing-rail .rail-resize-handle::after {
   .welcome-actions button + button { display: none; }
   .welcome-command { display: none; }
   .welcome-launcher { max-width: none; padding: 12px; }
+
+  .landing-docs {
+    border-radius: 12px;
+    margin: 12px 14px 0;
+    min-height: 0;
+    width: auto;
+  }
+
+  .landing-docs .docs-body {
+    display: grid;
+    min-height: 0;
+  }
+
+  .landing-docs .docs-nav {
+    border-bottom: 1px solid var(--line);
+    border-right: 0;
+    flex: none;
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .landing-docs .docs-nav button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    width: auto;
+  }
+
+  .landing-docs .docs-content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .landing-docs .docs-item-code-wrap {
+    min-width: 0;
+  }
+
   .launcher-head,
   .launcher-actions {
     align-items: stretch;
