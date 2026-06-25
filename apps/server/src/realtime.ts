@@ -24,6 +24,10 @@ export type RealtimeMessage =
     }
   | {
       data: SukaState;
+      type: "state.updated";
+    }
+  | {
+      data: SukaState;
       type: "state.expired";
     }
   | {
