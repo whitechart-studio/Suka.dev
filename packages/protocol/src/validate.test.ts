@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import type {
   Checkpoint,
   LedgerEvent,
+  LedgerBudgetPolicy,
   LedgerPointer,
+  LedgerPrivacyDefaults,
   TaskEntry,
   TeamConnectionSummary,
   TokenAssessment,
@@ -11,7 +13,9 @@ import type {
 } from "./index.js";
 import {
   validateCheckpoint,
+  validateLedgerBudgetPolicy,
   validateLedgerEvent,
+  validateLedgerPrivacyDefaults,
   validatePointer,
   validateTaskEntry,
   validateTokenAssessment,
@@ -601,6 +605,63 @@ test("rejects invalid ledger checkpoints", () => {
     assert.ok(result.issues.some((issue) => issue.path === "related_task_ids" && issue.code === "invalid_type"));
     assert.ok(result.issues.some((issue) => issue.path === "related_issue_ids" && issue.code === "invalid_type"));
     assert.ok(result.issues.some((issue) => issue.path === "summary" && issue.code === "invalid_type"));
+  }
+});
+
+test("accepts metadata-only ledger privacy defaults", () => {
+  const defaults = {
+    publish_file_paths: true,
+    publish_diff_content: false,
+    publish_terminal_logs: false,
+    publish_prompt_text: false,
+    retention_days: 7
+  } satisfies LedgerPrivacyDefaults;
+
+  const result = validateLedgerPrivacyDefaults(defaults);
+
+  assert.equal(result.ok, true);
+});
+
+test("rejects malformed ledger privacy defaults", () => {
+  const result = validateLedgerPrivacyDefaults({
+    publish_file_paths: "yes",
+    publish_diff_content: false,
+    publish_terminal_logs: 0,
+    publish_prompt_text: false,
+    retention_days: -1
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(result.issues.some((issue) => issue.path === "publish_file_paths" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "publish_terminal_logs" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "retention_days" && issue.code === "invalid_type"));
+  }
+});
+
+test("accepts ledger budget policies", () => {
+  const policy = {
+    scope: "session",
+    warning_threshold_tokens: 8000,
+    hard_limit_tokens: 10000
+  } satisfies LedgerBudgetPolicy;
+
+  const result = validateLedgerBudgetPolicy(policy);
+
+  assert.equal(result.ok, true);
+});
+
+test("rejects malformed ledger budget policies", () => {
+  const result = validateLedgerBudgetPolicy({
+    scope: "project",
+    warning_threshold_tokens: 12000,
+    hard_limit_tokens: 10000
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(result.issues.some((issue) => issue.path === "scope" && issue.code === "invalid_value"));
+    assert.ok(result.issues.some((issue) => issue.path === "warning_threshold_tokens" && issue.code === "invalid_value"));
   }
 });
 

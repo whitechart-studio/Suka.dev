@@ -37,6 +37,8 @@ export type LedgerEventType = (typeof LEDGER_EVENT_TYPES)[number];
 export type LedgerEventSeverity = (typeof LEDGER_EVENT_SEVERITIES)[number];
 export type LedgerCheckpointKind = (typeof LEDGER_CHECKPOINT_KINDS)[number];
 export type LedgerCheckpointStatus = (typeof LEDGER_CHECKPOINT_STATUSES)[number];
+export type LedgerBudgetScope = "session" | "task";
+export type LedgerBudgetStatusLevel = "ok" | "warning" | "exceeded";
 
 export type IsoTimestamp = string;
 export type PointerId = string;
@@ -236,6 +238,56 @@ export interface Checkpoint {
   related_issue_ids: string[];
   related_session_ids: string[];
   summary: string;
+}
+
+export interface LedgerPrivacyDefaults {
+  publish_file_paths: boolean;
+  publish_diff_content: boolean;
+  publish_terminal_logs: boolean;
+  publish_prompt_text: boolean;
+  retention_days: number;
+}
+
+export interface LedgerBudgetPolicy {
+  scope: LedgerBudgetScope;
+  warning_threshold_tokens: number;
+  hard_limit_tokens: number;
+}
+
+export interface LedgerBudgetStatus {
+  hard_limit_tokens: number;
+  level: LedgerBudgetStatusLevel;
+  remaining_tokens: number;
+  used_tokens: number;
+  utilization_ratio: number;
+  warning_threshold_tokens: number;
+}
+
+export interface TokenEfficiencyRollup {
+  scope: {
+    checkpoint_id?: string;
+    issue_id?: string;
+    repo_id?: string;
+    session_id?: string;
+    task_id?: string;
+    workspace_id?: string;
+  };
+  related_task_ids: string[];
+  assessed_task_ids: string[];
+  unassessed_task_ids: string[];
+  totals: {
+    discarded_tokens: number;
+    estimated_cost: number;
+    input_tokens: number;
+    output_tokens: number;
+    rework_tokens: number;
+    total_tokens: number;
+    unassessed_tokens: number;
+    unknown_tokens: number;
+    useful_tokens: number;
+  };
+  useful_token_ratio?: number;
+  budget?: LedgerBudgetStatus;
 }
 
 export type Pointer =

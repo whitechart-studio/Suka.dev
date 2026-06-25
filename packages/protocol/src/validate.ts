@@ -26,6 +26,8 @@ import type {
   EventPointer,
   LedgerEvent,
   LedgerPointer,
+  LedgerBudgetPolicy,
+  LedgerPrivacyDefaults,
   Pointer,
   PointerScope,
   PresenceSourceKind,
@@ -40,6 +42,7 @@ import type {
 type MutableIssueList = ValidationIssue[];
 const CLAIM_KINDS = ["soft_claim", "blocked_scope"] as const satisfies readonly ClaimKind[];
 const PRESENCE_SOURCE_KINDS = ["manual", "detected"] as const satisfies readonly PresenceSourceKind[];
+const LEDGER_BUDGET_SCOPES = ["session", "task"] as const;
 
 export function validatePointer(value: unknown): ValidationResult<Pointer> {
   const issues: MutableIssueList = [];
@@ -332,6 +335,46 @@ export function validateCheckpoint(value: unknown): ValidationResult<Checkpoint>
   return issues.length === 0 ? ok(value as unknown as Checkpoint) : fail(issues);
 }
 
+export function validateLedgerPrivacyDefaults(value: unknown): ValidationResult<LedgerPrivacyDefaults> {
+  const issues: MutableIssueList = [];
+  if (!isRecord(value)) {
+    return failObject();
+  }
+
+  requireBoolean(value, "publish_file_paths", issues);
+  requireBoolean(value, "publish_diff_content", issues);
+  requireBoolean(value, "publish_terminal_logs", issues);
+  requireBoolean(value, "publish_prompt_text", issues);
+  requireNonNegativeInteger(value, "retention_days", issues);
+
+  return issues.length === 0 ? ok(value as unknown as LedgerPrivacyDefaults) : fail(issues);
+}
+
+export function validateLedgerBudgetPolicy(value: unknown): ValidationResult<LedgerBudgetPolicy> {
+  const issues: MutableIssueList = [];
+  if (!isRecord(value)) {
+    return failObject();
+  }
+
+  requireEnum(value, "scope", LEDGER_BUDGET_SCOPES, issues);
+  requireNonNegativeInteger(value, "warning_threshold_tokens", issues);
+  requireNonNegativeInteger(value, "hard_limit_tokens", issues);
+
+  if (
+    Number.isInteger(value.warning_threshold_tokens) &&
+    Number.isInteger(value.hard_limit_tokens) &&
+    Number(value.warning_threshold_tokens) > Number(value.hard_limit_tokens)
+  ) {
+    issues.push({
+      code: "invalid_value",
+      path: "warning_threshold_tokens",
+      message: "warning_threshold_tokens cannot exceed hard_limit_tokens."
+    });
+  }
+
+  return issues.length === 0 ? ok(value as unknown as LedgerBudgetPolicy) : fail(issues);
+}
+
 function optionalPresenceSource(record: Record<string, unknown>, issues: MutableIssueList): void {
   const value = record.source;
   if (value === undefined) {
@@ -479,6 +522,16 @@ function optionalPositiveInteger(record: Record<string, unknown>, key: string, i
       code: "invalid_type",
       path,
       message: `${path} must be a positive integer when provided.`
+    });
+  }
+}
+
+function requireBoolean(record: Record<string, unknown>, key: string, issues: MutableIssueList, path = key): void {
+  if (typeof record[key] !== "boolean") {
+    issues.push({
+      code: record[key] === undefined ? "missing_field" : "invalid_type",
+      path,
+      message: `${path} must be a boolean.`
     });
   }
 }
