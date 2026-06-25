@@ -340,6 +340,147 @@ test("records structured ledger MVP records and filters by repo session task and
   assert.deepEqual(service.listLedgerCheckpoints({ task_id: "task_ledger_01" }).map((entry) => entry.checkpoint_id), ["checkpoint_pr_177"]);
 });
 
+test("builds checkpoint summaries across tasks issues sessions events and token usage", () => {
+  const service = createSukaService();
+  const taskBase = {
+    repo_id: "repo-a",
+    task_type: "implementation",
+    status: "completed",
+    started_at: "2026-06-25T06:00:00.000Z",
+    completed_at: "2026-06-25T06:20:00.000Z",
+    related_claim_ids: [],
+    related_checkpoint_ids: ["checkpoint_pr_180"]
+  };
+
+  assert.equal(service.recordLedgerTask({
+    ...taskBase,
+    task_id: "task_pr_01",
+    session_id: "session-a",
+    workspace_id: "workspace-a",
+    title: "Add checkpoint summaries",
+    intent_summary: "Build checkpoint summary rollups.",
+    related_issue_ids: ["172"]
+  }).ok, true);
+  assert.equal(service.recordLedgerTask({
+    ...taskBase,
+    task_id: "task_pr_02",
+    session_id: "session-b",
+    workspace_id: "workspace-a",
+    title: "Wire checkpoint CLI",
+    intent_summary: "Expose checkpoint summaries to CLI.",
+    related_issue_ids: ["172", "174"]
+  }).ok, true);
+  assert.equal(service.recordLedgerTask({
+    ...taskBase,
+    task_id: "task_pr_other",
+    session_id: "session-c",
+    title: "Other checkpoint task",
+    intent_summary: "This task belongs to another PR.",
+    related_checkpoint_ids: ["checkpoint_pr_181"],
+    related_issue_ids: ["172"]
+  }).ok, true);
+
+  assert.equal(service.recordLedgerTokenUsage({
+    task_id: "task_pr_01",
+    provider: "openai",
+    input_tokens: 100,
+    output_tokens: 200,
+    total_tokens: 300,
+    estimated_cost: 0.03,
+    measurement_source: "manual"
+  }).ok, true);
+  assert.equal(service.recordLedgerTokenUsage({
+    task_id: "task_pr_02",
+    provider: "anthropic",
+    input_tokens: 400,
+    output_tokens: 500,
+    total_tokens: 900,
+    estimated_cost: 0.07,
+    measurement_source: "manual"
+  }).ok, true);
+  assert.equal(service.recordLedgerTokenAssessment({
+    task_id: "task_pr_02",
+    value_category: "delivery",
+    usefulness_score: 91,
+    assessed_by: "user",
+    confidence: "high"
+  }).ok, true);
+  assert.equal(service.recordLedgerEvent({
+    event_id: "event_pr_01",
+    task_id: "task_pr_01",
+    session_id: "session-a",
+    repo_id: "repo-a",
+    event_type: "file_changed",
+    timestamp: "2026-06-25T06:10:00.000Z",
+    summary: "Changed service summary code.",
+    severity: "info",
+    affected_paths: ["apps/server/src/service.ts"]
+  }).ok, true);
+  assert.equal(service.recordLedgerEvent({
+    event_id: "event_pr_02",
+    task_id: "task_pr_02",
+    session_id: "session-b",
+    repo_id: "repo-a",
+    event_type: "file_changed",
+    timestamp: "2026-06-25T06:12:00.000Z",
+    summary: "Changed CLI summary code.",
+    severity: "info",
+    affected_paths: ["packages/cli/src/commands.ts"]
+  }).ok, true);
+  assert.equal(service.recordLedgerCheckpoint({
+    checkpoint_id: "checkpoint_pr_180",
+    repo_id: "repo-a",
+    kind: "pr",
+    external_id: "180",
+    title: "Summarize checkpoint work",
+    status: "open",
+    created_at: "2026-06-25T06:25:00.000Z",
+    related_task_ids: ["task_pr_01"],
+    related_issue_ids: ["172"],
+    related_session_ids: ["session-a"],
+    summary: "PR summarizes task and token evidence."
+  }).ok, true);
+  assert.equal(service.recordLedgerCheckpoint({
+    checkpoint_id: "checkpoint_pr_181",
+    repo_id: "repo-a",
+    kind: "pr",
+    external_id: "181",
+    title: "Follow-up checkpoint",
+    status: "open",
+    created_at: "2026-06-25T06:30:00.000Z",
+    related_task_ids: ["task_pr_other"],
+    related_issue_ids: ["172"],
+    related_session_ids: ["session-c"],
+    summary: "A second PR also references issue 172."
+  }).ok, true);
+
+  const summary = service.listLedgerCheckpointSummaries({ checkpoint_id: "checkpoint_pr_180" })[0];
+  assert.equal(summary?.checkpoint.external_id, "180");
+  assert.deepEqual(summary?.related_task_ids, ["task_pr_01", "task_pr_02"]);
+  assert.deepEqual(summary?.related_issue_ids, ["172", "174"]);
+  assert.deepEqual(summary?.related_session_ids, ["session-a", "session-b"]);
+  assert.deepEqual(summary?.affected_paths, ["apps/server/src/service.ts", "packages/cli/src/commands.ts"]);
+  assert.deepEqual(summary?.event_ids, ["event_pr_01", "event_pr_02"]);
+  assert.deepEqual(summary?.totals, {
+    estimated_cost: 0.1,
+    events: 2,
+    input_tokens: 500,
+    output_tokens: 700,
+    tasks: 2,
+    total_tokens: 1200
+  });
+  assert.deepEqual(summary?.token_usage.map((entry) => entry.task_id), ["task_pr_01", "task_pr_02"]);
+  assert.deepEqual(summary?.token_assessments.map((entry) => entry.task_id), ["task_pr_02"]);
+  assert.deepEqual(
+    service.listLedgerCheckpointSummaries({ task_id: "task_pr_02" }).map((entry) => entry.checkpoint.checkpoint_id),
+    ["checkpoint_pr_180"]
+  );
+  assert.deepEqual(
+    service.listLedgerCheckpointSummaries({ repo_id: "repo-a" }).map((entry) => entry.related_issue_ids),
+    [["172", "174"], ["172"]]
+  );
+});
+
 test("rejects invalid structured ledger records before persistence", () => {
   const service = createSukaService();
 

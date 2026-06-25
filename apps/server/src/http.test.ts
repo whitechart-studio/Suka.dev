@@ -1101,6 +1101,17 @@ test("ledger MVP API stores and filters structured ledger records", async () => 
     const eventsBody = await eventsResponse.json() as { data: Array<{ event_id: string }> };
     const checkpointsResponse = await fetch(`${running.url}/api/ledger/checkpoints?task_id=task_api_01`);
     const checkpointsBody = await checkpointsResponse.json() as { data: Array<{ checkpoint_id: string }> };
+    const checkpointSummariesResponse = await fetch(`${running.url}/api/ledger/checkpoint-summaries?checkpoint_id=checkpoint_pr_178`);
+    const checkpointSummariesBody = await checkpointSummariesResponse.json() as {
+      data: Array<{
+        affected_paths: string[];
+        checkpoint: { checkpoint_id: string };
+        related_issue_ids: string[];
+        related_session_ids: string[];
+        related_task_ids: string[];
+        totals: { total_tokens: number };
+      }>;
+    };
     const stateResponse = await fetch(`${running.url}/api/state`);
     const stateBody = await stateResponse.json() as { data: { ledger_tasks: Array<{ task_id: string }> } };
 
@@ -1109,6 +1120,12 @@ test("ledger MVP API stores and filters structured ledger records", async () => 
     assert.deepEqual(assessmentsBody.data.map((entry) => entry.value_category), ["delivery"]);
     assert.deepEqual(eventsBody.data.map((entry) => entry.event_id), ["event_api_01"]);
     assert.deepEqual(checkpointsBody.data.map((entry) => entry.checkpoint_id), ["checkpoint_pr_178"]);
+    assert.deepEqual(checkpointSummariesBody.data.map((entry) => entry.checkpoint.checkpoint_id), ["checkpoint_pr_178"]);
+    assert.deepEqual(checkpointSummariesBody.data[0]?.related_task_ids, ["task_api_01"]);
+    assert.deepEqual(checkpointSummariesBody.data[0]?.related_issue_ids, ["170"]);
+    assert.deepEqual(checkpointSummariesBody.data[0]?.related_session_ids, ["session-a"]);
+    assert.deepEqual(checkpointSummariesBody.data[0]?.affected_paths, ["apps/server/src/http.ts"]);
+    assert.equal(checkpointSummariesBody.data[0]?.totals.total_tokens, 6400);
     assert.deepEqual(stateBody.data.ledger_tasks.map((entry) => entry.task_id), ["task_api_01", "task_api_other"]);
   } finally {
     await running.close();

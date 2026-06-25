@@ -229,6 +229,13 @@ async function routeRequest(
     return;
   }
 
+  if (method === "GET" && url.pathname === "/api/ledger/checkpoint-summaries") {
+    writeJson(response, 200, {
+      data: service.listLedgerCheckpointSummaries(parseLedgerFilters(url))
+    });
+    return;
+  }
+
   if (method === "GET" && url.pathname === "/api/projects") {
     writeJson(response, 200, {
       data: service.listProjects()

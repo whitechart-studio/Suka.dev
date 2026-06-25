@@ -1838,6 +1838,52 @@ test("ledger read commands pass structured filters to the local server", async (
   );
 });
 
+test("ledger checkpoint summary reads checkpoint rollups", async () => {
+  const requests: string[] = [];
+  const output: string[] = [];
+  const result = await runCli({
+    argv: [
+      "ledger",
+      "checkpoint",
+      "summary",
+      "--server",
+      "http://suka.test",
+      "--repo-id",
+      "repo-a",
+      "--task-id",
+      "task_cli_01",
+      "--checkpoint-id",
+      "checkpoint_pr_179"
+    ],
+    env: {},
+    fetch: async (url, init) => {
+      requests.push(String(url));
+      assert.equal(init?.method, "GET");
+      return jsonResponse(200, [{
+        checkpoint: {
+          checkpoint_id: "checkpoint_pr_179"
+        },
+        related_task_ids: ["task_cli_01"],
+        totals: {
+          total_tokens: 1600
+        }
+      }]);
+    },
+    io: {
+      stdout: { write: (value: string) => output.push(value) },
+      stderr: { write: () => undefined }
+    }
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(
+    requests[0],
+    "http://suka.test/api/ledger/checkpoint-summaries?repo_id=repo-a&task_id=task_cli_01&checkpoint_id=checkpoint_pr_179"
+  );
+  assert.match(output.join(""), /checkpoint_pr_179/);
+  assert.match(output.join(""), /1600/);
+});
+
 test("remind reports missing shared-truth updates for changed files", async () => {
   const requests: Array<{ init?: RequestInit; url: string }> = [];
   const output: string[] = [];

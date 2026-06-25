@@ -93,6 +93,10 @@ export class SukaApiClient {
     return this.#request("GET", withQuery("/api/ledger/checkpoints", filters));
   }
 
+  async listLedgerCheckpointSummaries(filters?: LedgerRecordFilters): Promise<unknown> {
+    return this.#request("GET", withQuery("/api/ledger/checkpoint-summaries", filters));
+  }
+
   async createLedgerCheckpoint(checkpoint: unknown): Promise<unknown> {
     return this.#request("POST", "/api/ledger/checkpoints", checkpoint);
   }

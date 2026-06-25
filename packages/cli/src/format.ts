@@ -228,6 +228,7 @@ Usage:
   suka ledger checkpoint pr <number> <title> [--task-id ID] [--issue-id ID] [--summary TEXT] [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
   suka ledger checkpoint commit <sha> <title> [--task-id ID] [--issue-id ID] [--summary TEXT] [--repo-id ID] [--session ID] [--server URL]
   suka ledger checkpoint read [--repo-id ID] [--task-id ID] [--checkpoint-id ID] [--server URL]
+  suka ledger checkpoint summary [--repo-id ID] [--task-id ID] [--checkpoint-id ID] [--server URL]
   suka conflicts [--changed] [--workspace ID] [--repo-id ID] [--session ID] [--path PATH] [--api API] [--table TABLE] [--env NAME] [--domain DOMAIN] [--since ISO] [--since-session-start] [--server URL]
   suka release <claim-id> [--server URL]
   suka cleanup [--workspace ID] [--repo ID] [--session ID] [--server URL]
