@@ -178,6 +178,136 @@ type LedgerPointer = {
   };
 };
 
+type LedgerTaskEntry = {
+  task_id: string;
+  workspace_id?: string;
+  repo_id: string;
+  session_id: string;
+  title: string;
+  intent_summary: string;
+  task_type: string;
+  status: string;
+  started_at: string;
+  completed_at?: string;
+  related_issue_ids: string[];
+  related_claim_ids: string[];
+  related_checkpoint_ids: string[];
+};
+
+type LedgerTokenUsageRecord = {
+  task_id: string;
+  provider: string;
+  model?: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  estimated_cost?: number;
+  currency?: string;
+  measurement_source: string;
+};
+
+type LedgerTokenAssessmentRecord = {
+  task_id: string;
+  value_category: string;
+  usefulness_score?: number;
+  assessed_by: string;
+  confidence: string;
+  reason?: string;
+};
+
+type StructuredLedgerEvent = {
+  event_id: string;
+  task_id?: string;
+  session_id: string;
+  repo_id: string;
+  event_type: string;
+  timestamp: string;
+  summary: string;
+  severity: string;
+  affected_paths: string[];
+};
+
+type LedgerCheckpointRecord = {
+  checkpoint_id: string;
+  repo_id: string;
+  kind: string;
+  external_id?: string;
+  title: string;
+  status: string;
+  created_at: string;
+  completed_at?: string;
+  related_task_ids: string[];
+  related_issue_ids: string[];
+  related_session_ids: string[];
+  summary: string;
+};
+
+type LedgerCheckpointSummary = {
+  checkpoint: LedgerCheckpointRecord;
+  related_task_ids: string[];
+  related_issue_ids: string[];
+  related_session_ids: string[];
+  affected_paths: string[];
+  event_ids: string[];
+  token_usage: LedgerTokenUsageRecord[];
+  token_assessments: LedgerTokenAssessmentRecord[];
+  totals: {
+    estimated_cost: number;
+    events: number;
+    input_tokens: number;
+    output_tokens: number;
+    tasks: number;
+    total_tokens: number;
+  };
+};
+
+type TokenEfficiencyRollup = {
+  scope: Record<string, string | undefined>;
+  related_task_ids: string[];
+  assessed_task_ids: string[];
+  unassessed_task_ids: string[];
+  totals: {
+    discarded_tokens: number;
+    estimated_cost: number;
+    input_tokens: number;
+    output_tokens: number;
+    rework_tokens: number;
+    total_tokens: number;
+    unassessed_tokens: number;
+    unknown_tokens: number;
+    useful_tokens: number;
+  };
+  useful_token_ratio?: number;
+  budget?: {
+    hard_limit_tokens: number;
+    level: string;
+    remaining_tokens: number;
+    used_tokens: number;
+    utilization_ratio: number;
+    warning_threshold_tokens: number;
+  };
+};
+
+type LedgerGovernance = {
+  privacy_defaults: {
+    publish_file_paths: boolean;
+    publish_diff_content: boolean;
+    publish_terminal_logs: boolean;
+    publish_prompt_text: boolean;
+    retention_days: number;
+  };
+};
+
+type StructuredLedgerData = {
+  tasks: LedgerTaskEntry[];
+  tokenUsage: LedgerTokenUsageRecord[];
+  tokenAssessments: LedgerTokenAssessmentRecord[];
+  events: StructuredLedgerEvent[];
+  checkpointSummaries: LedgerCheckpointSummary[];
+  tokenEfficiency: TokenEfficiencyRollup[];
+  governance?: LedgerGovernance;
+};
+
 type Scope = {
   paths?: string[];
   apis?: string[];
@@ -339,6 +469,15 @@ const emptyState: SukaState = {
   events: [],
   ledger: [],
   presence: []
+};
+
+const emptyStructuredLedgerData: StructuredLedgerData = {
+  checkpointSummaries: [],
+  events: [],
+  tasks: [],
+  tokenAssessments: [],
+  tokenEfficiency: [],
+  tokenUsage: []
 };
 
 type AppSettings = {
@@ -3330,41 +3469,110 @@ function LedgerPage({
   onClose(): void;
 }): React.ReactElement {
   const [query, setQuery] = useState("");
-  const [agentFilter, setAgentFilter] = useState("all");
-  const [eventFilter, setEventFilter] = useState("all");
-  const [branchFilter, setBranchFilter] = useState("all");
+  const [signalFilter, setSignalFilter] = useState("all");
+  const [checkpointFilter, setCheckpointFilter] = useState("all");
   const [sessionFilter, setSessionFilter] = useState("all");
   const [selectedId, setSelectedId] = useState("");
-  const sortedEntries = useMemo(
+  const [structuredLedger, setStructuredLedger] = useState<StructuredLedgerData>(emptyStructuredLedgerData);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [ledgerError, setLedgerError] = useState("");
+  const [ledgerUpdatedAt, setLedgerUpdatedAt] = useState("");
+  const loadStructuredLedger = useCallback(async () => {
+    setLedgerLoading(true);
+    const queryString = activeProject?.repo_id !== undefined ? `?repo_id=${encodeURIComponent(activeProject.repo_id)}` : "";
+    try {
+      const [
+        tasksResponse,
+        usageResponse,
+        assessmentsResponse,
+        eventsResponse,
+        checkpointResponse,
+        efficiencyResponse,
+        governanceResponse
+      ] = await Promise.all([
+        fetch(`/api/ledger/tasks${queryString}`, { cache: "no-store" }),
+        fetch(`/api/ledger/token-usage${queryString}`, { cache: "no-store" }),
+        fetch(`/api/ledger/token-assessments${queryString}`, { cache: "no-store" }),
+        fetch(`/api/ledger/events${queryString}`, { cache: "no-store" }),
+        fetch(`/api/ledger/checkpoint-summaries${queryString}`, { cache: "no-store" }),
+        fetch(`/api/ledger/token-efficiency${queryString}`, { cache: "no-store" }),
+        fetch("/api/ledger/governance", { cache: "no-store" })
+      ]);
+      if (!tasksResponse.ok || !usageResponse.ok || !assessmentsResponse.ok || !eventsResponse.ok || !checkpointResponse.ok || !efficiencyResponse.ok || !governanceResponse.ok) {
+        throw new Error("ledger_api_unavailable");
+      }
+      const [
+        tasksPayload,
+        usagePayload,
+        assessmentsPayload,
+        eventsPayload,
+        checkpointPayload,
+        efficiencyPayload,
+        governancePayload
+      ] = await Promise.all([
+        tasksResponse.json() as Promise<{ data: LedgerTaskEntry[] }>,
+        usageResponse.json() as Promise<{ data: LedgerTokenUsageRecord[] }>,
+        assessmentsResponse.json() as Promise<{ data: LedgerTokenAssessmentRecord[] }>,
+        eventsResponse.json() as Promise<{ data: StructuredLedgerEvent[] }>,
+        checkpointResponse.json() as Promise<{ data: LedgerCheckpointSummary[] }>,
+        efficiencyResponse.json() as Promise<{ data: TokenEfficiencyRollup[] }>,
+        governanceResponse.json() as Promise<{ data: LedgerGovernance }>
+      ]);
+      setStructuredLedger({
+        checkpointSummaries: Array.isArray(checkpointPayload.data) ? checkpointPayload.data : [],
+        events: Array.isArray(eventsPayload.data) ? eventsPayload.data : [],
+        governance: governancePayload.data,
+        tasks: Array.isArray(tasksPayload.data) ? tasksPayload.data : [],
+        tokenAssessments: Array.isArray(assessmentsPayload.data) ? assessmentsPayload.data : [],
+        tokenEfficiency: Array.isArray(efficiencyPayload.data) ? efficiencyPayload.data : [],
+        tokenUsage: Array.isArray(usagePayload.data) ? usagePayload.data : []
+      });
+      setLedgerError("");
+      setLedgerUpdatedAt(new Date().toISOString());
+    } catch {
+      setLedgerError("Ledger data could not be refreshed. Showing the last available view.");
+    } finally {
+      setLedgerLoading(false);
+    }
+  }, [activeProject?.repo_id]);
+
+  useEffect(() => {
+    void loadStructuredLedger();
+    const timer = window.setInterval(() => void loadStructuredLedger(), 10000);
+    return () => window.clearInterval(timer);
+  }, [loadStructuredLedger]);
+
+  const legacyEntries = useMemo(
     () => entries.slice().sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at)),
     [entries]
   );
-  const agents = useMemo(() => uniqueSorted(sortedEntries.map((entry) => entry.agent_id)), [sortedEntries]);
-  const eventTypes = useMemo(() => uniqueSorted(sortedEntries.map((entry) => entry.event_type)), [sortedEntries]);
-  const branches = useMemo(() => uniqueSorted(sortedEntries.map((entry) => entry.branch)), [sortedEntries]);
-  const sessions = useMemo(() => uniqueSorted(sortedEntries.map((entry) => entry.session_id)), [sortedEntries]);
-  const filteredEntries = useMemo(() => sortedEntries.filter((entry) => (
-    (agentFilter === "all" || entry.agent_id === agentFilter)
-    && (eventFilter === "all" || entry.event_type === eventFilter)
-    && (branchFilter === "all" || entry.branch === branchFilter)
-    && (sessionFilter === "all" || entry.session_id === sessionFilter)
-    && ledgerMatchesQuery(entry, query)
-  )), [agentFilter, branchFilter, eventFilter, query, sessionFilter, sortedEntries]);
+  const timeline = useMemo(() => buildLedgerTimeline(structuredLedger, legacyEntries), [legacyEntries, structuredLedger]);
+  const sessions = useMemo(() => uniqueSorted(timeline.map((item) => item.session_id ?? "")), [timeline]);
+  const signalTypes = useMemo(() => uniqueSorted(timeline.map((item) => item.signal)), [timeline]);
+  const checkpoints = useMemo(() => uniqueSorted(timeline.flatMap((item) => item.checkpoint_ids)), [timeline]);
+  const filteredTimeline = useMemo(() => timeline.filter((item) => (
+    (signalFilter === "all" || item.signal === signalFilter)
+    && (checkpointFilter === "all" || item.checkpoint_ids.includes(checkpointFilter))
+    && (sessionFilter === "all" || item.session_id === sessionFilter)
+    && ledgerTimelineMatchesQuery(item, query)
+  )), [checkpointFilter, query, sessionFilter, signalFilter, timeline]);
 
   useEffect(() => {
-    if (filteredEntries.length === 0) {
+    if (filteredTimeline.length === 0) {
       setSelectedId("");
       return;
     }
-    if (!filteredEntries.some((entry) => entry.id === selectedId)) {
-      setSelectedId(filteredEntries[0]?.id ?? "");
+    if (!filteredTimeline.some((entry) => entry.id === selectedId)) {
+      setSelectedId(filteredTimeline[0]?.id ?? "");
     }
-  }, [filteredEntries, selectedId]);
+  }, [filteredTimeline, selectedId]);
 
-  const selectedEntry = filteredEntries.find((entry) => entry.id === selectedId) ?? filteredEntries[0];
-  const totals = useMemo(() => ledgerTotals(filteredEntries), [filteredEntries]);
+  const selectedEntry = filteredTimeline.find((entry) => entry.id === selectedId) ?? filteredTimeline[0];
+  const totals = useMemo(() => structuredLedgerTotals(structuredLedger, filteredTimeline), [filteredTimeline, structuredLedger]);
+  const primaryEfficiency = structuredLedger.tokenEfficiency[0];
   const noProject = activeProject === undefined;
   const projectLabel = activeProject?.name ?? activeProject?.repo_root ?? "No tracked project selected";
+  const hasLedgerData = timeline.length > 0;
 
   return (
     <section aria-label="Coding Ledger" aria-modal="true" className="ledger-page" role="dialog">
@@ -3381,16 +3589,29 @@ function LedgerPage({
             </div>
           </div>
           <div className="ledger-page-metrics" aria-label="Ledger summary">
-            <span><FileClock size={13} />{filteredEntries.length} entries</span>
+            <span><FileClock size={13} />{filteredTimeline.length} signals</span>
             <span><Code2 size={13} />{totals.files} files</span>
             <span><Timer size={13} />{totals.tokens.toLocaleString()} tokens</span>
+            <span><CheckCheck size={13} />{totals.checkpoints} checkpoints</span>
+            {ledgerUpdatedAt.length > 0 ? <span><RefreshCw size={13} />{formatRelativeTime(ledgerUpdatedAt)}</span> : null}
           </div>
         </header>
+
+        <div className="ledger-command-row">
+          <TokenEfficiencyPanel rollup={primaryEfficiency} />
+          <LedgerGovernancePanel governance={structuredLedger.governance} />
+        </div>
 
         {noProject ? (
           <div className="ledger-page-notice">
             <HardDrive size={14} />
             <span>Select or track a repository to anchor future ledger entries to a workspace.</span>
+          </div>
+        ) : null}
+        {ledgerError.length > 0 ? (
+          <div className="ledger-page-notice warning">
+            <TriangleAlert size={14} />
+            <span>{ledgerError}</span>
           </div>
         ) : null}
 
@@ -3399,30 +3620,33 @@ function LedgerPage({
             <span>Search</span>
             <input
               aria-label="Search ledger entries"
-              placeholder="summary, path, evidence, worktree..."
+              placeholder="task, issue, checkpoint, path..."
               type="search"
               value={query}
               onChange={(event) => setQuery(event.currentTarget.value)}
             />
           </label>
-          <LedgerSelect label="Agent" value={agentFilter} values={agents} onChange={setAgentFilter} />
-          <LedgerSelect label="Event" value={eventFilter} values={eventTypes} onChange={setEventFilter} />
-          <LedgerSelect label="Branch" value={branchFilter} values={branches} onChange={setBranchFilter} />
+          <LedgerSelect label="Signal" value={signalFilter} values={signalTypes} onChange={setSignalFilter} />
           <LedgerSelect label="Session" value={sessionFilter} values={sessions} onChange={setSessionFilter} />
+          <LedgerSelect label="Checkpoint" value={checkpointFilter} values={checkpoints} onChange={setCheckpointFilter} />
+          <button className="ledger-refresh" type="button" onClick={() => void loadStructuredLedger()}>
+            <RefreshCw size={13} />
+            <span>{ledgerLoading ? "Refreshing" : "Refresh"}</span>
+          </button>
         </div>
 
-        {sortedEntries.length === 0 ? (
+        {!hasLedgerData ? (
           <EmptyState
             icon={<BookOpen size={16} />}
-            title="No ledger entries yet"
-            text="When agents publish coding events, this page will show the timeline, evidence, changed files, cost, and session metadata."
+            title={ledgerLoading ? "Loading ledger" : "No ledger records yet"}
+            text="When agents record tasks, events, token usage, and PR checkpoints, this page will show the timeline, evidence chain, and spend efficiency."
           />
         ) : (
           <div className="ledger-page-grid">
             <section aria-label="Ledger timeline" className="ledger-list">
-              {filteredEntries.length === 0 ? (
+              {filteredTimeline.length === 0 ? (
                 <EmptyState icon={<Scan size={16} />} title="No matching entries" text="Clear a filter or search for a different branch, agent, session, or path." />
-              ) : filteredEntries.map((entry) => (
+              ) : filteredTimeline.map((entry) => (
                 <button
                   aria-pressed={entry.id === selectedEntry?.id}
                   className={`ledger-entry ${entry.id === selectedEntry?.id ? "selected" : ""}`}
@@ -3431,22 +3655,24 @@ function LedgerPage({
                   onClick={() => setSelectedId(entry.id)}
                 >
                   <span className="ledger-entry-head">
-                    <strong>{truncate(entry.summary, 76)}</strong>
-                    <Badge tone={ledgerTone(entry.event_type)} icon={<Activity size={12} />}>{eventLabel(entry.event_type)}</Badge>
+                    <strong>{truncate(entry.title, 76)}</strong>
+                    <Badge tone={ledgerSignalTone(entry)} icon={<Activity size={12} />}>{eventLabel(entry.signal)}</Badge>
                   </span>
                   <span className="ledger-entry-meta">
-                    <span><Bot size={12} />{agentLabel(entry.agent_id)}</span>
-                    <span><GitBranch size={12} />{truncate(entry.branch, 32)}</span>
+                    {entry.task_id !== undefined ? <span><ClipboardList size={12} />{entry.task_id}</span> : null}
+                    {entry.session_id !== undefined ? <span><RadioTower size={12} />{truncate(entry.session_id, 28)}</span> : null}
                     <span><Timer size={12} />{formatRelativeTime(entry.created_at)}</span>
+                    {entry.tokens > 0 ? <span><Gauge size={12} />{entry.tokens.toLocaleString()} tok</span> : null}
                   </span>
                   <span className="ledger-entry-paths">
-                    {entry.affected_paths.slice(0, 3).map((path) => <code key={path}>{path}</code>)}
+                    {entry.checkpoint_ids.slice(0, 2).map((checkpoint) => <code key={checkpoint}>{checkpoint}</code>)}
+                    {entry.paths.slice(0, 3).map((path) => <code key={path}>{path}</code>)}
                   </span>
                 </button>
               ))}
             </section>
 
-            <LedgerDetail entry={selectedEntry} />
+            <LedgerDetail entry={selectedEntry} data={structuredLedger} />
           </div>
         )}
       </div>
@@ -3476,54 +3702,154 @@ function LedgerSelect({
   );
 }
 
-function LedgerDetail({ entry }: { entry: LedgerPointer | undefined }): React.ReactElement {
+type LedgerTimelineItem = {
+  id: string;
+  kind: "task" | "event" | "checkpoint" | "legacy";
+  signal: string;
+  title: string;
+  summary: string;
+  created_at: string;
+  session_id?: string | undefined;
+  task_id?: string | undefined;
+  checkpoint_ids: string[];
+  issue_ids: string[];
+  paths: string[];
+  tokens: number;
+  source: LedgerTaskEntry | StructuredLedgerEvent | LedgerCheckpointSummary | LedgerPointer;
+};
+
+function TokenEfficiencyPanel({ rollup }: { rollup: TokenEfficiencyRollup | undefined }): React.ReactElement {
+  const totals = rollup?.totals;
+  const totalTokens = totals?.total_tokens ?? 0;
+  const usefulRatio = rollup?.useful_token_ratio ?? (totalTokens > 0 && totals !== undefined ? totals.useful_tokens / totalTokens : 0);
+  const segments = totals === undefined ? [] : [
+    { className: "useful", label: "Useful", value: totals.useful_tokens },
+    { className: "rework", label: "Rework", value: totals.rework_tokens },
+    { className: "discarded", label: "Discarded", value: totals.discarded_tokens },
+    { className: "unknown", label: "Unknown", value: totals.unknown_tokens + totals.unassessed_tokens }
+  ];
+
+  return (
+    <section className="ledger-efficiency-card" aria-label="Token efficiency">
+      <div className="ledger-card-title">
+        <span><Gauge size={14} />Token efficiency</span>
+        <strong>{totalTokens.toLocaleString()} tokens</strong>
+      </div>
+      <div className="ledger-efficiency-score">
+        <strong>{Math.round(usefulRatio * 100)}%</strong>
+        <span>useful output</span>
+      </div>
+      <div className="ledger-token-bar" aria-label="Token category distribution">
+        {segments.length === 0 ? <i className="unknown" style={{ width: "100%" }} /> : segments.map((segment) => (
+          <i
+            aria-label={`${segment.label}: ${segment.value.toLocaleString()} tokens`}
+            className={segment.className}
+            key={segment.label}
+            style={{ width: `${segment.value > 0 && totalTokens > 0 ? Math.max(4, (segment.value / totalTokens) * 100) : 0}%` }}
+            title={`${segment.label}: ${segment.value.toLocaleString()}`}
+          />
+        ))}
+      </div>
+      <div className="ledger-efficiency-meta">
+        <span>Assessed <strong>{rollup?.assessed_task_ids.length ?? 0}</strong></span>
+        <span>Unassessed <strong>{rollup?.unassessed_task_ids.length ?? 0}</strong></span>
+        <span>Cost <strong>{formatLedgerMoney(totals?.estimated_cost ?? 0)}</strong></span>
+        {rollup?.budget !== undefined ? <span>Budget <strong>{eventLabel(rollup.budget.level)}</strong></span> : null}
+      </div>
+    </section>
+  );
+}
+
+function LedgerGovernancePanel({ governance }: { governance: LedgerGovernance | undefined }): React.ReactElement {
+  const privacy = governance?.privacy_defaults;
+  return (
+    <section className="ledger-governance-card" aria-label="Ledger governance">
+      <div className="ledger-card-title">
+        <span><LockKeyhole size={14} />Governance</span>
+        <strong>{privacy?.retention_days ?? 7}d retention</strong>
+      </div>
+      <div className="ledger-governance-grid">
+        <span className={privacy?.publish_file_paths === false ? "off" : ""}>Paths {privacy?.publish_file_paths === false ? "off" : "on"}</span>
+        <span className={privacy?.publish_diff_content ? "" : "off"}>Diffs {privacy?.publish_diff_content ? "on" : "off"}</span>
+        <span className={privacy?.publish_terminal_logs ? "" : "off"}>Terminal {privacy?.publish_terminal_logs ? "on" : "off"}</span>
+        <span className={privacy?.publish_prompt_text ? "" : "off"}>Prompts {privacy?.publish_prompt_text ? "on" : "off"}</span>
+      </div>
+    </section>
+  );
+}
+
+function LedgerDetail({ data, entry }: { data: StructuredLedgerData; entry: LedgerTimelineItem | undefined }): React.ReactElement {
   if (entry === undefined) {
     return (
       <aside className="ledger-detail">
-        <EmptyState icon={<BookOpen size={16} />} title="Select an entry" text="Choose a ledger entry to inspect evidence, changed paths, session, branch, and token usage." />
+        <EmptyState icon={<BookOpen size={16} />} title="Select a signal" text="Choose a task, event, or checkpoint to inspect evidence, changed paths, session, and token usage." />
       </aside>
     );
   }
 
-  const diff = formatLedgerDiff(entry);
-  const cost = formatLedgerCost(entry);
+  const relatedUsage = entry.task_id !== undefined ? uniqueTokenUsageRecords(data.tokenUsage.filter((usage) => usage.task_id === entry.task_id)) : [];
+  const relatedAssessments = entry.task_id !== undefined ? data.tokenAssessments.filter((assessment) => assessment.task_id === entry.task_id) : [];
+  const relatedEvents = data.events.filter((event) => event.task_id !== undefined && event.task_id === entry.task_id);
+  const relatedCheckpoints = data.checkpointSummaries.filter((summary) => {
+    return entry.checkpoint_ids.includes(summary.checkpoint.checkpoint_id)
+      || (entry.task_id !== undefined && summary.related_task_ids.includes(entry.task_id));
+  });
+  const tokenTotal = relatedUsage.length > 0 ? relatedUsage.reduce((sum, usage) => sum + usage.total_tokens, 0) : entry.tokens;
 
   return (
     <aside aria-label="Ledger entry detail" className="ledger-detail">
       <div className="ledger-detail-head">
-        <Badge tone={ledgerTone(entry.event_type)} icon={<Code2 size={13} />}>{eventLabel(entry.event_type)}</Badge>
+        <Badge tone={ledgerSignalTone(entry)} icon={<Code2 size={13} />}>{eventLabel(entry.signal)}</Badge>
         <span>{formatRelativeTime(entry.created_at)}</span>
       </div>
-      <h3>{entry.summary}</h3>
+      <h3>{entry.title}</h3>
+      <p className="ledger-detail-summary">{entry.summary}</p>
       <div className="ledger-detail-grid">
-        <span><Bot size={13} />{agentLabel(entry.agent_id)}</span>
-        <span><RadioTower size={13} />{entry.session_id}</span>
-        <span><GitBranch size={13} />{entry.branch}</span>
-        <span><HardDrive size={13} />{formatWorktree(entry.worktree)}</span>
-        <span><Network size={13} />{entry.workspace_id}</span>
-        <span><Route size={13} />{entry.repo_id}</span>
-        {diff ? <span><FileClock size={13} />{diff}</span> : null}
-        {cost ? <span><Timer size={13} />{cost}</span> : null}
+        {entry.task_id !== undefined ? <span><ClipboardList size={13} />{entry.task_id}</span> : null}
+        {entry.session_id !== undefined ? <span><RadioTower size={13} />{entry.session_id}</span> : null}
+        <span><Route size={13} />{entry.kind}</span>
+        <span><Timer size={13} />{tokenTotal.toLocaleString()} tokens</span>
+        {entry.issue_ids.length > 0 ? <span><Network size={13} />issues {entry.issue_ids.join(", ")}</span> : null}
+        {entry.checkpoint_ids.length > 0 ? <span><CheckCheck size={13} />{entry.checkpoint_ids.length} checkpoint refs</span> : null}
       </div>
       <section className="ledger-detail-section">
         <h4>Changed files</h4>
-        <PathList paths={entry.affected_paths} />
+        <PathList paths={entry.paths} />
       </section>
       <section className="ledger-detail-section">
-        <h4>Evidence</h4>
-        {entry.evidence !== undefined && entry.evidence.length > 0 ? (
+        <h4>Evidence chain</h4>
+        {relatedEvents.length + relatedCheckpoints.length > 0 ? (
           <ul className="ledger-evidence">
-            {entry.evidence.slice(0, 6).map((item) => <li key={item}>{item}</li>)}
+            {relatedEvents.slice(0, 4).map((event) => <li key={event.event_id}>{eventLabel(event.event_type)} · {event.summary}</li>)}
+            {relatedCheckpoints.slice(0, 4).map((summary) => (
+              <li key={summary.checkpoint.checkpoint_id}>
+                {eventLabel(summary.checkpoint.kind)} · {summary.checkpoint.title} · {summary.totals.total_tokens.toLocaleString()} tokens
+              </li>
+            ))}
           </ul>
         ) : <p className="empty">evidence: none</p>}
       </section>
-      {entry.token_usage !== undefined ? (
+      {relatedUsage.length > 0 ? (
         <section className="ledger-detail-section">
           <h4>Usage</h4>
           <div className="ledger-usage-row">
-            <span>Input <strong>{entry.token_usage.input_tokens.toLocaleString()}</strong></span>
-            <span>Output <strong>{entry.token_usage.output_tokens.toLocaleString()}</strong></span>
-            {entry.token_usage.model !== undefined ? <span>Model <strong>{entry.token_usage.model}</strong></span> : null}
+            {relatedUsage.map((usage) => (
+              <span key={`${usage.task_id}:${usage.model ?? usage.provider}`}>
+                {usage.model ?? usage.provider} <strong>{usage.total_tokens.toLocaleString()}</strong>
+              </span>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {relatedAssessments.length > 0 ? (
+        <section className="ledger-detail-section">
+          <h4>Assessment</h4>
+          <div className="ledger-usage-row">
+            {relatedAssessments.map((assessment) => (
+              <span key={`${assessment.task_id}:${assessment.value_category}`}>
+                {eventLabel(assessment.value_category)} <strong>{assessment.confidence}</strong>
+              </span>
+            ))}
           </div>
         </section>
       ) : null}
@@ -4386,6 +4712,146 @@ function agentLabel(agentId: string): string {
   return agentIdentity({ agent_id: agentId, current_files: [], status: "online", tool: agentId }).label;
 }
 
+function buildLedgerTimeline(data: StructuredLedgerData, legacyEntries: LedgerPointer[]): LedgerTimelineItem[] {
+  const usageByTask = new Map<string, LedgerTokenUsageRecord[]>();
+  for (const usage of data.tokenUsage) {
+    usageByTask.set(usage.task_id, [...(usageByTask.get(usage.task_id) ?? []), usage]);
+  }
+  const pathsByTask = new Map<string, string[]>();
+  for (const event of data.events) {
+    if (event.task_id === undefined) continue;
+    pathsByTask.set(event.task_id, uniqueSorted([...(pathsByTask.get(event.task_id) ?? []), ...event.affected_paths]));
+  }
+  for (const summary of data.checkpointSummaries) {
+    for (const taskId of summary.related_task_ids) {
+      pathsByTask.set(taskId, uniqueSorted([...(pathsByTask.get(taskId) ?? []), ...summary.affected_paths]));
+    }
+  }
+
+  const taskItems = data.tasks.map((task): LedgerTimelineItem => ({
+    checkpoint_ids: task.related_checkpoint_ids,
+    created_at: task.completed_at ?? task.started_at,
+    id: `task:${task.task_id}`,
+    issue_ids: task.related_issue_ids,
+    kind: "task",
+    paths: pathsByTask.get(task.task_id) ?? [],
+    session_id: task.session_id,
+    signal: task.status,
+    source: task,
+    summary: task.intent_summary,
+    task_id: task.task_id,
+    title: task.title,
+    tokens: (usageByTask.get(task.task_id) ?? []).reduce((sum, usage) => sum + usage.total_tokens, 0)
+  }));
+
+  const eventItems = data.events.map((event): LedgerTimelineItem => ({
+    checkpoint_ids: checkpointIdsForTask(data.checkpointSummaries, event.task_id),
+    created_at: event.timestamp,
+    id: `event:${event.event_id}`,
+    issue_ids: issueIdsForTask(data.tasks, event.task_id),
+    kind: "event",
+    paths: event.affected_paths,
+    session_id: event.session_id,
+    signal: event.event_type,
+    source: event,
+    summary: event.summary,
+    task_id: event.task_id,
+    title: event.summary,
+    tokens: event.task_id === undefined ? 0 : (usageByTask.get(event.task_id) ?? []).reduce((sum, usage) => sum + usage.total_tokens, 0)
+  }));
+
+  const checkpointItems = data.checkpointSummaries.map((summary): LedgerTimelineItem => ({
+    checkpoint_ids: [summary.checkpoint.checkpoint_id],
+    created_at: summary.checkpoint.completed_at ?? summary.checkpoint.created_at,
+    id: `checkpoint:${summary.checkpoint.checkpoint_id}`,
+    issue_ids: summary.related_issue_ids,
+    kind: "checkpoint",
+    paths: summary.affected_paths,
+    session_id: summary.related_session_ids[0],
+    signal: summary.checkpoint.status,
+    source: summary,
+    summary: summary.checkpoint.summary,
+    task_id: summary.related_task_ids[0],
+    title: summary.checkpoint.title,
+    tokens: summary.totals.total_tokens
+  }));
+
+  const legacyItems = legacyEntries.map((entry): LedgerTimelineItem => ({
+    checkpoint_ids: [],
+    created_at: entry.created_at,
+    id: `legacy:${entry.id}`,
+    issue_ids: [],
+    kind: "legacy",
+    paths: entry.affected_paths,
+    session_id: entry.session_id,
+    signal: entry.event_type,
+    source: entry,
+    summary: entry.summary,
+    title: entry.summary,
+    tokens: entry.token_usage?.total_tokens ?? (entry.token_usage === undefined ? 0 : entry.token_usage.input_tokens + entry.token_usage.output_tokens)
+  }));
+
+  return [...taskItems, ...eventItems, ...checkpointItems, ...legacyItems]
+    .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at));
+}
+
+function checkpointIdsForTask(summaries: LedgerCheckpointSummary[], taskId: string | undefined): string[] {
+  if (taskId === undefined) return [];
+  return summaries
+    .filter((summary) => summary.related_task_ids.includes(taskId))
+    .map((summary) => summary.checkpoint.checkpoint_id);
+}
+
+function issueIdsForTask(tasks: LedgerTaskEntry[], taskId: string | undefined): string[] {
+  if (taskId === undefined) return [];
+  return tasks.find((task) => task.task_id === taskId)?.related_issue_ids ?? [];
+}
+
+function ledgerTimelineMatchesQuery(item: LedgerTimelineItem, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (needle.length === 0) return true;
+  return [
+    item.title,
+    item.summary,
+    item.task_id ?? "",
+    item.session_id ?? "",
+    item.signal,
+    ...item.checkpoint_ids,
+    ...item.issue_ids,
+    ...item.paths
+  ].some((value) => value.toLowerCase().includes(needle));
+}
+
+function structuredLedgerTotals(data: StructuredLedgerData, items: LedgerTimelineItem[]): { checkpoints: number; files: number; tokens: number } {
+  const taskIds = new Set(items.map((item) => item.task_id).filter((value): value is string => value !== undefined));
+  const checkpointIds = new Set(items.flatMap((item) => item.checkpoint_ids));
+  const files = new Set(items.flatMap((item) => item.paths.filter(Boolean))).size;
+  const tokens = uniqueTokenUsageRecords(data.tokenUsage)
+    .filter((usage) => taskIds.size === 0 || taskIds.has(usage.task_id))
+    .reduce((sum, usage) => sum + usage.total_tokens, 0);
+  return {
+    checkpoints: checkpointIds.size,
+    files,
+    tokens: tokens > 0 ? tokens : items.reduce((sum, item) => sum + item.tokens, 0)
+  };
+}
+
+function uniqueTokenUsageRecords(records: LedgerTokenUsageRecord[]): LedgerTokenUsageRecord[] {
+  const byKey = new Map<string, LedgerTokenUsageRecord>();
+  for (const record of records) {
+    const key = [record.task_id, record.provider, record.model ?? "", record.measurement_source].join(":");
+    byKey.set(key, record);
+  }
+  return [...byKey.values()];
+}
+
+function ledgerSignalTone(item: LedgerTimelineItem): string {
+  if (item.signal.includes("failed") || item.signal.includes("conflict") || item.signal.includes("blocked")) return "risk";
+  if (item.signal.includes("completed") || item.signal.includes("passed") || item.signal.includes("accepted") || item.signal.includes("open")) return "live";
+  if (item.kind === "checkpoint") return "info";
+  return "neutral";
+}
+
 function ledgerTone(eventType: string): string {
   if (eventType.includes("failed") || eventType.includes("conflict")) return "risk";
   if (eventType.includes("completed") || eventType.includes("passed") || eventType.includes("accepted")) return "live";
@@ -4406,6 +4872,11 @@ function formatLedgerCost(entry: LedgerPointer): string | undefined {
     return `${tokens.toLocaleString()} tok / $${usage.estimated_cost_usd.toFixed(3)}`;
   }
   return `${tokens.toLocaleString()} tok`;
+}
+
+function formatLedgerMoney(value: number): string {
+  if (value <= 0) return "$0.000";
+  return `$${value.toFixed(3)}`;
 }
 
 function formatWorktree(worktree: string): string {
