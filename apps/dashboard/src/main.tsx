@@ -3473,6 +3473,7 @@ function LedgerPage({
   const [checkpointFilter, setCheckpointFilter] = useState("all");
   const [sessionFilter, setSessionFilter] = useState("all");
   const [selectedId, setSelectedId] = useState("");
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [structuredLedger, setStructuredLedger] = useState<StructuredLedgerData>(emptyStructuredLedgerData);
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [ledgerError, setLedgerError] = useState("");
@@ -3560,14 +3561,25 @@ function LedgerPage({
   useEffect(() => {
     if (filteredTimeline.length === 0) {
       setSelectedId("");
+      setInspectorOpen(false);
       return;
     }
     if (!filteredTimeline.some((entry) => entry.id === selectedId)) {
       setSelectedId(filteredTimeline[0]?.id ?? "");
+      setInspectorOpen(false);
     }
   }, [filteredTimeline, selectedId]);
 
   const selectedEntry = filteredTimeline.find((entry) => entry.id === selectedId) ?? filteredTimeline[0];
+  useEffect(() => {
+    if (!inspectorOpen) return;
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") setInspectorOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [inspectorOpen]);
+
   const totals = useMemo(() => structuredLedgerTotals(structuredLedger, filteredTimeline), [filteredTimeline, structuredLedger]);
   const primaryEfficiency = structuredLedger.tokenEfficiency[0];
   const noProject = activeProject === undefined;
@@ -3591,7 +3603,7 @@ function LedgerPage({
           <div className="ledger-page-metrics" aria-label="Ledger summary">
             <span><FileClock size={13} />{filteredTimeline.length} signals</span>
             <span><Code2 size={13} />{totals.files} files</span>
-            <span><Timer size={13} />{totals.tokens.toLocaleString()} tokens</span>
+            <span><Timer size={13} />{totals.tokens.toLocaleString()} token impact</span>
             <span><CheckCheck size={13} />{totals.checkpoints} checkpoints</span>
             {ledgerUpdatedAt.length > 0 ? <span><RefreshCw size={13} />{formatRelativeTime(ledgerUpdatedAt)}</span> : null}
           </div>
@@ -3643,38 +3655,72 @@ function LedgerPage({
           />
         ) : (
           <div className="ledger-page-grid">
-            <section aria-label="Ledger timeline" className="ledger-list">
+            <section aria-label="Ledger timeline" className="ledger-table-panel">
               {filteredTimeline.length === 0 ? (
                 <EmptyState icon={<Scan size={16} />} title="No matching entries" text="Clear a filter or search for a different branch, agent, session, or path." />
-              ) : filteredTimeline.map((entry) => (
-                <button
-                  aria-pressed={entry.id === selectedEntry?.id}
-                  className={`ledger-entry ${entry.id === selectedEntry?.id ? "selected" : ""}`}
-                  key={entry.id}
-                  type="button"
-                  onClick={() => setSelectedId(entry.id)}
-                >
-                  <span className="ledger-entry-head">
-                    <strong>{truncate(entry.title, 76)}</strong>
-                    <Badge tone={ledgerSignalTone(entry)} icon={<Activity size={12} />}>{eventLabel(entry.signal)}</Badge>
-                  </span>
-                  <span className="ledger-entry-meta">
-                    {entry.task_id !== undefined ? <span><ClipboardList size={12} />{entry.task_id}</span> : null}
-                    {entry.session_id !== undefined ? <span><RadioTower size={12} />{truncate(entry.session_id, 28)}</span> : null}
-                    <span><Timer size={12} />{formatRelativeTime(entry.created_at)}</span>
-                    {entry.tokens > 0 ? <span><Gauge size={12} />{entry.tokens.toLocaleString()} tok</span> : null}
-                  </span>
-                  <span className="ledger-entry-paths">
-                    {entry.checkpoint_ids.slice(0, 2).map((checkpoint) => <code key={checkpoint}>{checkpoint}</code>)}
-                    {entry.paths.slice(0, 3).map((path) => <code key={path}>{path}</code>)}
-                  </span>
-                </button>
-              ))}
+              ) : (
+                <div className="ledger-table-wrap">
+                  <table className="ledger-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Time</th>
+                        <th scope="col">Task</th>
+                        <th scope="col">Signal</th>
+                        <th scope="col">Session</th>
+                        <th scope="col">Files</th>
+                        <th scope="col">Tokens</th>
+                        <th scope="col">Checkpoint</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredTimeline.map((entry) => (
+                        <tr
+                          aria-selected={inspectorOpen && entry.id === selectedEntry?.id}
+                          className={inspectorOpen && entry.id === selectedEntry?.id ? "selected" : ""}
+                          key={entry.id}
+                        >
+                          <td>
+                            <span className="ledger-table-time">{formatRelativeTime(entry.created_at)}</span>
+                          </td>
+                          <td>
+                            <button
+                              className="ledger-row-select"
+                              type="button"
+                              onClick={() => {
+                                setSelectedId(entry.id);
+                                setInspectorOpen(true);
+                              }}
+                            >
+                              <strong>{truncate(entry.title, 72)}</strong>
+                              <small>{entry.task_id ?? eventLabel(entry.kind)}</small>
+                            </button>
+                          </td>
+                          <td>
+                            <Badge tone={ledgerSignalTone(entry)} icon={<Activity size={12} />}>{eventLabel(entry.signal)}</Badge>
+                          </td>
+                          <td>{entry.session_id !== undefined ? truncate(entry.session_id, 24) : "none"}</td>
+                          <td>{entry.paths.length}</td>
+                          <td>{entry.tokens > 0 ? entry.tokens.toLocaleString() : "none"}</td>
+                          <td>
+                            {entry.checkpoint_ids.length > 0 ? (
+                              <code>{truncate(entry.checkpoint_ids[0] ?? "", 24)}</code>
+                            ) : "none"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </section>
-
-            <LedgerDetail entry={selectedEntry} data={structuredLedger} />
           </div>
         )}
+        {inspectorOpen ? (
+          <div aria-label="Ledger detail inspector" className="ledger-inspector" role="dialog">
+            <button aria-label="Close ledger detail" className="ledger-inspector-backdrop" type="button" onClick={() => setInspectorOpen(false)} />
+            <LedgerDetail entry={selectedEntry} data={structuredLedger} onClose={() => setInspectorOpen(false)} />
+          </div>
+        ) : null}
       </div>
     </section>
   );
@@ -3753,7 +3799,7 @@ function TokenEfficiencyPanel({ rollup }: { rollup: TokenEfficiencyRollup | unde
       <div className="ledger-efficiency-meta">
         <span>Assessed <strong>{rollup?.assessed_task_ids.length ?? 0}</strong></span>
         <span>Unassessed <strong>{rollup?.unassessed_task_ids.length ?? 0}</strong></span>
-        <span>Cost <strong>{formatLedgerMoney(totals?.estimated_cost ?? 0)}</strong></span>
+        <span>Measured <strong>{totalTokens.toLocaleString()}</strong></span>
         {rollup?.budget !== undefined ? <span>Budget <strong>{eventLabel(rollup.budget.level)}</strong></span> : null}
       </div>
     </section>
@@ -3778,10 +3824,21 @@ function LedgerGovernancePanel({ governance }: { governance: LedgerGovernance | 
   );
 }
 
-function LedgerDetail({ data, entry }: { data: StructuredLedgerData; entry: LedgerTimelineItem | undefined }): React.ReactElement {
+function LedgerDetail({
+  data,
+  entry,
+  onClose
+}: {
+  data: StructuredLedgerData;
+  entry: LedgerTimelineItem | undefined;
+  onClose(): void;
+}): React.ReactElement {
   if (entry === undefined) {
     return (
       <aside className="ledger-detail">
+        <button aria-label="Close ledger detail" className="ledger-detail-close" type="button" onClick={onClose}>
+          <X size={14} />
+        </button>
         <EmptyState icon={<BookOpen size={16} />} title="Select a signal" text="Choose a task, event, or checkpoint to inspect evidence, changed paths, session, and token usage." />
       </aside>
     );
@@ -3800,7 +3857,12 @@ function LedgerDetail({ data, entry }: { data: StructuredLedgerData; entry: Ledg
     <aside aria-label="Ledger entry detail" className="ledger-detail">
       <div className="ledger-detail-head">
         <Badge tone={ledgerSignalTone(entry)} icon={<Code2 size={13} />}>{eventLabel(entry.signal)}</Badge>
-        <span>{formatRelativeTime(entry.created_at)}</span>
+        <div className="ledger-detail-actions">
+          <span>{formatRelativeTime(entry.created_at)}</span>
+          <button aria-label="Close ledger detail" className="ledger-detail-close" type="button" onClick={onClose}>
+            <X size={14} />
+          </button>
+        </div>
       </div>
       <h3>{entry.title}</h3>
       <p className="ledger-detail-summary">{entry.summary}</p>
@@ -4868,15 +4930,7 @@ function formatLedgerCost(entry: LedgerPointer): string | undefined {
   const usage = entry.token_usage;
   if (usage === undefined) return undefined;
   const tokens = usage.total_tokens ?? usage.input_tokens + usage.output_tokens;
-  if (usage.estimated_cost_usd !== undefined) {
-    return `${tokens.toLocaleString()} tok / $${usage.estimated_cost_usd.toFixed(3)}`;
-  }
   return `${tokens.toLocaleString()} tok`;
-}
-
-function formatLedgerMoney(value: number): string {
-  if (value <= 0) return "$0.000";
-  return `$${value.toFixed(3)}`;
 }
 
 function formatWorktree(worktree: string): string {
