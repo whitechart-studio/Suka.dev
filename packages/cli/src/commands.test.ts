@@ -1370,6 +1370,474 @@ test("brief read filters by current session context", async () => {
   assert.doesNotMatch(output.join(""), /ptr_brief_session_b/);
 });
 
+test("ledger task start records a prompt work unit", async () => {
+  const requests: Array<{ init?: RequestInit; url: string }> = [];
+  const result = await runCli({
+    argv: [
+      "ledger",
+      "task",
+      "start",
+      "Implement ledger CLI",
+      "--server",
+      "http://suka.test",
+      "--workspace",
+      "workspace-a",
+      "--repo-id",
+      "repo-a",
+      "--session",
+      "session-a",
+      "--summary",
+      "Add task token event and checkpoint commands.",
+      "--type",
+      "implementation",
+      "--issue-id",
+      "171",
+      "--claim-id",
+      "claim_cli",
+      "--checkpoint-id",
+      "checkpoint_pr_179"
+    ],
+    env: {},
+    now: new Date("2026-06-25T10:00:00.000Z"),
+    fetch: async (url, init) => {
+      const request: { init?: RequestInit; url: string } = { url: String(url) };
+      if (init !== undefined) {
+        request.init = init;
+      }
+      requests.push(request);
+      return jsonResponse(201, JSON.parse(String(init?.body)) as unknown);
+    },
+    io: silentIo()
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(requests[0]?.url, "http://suka.test/api/ledger/tasks");
+  assert.equal(requests[0]?.init?.method, "POST");
+  const body = JSON.parse(String(requests[0]?.init?.body)) as {
+    intent_summary: string;
+    related_checkpoint_ids: string[];
+    related_claim_ids: string[];
+    related_issue_ids: string[];
+    repo_id: string;
+    session_id: string;
+    started_at: string;
+    status: string;
+    task_id: string;
+    task_type: string;
+    title: string;
+    workspace_id: string;
+  };
+  assert.match(body.task_id, /^task_/);
+  assert.equal(body.title, "Implement ledger CLI");
+  assert.equal(body.intent_summary, "Add task token event and checkpoint commands.");
+  assert.equal(body.task_type, "implementation");
+  assert.equal(body.status, "active");
+  assert.equal(body.workspace_id, "workspace-a");
+  assert.equal(body.repo_id, "repo-a");
+  assert.equal(body.session_id, "session-a");
+  assert.equal(body.started_at, "2026-06-25T10:00:00.000Z");
+  assert.deepEqual(body.related_issue_ids, ["171"]);
+  assert.deepEqual(body.related_claim_ids, ["claim_cli"]);
+  assert.deepEqual(body.related_checkpoint_ids, ["checkpoint_pr_179"]);
+});
+
+test("ledger task start requires summary and session context", async () => {
+  const requests: unknown[] = [];
+  const errors: string[] = [];
+  const missingSummary = await runCli({
+    argv: ["ledger", "task", "start", "Implement ledger CLI", "--server", "http://suka.test"],
+    env: {
+      SUKA_REPO_ID: "repo-a",
+      SUKA_SESSION_ID: "session-a"
+    },
+    fetch: async (url, init) => {
+      requests.push({ init, url });
+      return jsonResponse(201, {});
+    },
+    io: {
+      stdout: { write: () => undefined },
+      stderr: { write: (value: string) => errors.push(value) }
+    }
+  });
+
+  assert.equal(missingSummary.exitCode, 1);
+  assert.match(errors.join(""), /ledger task start requires --summary/);
+  assert.equal(requests.length, 0);
+
+  errors.length = 0;
+  const missingContext = await runCli({
+    argv: [
+      "ledger",
+      "task",
+      "start",
+      "Implement ledger CLI",
+      "--server",
+      "http://suka.test",
+      "--summary",
+      "Add commands."
+    ],
+    env: {},
+    fetch: async (url, init) => {
+      requests.push({ init, url });
+      return jsonResponse(201, {});
+    },
+    io: {
+      stdout: { write: () => undefined },
+      stderr: { write: (value: string) => errors.push(value) }
+    }
+  });
+
+  assert.equal(missingContext.exitCode, 1);
+  assert.match(errors.join(""), /ledger task start requires --repo-id and --session context/);
+  assert.equal(requests.length, 0);
+});
+
+test("ledger task finish updates an existing task", async () => {
+  const requests: Array<{ init?: RequestInit; url: string }> = [];
+  const result = await runCli({
+    argv: [
+      "ledger",
+      "task",
+      "finish",
+      "task_cli_01",
+      "--server",
+      "http://suka.test",
+      "--checkpoint-id",
+      "checkpoint_pr_179"
+    ],
+    env: {},
+    now: new Date("2026-06-25T11:00:00.000Z"),
+    fetch: async (url, init) => {
+      const request: { init?: RequestInit; url: string } = { url: String(url) };
+      if (init !== undefined) {
+        request.init = init;
+      }
+      requests.push(request);
+      if (init?.method === "GET") {
+        return jsonResponse(200, [{
+          intent_summary: "Add ledger commands.",
+          related_checkpoint_ids: [],
+          related_claim_ids: [],
+          related_issue_ids: ["171"],
+          repo_id: "repo-a",
+          session_id: "session-a",
+          started_at: "2026-06-25T10:00:00.000Z",
+          status: "active",
+          task_id: "task_cli_01",
+          task_type: "implementation",
+          title: "Implement ledger CLI",
+          workspace_id: "workspace-a"
+        }]);
+      }
+      return jsonResponse(201, JSON.parse(String(init?.body)) as unknown);
+    },
+    io: silentIo()
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(requests[0]?.url, "http://suka.test/api/ledger/tasks?task_id=task_cli_01");
+  assert.equal(requests[1]?.url, "http://suka.test/api/ledger/tasks");
+  const body = JSON.parse(String(requests[1]?.init?.body)) as {
+    completed_at: string;
+    related_checkpoint_ids: string[];
+    status: string;
+    task_id: string;
+  };
+  assert.equal(body.task_id, "task_cli_01");
+  assert.equal(body.status, "completed");
+  assert.equal(body.completed_at, "2026-06-25T11:00:00.000Z");
+  assert.deepEqual(body.related_checkpoint_ids, ["checkpoint_pr_179"]);
+});
+
+test("ledger token commands record usage and assessment", async () => {
+  const requests: Array<{ init?: RequestInit; url: string }> = [];
+  const usageResult = await runCli({
+    argv: [
+      "ledger",
+      "token",
+      "record",
+      "task_cli_01",
+      "--server",
+      "http://suka.test",
+      "--provider",
+      "openai",
+      "--model",
+      "gpt-5",
+      "--input",
+      "1200",
+      "--output",
+      "400",
+      "--cached-input",
+      "80",
+      "--reasoning",
+      "60",
+      "--tool-call",
+      "20",
+      "--cost",
+      "0.42",
+      "--currency",
+      "USD",
+      "--source",
+      "api"
+    ],
+    env: {},
+    fetch: async (url, init) => {
+      const request: { init?: RequestInit; url: string } = { url: String(url) };
+      if (init !== undefined) {
+        request.init = init;
+      }
+      requests.push(request);
+      return jsonResponse(201, JSON.parse(String(init?.body)) as unknown);
+    },
+    io: silentIo()
+  });
+
+  assert.equal(usageResult.exitCode, 0);
+  assert.equal(requests[0]?.url, "http://suka.test/api/ledger/token-usage");
+  const usage = JSON.parse(String(requests[0]?.init?.body)) as {
+    cached_input_tokens: number;
+    estimated_cost: number;
+    input_tokens: number;
+    measurement_source: string;
+    output_tokens: number;
+    provider: string;
+    reasoning_tokens: number;
+    task_id: string;
+    tool_call_tokens: number;
+    total_tokens: number;
+  };
+  assert.equal(usage.task_id, "task_cli_01");
+  assert.equal(usage.provider, "openai");
+  assert.equal(usage.input_tokens, 1200);
+  assert.equal(usage.output_tokens, 400);
+  assert.equal(usage.cached_input_tokens, 80);
+  assert.equal(usage.reasoning_tokens, 60);
+  assert.equal(usage.tool_call_tokens, 20);
+  assert.equal(usage.total_tokens, 1600);
+  assert.equal(usage.estimated_cost, 0.42);
+  assert.equal(usage.measurement_source, "api");
+
+  const assessmentResult = await runCli({
+    argv: [
+      "ledger",
+      "token",
+      "assess",
+      "task_cli_01",
+      "--server",
+      "http://suka.test",
+      "--category",
+      "delivery",
+      "--score",
+      "86",
+      "--by",
+      "user",
+      "--confidence",
+      "high",
+      "--reason",
+      "Useful implementation output."
+    ],
+    env: {},
+    fetch: async (url, init) => {
+      const request: { init?: RequestInit; url: string } = { url: String(url) };
+      if (init !== undefined) {
+        request.init = init;
+      }
+      requests.push(request);
+      return jsonResponse(201, JSON.parse(String(init?.body)) as unknown);
+    },
+    io: silentIo()
+  });
+
+  assert.equal(assessmentResult.exitCode, 0);
+  assert.equal(requests[1]?.url, "http://suka.test/api/ledger/token-assessments");
+  const assessment = JSON.parse(String(requests[1]?.init?.body)) as {
+    confidence: string;
+    reason: string;
+    task_id: string;
+    usefulness_score: number;
+    value_category: string;
+  };
+  assert.equal(assessment.task_id, "task_cli_01");
+  assert.equal(assessment.value_category, "delivery");
+  assert.equal(assessment.usefulness_score, 86);
+  assert.equal(assessment.confidence, "high");
+  assert.equal(assessment.reason, "Useful implementation output.");
+});
+
+test("ledger token record validates required token counts before publishing", async () => {
+  const requests: unknown[] = [];
+  const errors: string[] = [];
+  const result = await runCli({
+    argv: ["ledger", "token", "record", "task_cli_01", "--server", "http://suka.test", "--input", "100"],
+    env: {},
+    fetch: async (url, init) => {
+      requests.push({ init, url });
+      return jsonResponse(201, {});
+    },
+    io: {
+      stdout: { write: () => undefined },
+      stderr: { write: (value: string) => errors.push(value) }
+    }
+  });
+
+  assert.equal(result.exitCode, 1);
+  assert.equal(requests.length, 0);
+  assert.match(errors.join(""), /--output is required/);
+});
+
+test("ledger event and checkpoint commands write reviewable evidence", async () => {
+  const requests: Array<{ init?: RequestInit; url: string }> = [];
+  const eventResult = await runCli({
+    argv: [
+      "ledger",
+      "event",
+      "write",
+      "file_changed",
+      "CLI command file changed",
+      "--server",
+      "http://suka.test",
+      "--repo-id",
+      "repo-a",
+      "--session",
+      "session-a",
+      "--task-id",
+      "task_cli_01",
+      "--path",
+      "packages/cli/src/commands.ts",
+      "--severity",
+      "info"
+    ],
+    env: {},
+    now: new Date("2026-06-25T10:30:00.000Z"),
+    fetch: async (url, init) => {
+      const request: { init?: RequestInit; url: string } = { url: String(url) };
+      if (init !== undefined) {
+        request.init = init;
+      }
+      requests.push(request);
+      return jsonResponse(201, JSON.parse(String(init?.body)) as unknown);
+    },
+    io: silentIo()
+  });
+
+  assert.equal(eventResult.exitCode, 0);
+  assert.equal(requests[0]?.url, "http://suka.test/api/ledger/events");
+  const event = JSON.parse(String(requests[0]?.init?.body)) as {
+    affected_paths: string[];
+    event_id: string;
+    event_type: string;
+    repo_id: string;
+    session_id: string;
+    severity: string;
+    summary: string;
+    task_id: string;
+    timestamp: string;
+  };
+  assert.match(event.event_id, /^ledger-event_/);
+  assert.equal(event.event_type, "file_changed");
+  assert.equal(event.summary, "CLI command file changed");
+  assert.equal(event.repo_id, "repo-a");
+  assert.equal(event.session_id, "session-a");
+  assert.equal(event.task_id, "task_cli_01");
+  assert.equal(event.timestamp, "2026-06-25T10:30:00.000Z");
+  assert.equal(event.severity, "info");
+  assert.deepEqual(event.affected_paths, ["packages/cli/src/commands.ts"]);
+
+  const checkpointResult = await runCli({
+    argv: [
+      "ledger",
+      "checkpoint",
+      "pr",
+      "179",
+      "Ledger CLI workflow",
+      "--server",
+      "http://suka.test",
+      "--repo-id",
+      "repo-a",
+      "--session",
+      "session-a",
+      "--task-id",
+      "task_cli_01",
+      "--issue-id",
+      "171",
+      "--summary",
+      "Adds ledger commands for developer workflows."
+    ],
+    env: {},
+    now: new Date("2026-06-25T11:00:00.000Z"),
+    fetch: async (url, init) => {
+      const request: { init?: RequestInit; url: string } = { url: String(url) };
+      if (init !== undefined) {
+        request.init = init;
+      }
+      requests.push(request);
+      return jsonResponse(201, JSON.parse(String(init?.body)) as unknown);
+    },
+    io: silentIo()
+  });
+
+  assert.equal(checkpointResult.exitCode, 0);
+  assert.equal(requests[1]?.url, "http://suka.test/api/ledger/checkpoints");
+  const checkpoint = JSON.parse(String(requests[1]?.init?.body)) as {
+    checkpoint_id: string;
+    external_id: string;
+    kind: string;
+    related_issue_ids: string[];
+    related_session_ids: string[];
+    related_task_ids: string[];
+    repo_id: string;
+    status: string;
+    summary: string;
+    title: string;
+  };
+  assert.match(checkpoint.checkpoint_id, /^checkpoint_/);
+  assert.equal(checkpoint.kind, "pr");
+  assert.equal(checkpoint.external_id, "179");
+  assert.equal(checkpoint.title, "Ledger CLI workflow");
+  assert.equal(checkpoint.status, "open");
+  assert.equal(checkpoint.repo_id, "repo-a");
+  assert.deepEqual(checkpoint.related_task_ids, ["task_cli_01"]);
+  assert.deepEqual(checkpoint.related_issue_ids, ["171"]);
+  assert.deepEqual(checkpoint.related_session_ids, ["session-a"]);
+  assert.equal(checkpoint.summary, "Adds ledger commands for developer workflows.");
+});
+
+test("ledger read commands pass structured filters to the local server", async () => {
+  const requests: string[] = [];
+  const result = await runCli({
+    argv: [
+      "ledger",
+      "task",
+      "read",
+      "--server",
+      "http://suka.test",
+      "--workspace",
+      "workspace-a",
+      "--repo-id",
+      "repo-a",
+      "--session",
+      "session-a",
+      "--task-id",
+      "task_cli_01",
+      "--checkpoint-id",
+      "checkpoint_pr_179"
+    ],
+    env: {},
+    fetch: async (url, init) => {
+      requests.push(String(url));
+      assert.equal(init?.method, "GET");
+      return jsonResponse(200, []);
+    },
+    io: silentIo()
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(
+    requests[0],
+    "http://suka.test/api/ledger/tasks?workspace_id=workspace-a&repo_id=repo-a&session_id=session-a&task_id=task_cli_01&checkpoint_id=checkpoint_pr_179"
+  );
+});
+
 test("remind reports missing shared-truth updates for changed files", async () => {
   const requests: Array<{ init?: RequestInit; url: string }> = [];
   const output: string[] = [];

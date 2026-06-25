@@ -12,6 +12,14 @@ export interface ApiResponse<T> {
   };
 }
 
+export interface LedgerRecordFilters {
+  checkpoint_id?: string;
+  repo_id?: string;
+  session_id?: string;
+  task_id?: string;
+  workspace_id?: string;
+}
+
 export class SukaApiClient {
   readonly #baseUrl: string;
   readonly #fetch: typeof fetch;
@@ -49,6 +57,46 @@ export class SukaApiClient {
     return this.#request("POST", "/api/briefs", brief);
   }
 
+  async listLedgerTasks(filters?: LedgerRecordFilters): Promise<unknown> {
+    return this.#request("GET", withQuery("/api/ledger/tasks", filters));
+  }
+
+  async createLedgerTask(task: unknown): Promise<unknown> {
+    return this.#request("POST", "/api/ledger/tasks", task);
+  }
+
+  async listLedgerTokenUsage(filters?: LedgerRecordFilters): Promise<unknown> {
+    return this.#request("GET", withQuery("/api/ledger/token-usage", filters));
+  }
+
+  async createLedgerTokenUsage(tokenUsage: unknown): Promise<unknown> {
+    return this.#request("POST", "/api/ledger/token-usage", tokenUsage);
+  }
+
+  async listLedgerTokenAssessments(filters?: LedgerRecordFilters): Promise<unknown> {
+    return this.#request("GET", withQuery("/api/ledger/token-assessments", filters));
+  }
+
+  async createLedgerTokenAssessment(assessment: unknown): Promise<unknown> {
+    return this.#request("POST", "/api/ledger/token-assessments", assessment);
+  }
+
+  async listLedgerEvents(filters?: LedgerRecordFilters): Promise<unknown> {
+    return this.#request("GET", withQuery("/api/ledger/events", filters));
+  }
+
+  async createLedgerEvent(event: unknown): Promise<unknown> {
+    return this.#request("POST", "/api/ledger/events", event);
+  }
+
+  async listLedgerCheckpoints(filters?: LedgerRecordFilters): Promise<unknown> {
+    return this.#request("GET", withQuery("/api/ledger/checkpoints", filters));
+  }
+
+  async createLedgerCheckpoint(checkpoint: unknown): Promise<unknown> {
+    return this.#request("POST", "/api/ledger/checkpoints", checkpoint);
+  }
+
   async checkConflicts(subject: unknown): Promise<unknown> {
     return this.#request("POST", "/api/conflicts/check", subject);
   }
@@ -81,4 +129,20 @@ export class SukaApiClient {
 
     return payload.data;
   }
+}
+
+function withQuery(path: string, filters: LedgerRecordFilters | undefined): string {
+  if (filters === undefined) {
+    return path;
+  }
+
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined) {
+      params.set(key, value);
+    }
+  }
+
+  const query = params.toString();
+  return query.length === 0 ? path : `${path}?${query}`;
 }
