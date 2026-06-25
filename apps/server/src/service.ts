@@ -35,6 +35,7 @@ export interface SukaService {
   listLedgerTokenAssessments(filters?: LedgerRecordFilters): TokenAssessment[];
   listLedgerEvents(filters?: LedgerRecordFilters): LedgerEvent[];
   listLedgerCheckpoints(filters?: LedgerRecordFilters): Checkpoint[];
+  listLedgerCheckpointSummaries(filters?: LedgerRecordFilters): LedgerCheckpointSummary[];
   listProjects(): LocalProject[];
   getActiveProject(): LocalProject | undefined;
   registerProject(input: LocalProjectInput): LocalProject;
@@ -55,6 +56,25 @@ export interface SukaService {
 export interface LedgerRecordFilters extends CoordinationContext {
   task_id?: string;
   checkpoint_id?: string;
+}
+
+export interface LedgerCheckpointSummary {
+  checkpoint: Checkpoint;
+  related_task_ids: string[];
+  related_issue_ids: string[];
+  related_session_ids: string[];
+  affected_paths: string[];
+  event_ids: string[];
+  token_usage: TokenUsage[];
+  token_assessments: TokenAssessment[];
+  totals: {
+    estimated_cost: number;
+    events: number;
+    input_tokens: number;
+    output_tokens: number;
+    tasks: number;
+    total_tokens: number;
+  };
 }
 
 export function createSukaService(store: SukaStore = new MemorySukaStore()): SukaService {
@@ -98,6 +118,21 @@ export function createSukaService(store: SukaStore = new MemorySukaStore()): Suk
           (filters.task_id === undefined || checkpoint.related_task_ids.includes(filters.task_id)) &&
           (filters.session_id === undefined || checkpoint.related_session_ids.includes(filters.session_id));
       });
+    },
+
+    listLedgerCheckpointSummaries(filters = {}) {
+      const state = store.getState();
+      return state.ledger_checkpoints
+        .filter((checkpoint) => {
+          return matchesCheckpointFilters(checkpoint, filters) &&
+            (filters.checkpoint_id === undefined || checkpoint.checkpoint_id === filters.checkpoint_id) &&
+            (filters.session_id === undefined || checkpoint.related_session_ids.includes(filters.session_id));
+        })
+        .map((checkpoint) => buildCheckpointSummary(checkpoint, state))
+        .filter((summary) => {
+          return (filters.task_id === undefined || summary.related_task_ids.includes(filters.task_id)) &&
+            (filters.session_id === undefined || summary.related_session_ids.includes(filters.session_id));
+        });
     },
 
     listProjects() {
@@ -265,6 +300,46 @@ function projectTrackingSessionId(project: LocalProject): string {
 
 function taskIdsForFilters(tasks: TaskEntry[], filters: LedgerRecordFilters): Set<string> {
   return new Set(tasks.filter((task) => matchesLedgerFilters(task, filters)).map((task) => task.task_id));
+}
+
+function buildCheckpointSummary(checkpoint: Checkpoint, state: SukaState): LedgerCheckpointSummary {
+  const tasks = state.ledger_tasks.filter((task) =>
+    checkpoint.related_task_ids.includes(task.task_id) || task.related_checkpoint_ids.includes(checkpoint.checkpoint_id)
+  );
+  const taskIds = uniqueStrings([...checkpoint.related_task_ids, ...tasks.map((task) => task.task_id)]);
+  const events = state.ledger_events.filter((event) => event.task_id !== undefined && taskIds.includes(event.task_id));
+  const tokenUsage = state.ledger_token_usage.filter((usage) => taskIds.includes(usage.task_id));
+  const tokenAssessments = state.ledger_token_assessments.filter((assessment) => taskIds.includes(assessment.task_id));
+
+  return {
+    checkpoint,
+    related_task_ids: taskIds,
+    related_issue_ids: uniqueStrings([
+      ...checkpoint.related_issue_ids,
+      ...tasks.flatMap((task) => task.related_issue_ids)
+    ]),
+    related_session_ids: uniqueStrings([
+      ...checkpoint.related_session_ids,
+      ...tasks.map((task) => task.session_id),
+      ...events.map((event) => event.session_id)
+    ]),
+    affected_paths: uniqueStrings(events.flatMap((event) => event.affected_paths)),
+    event_ids: events.map((event) => event.event_id),
+    token_usage: tokenUsage,
+    token_assessments: tokenAssessments,
+    totals: {
+      estimated_cost: tokenUsage.reduce((total, usage) => total + (usage.estimated_cost ?? 0), 0),
+      events: events.length,
+      input_tokens: tokenUsage.reduce((total, usage) => total + usage.input_tokens, 0),
+      output_tokens: tokenUsage.reduce((total, usage) => total + usage.output_tokens, 0),
+      tasks: tasks.length,
+      total_tokens: tokenUsage.reduce((total, usage) => total + usage.total_tokens, 0)
+    }
+  };
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)];
 }
 
 function matchesTaskLinkedRecord(taskId: string, taskIds: Set<string>, filters: LedgerRecordFilters): boolean {

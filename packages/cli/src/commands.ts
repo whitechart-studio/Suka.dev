@@ -784,6 +784,12 @@ async function ledgerCheckpointCommand(
     return { exitCode: 0 };
   }
 
+  if (action === "summary") {
+    const result = await client.listLedgerCheckpointSummaries(ledgerFilters(flags, config, context.env));
+    context.io.stdout.write(formatJson(result));
+    return { exitCode: 0 };
+  }
+
   if (action === "pr" || action === "commit" || action === "merge" || action === "release" || action === "handoff") {
     const externalId = args[1] ?? readStringFlag(flags, "external-id");
     const title = readStringFlag(flags, "title") ?? args.slice(2).join(" ").trim();
@@ -813,7 +819,7 @@ async function ledgerCheckpointCommand(
     return { exitCode: 0 };
   }
 
-  throw new Error("ledger checkpoint requires a supported action: pr, commit, merge, release, handoff, or read.");
+  throw new Error("ledger checkpoint requires a supported action: pr, commit, merge, release, handoff, read, or summary.");
 }
 
 async function decisionCommand(
