@@ -2,20 +2,37 @@ import {
   DECISION_CONFIDENCE_LEVELS,
   DECISION_STATUSES,
   EVENT_TYPES,
+  LEDGER_CHECKPOINT_KINDS,
+  LEDGER_CHECKPOINT_STATUSES,
+  LEDGER_EVENT_SEVERITIES,
+  LEDGER_EVENT_TYPES,
+  LEDGER_TASK_STATUSES,
+  LEDGER_TASK_TYPES,
+  LEDGER_TOKEN_ASSESSORS,
+  LEDGER_TOKEN_CONFIDENCE_LEVELS,
+  LEDGER_TOKEN_CURRENCIES,
+  LEDGER_TOKEN_MEASUREMENT_SOURCES,
+  LEDGER_TOKEN_PROVIDERS,
+  LEDGER_TOKEN_VALUE_CATEGORIES,
   POINTER_TYPES,
   PRESENCE_STATUSES
 } from "./constants.js";
 import type {
   BriefPointer,
+  Checkpoint,
   ClaimKind,
   ClaimPointer,
   DecisionPointer,
   EventPointer,
+  LedgerEvent,
   LedgerPointer,
   Pointer,
   PointerScope,
   PresenceSourceKind,
   PresencePointer,
+  TaskEntry,
+  TokenAssessment,
+  TokenUsage,
   ValidationIssue,
   ValidationResult
 } from "./types.js";
@@ -212,6 +229,109 @@ export function validateLedgerPointer(value: unknown): ValidationResult<LedgerPo
   return issues.length === 0 ? ok(value as unknown as LedgerPointer) : fail(issues);
 }
 
+export function validateTaskEntry(value: unknown): ValidationResult<TaskEntry> {
+  const issues: MutableIssueList = [];
+  if (!isRecord(value)) {
+    return failObject();
+  }
+
+  requireString(value, "task_id", issues);
+  requireString(value, "session_id", issues);
+  requireString(value, "repo_id", issues);
+  optionalNonEmptyString(value, "workspace_id", issues);
+  requireString(value, "title", issues);
+  requireString(value, "intent_summary", issues);
+  requireEnum(value, "task_type", LEDGER_TASK_TYPES, issues);
+  requireEnum(value, "status", LEDGER_TASK_STATUSES, issues);
+  requireTimestamp(value, "started_at", issues);
+  optionalTimestamp(value, "completed_at", issues);
+  requireStringArray(value, "related_issue_ids", issues);
+  requireStringArray(value, "related_claim_ids", issues);
+  requireStringArray(value, "related_checkpoint_ids", issues);
+
+  return issues.length === 0 ? ok(value as unknown as TaskEntry) : fail(issues);
+}
+
+export function validateTokenUsage(value: unknown): ValidationResult<TokenUsage> {
+  const issues: MutableIssueList = [];
+  if (!isRecord(value)) {
+    return failObject();
+  }
+
+  requireString(value, "task_id", issues);
+  requireEnum(value, "provider", LEDGER_TOKEN_PROVIDERS, issues);
+  optionalNonEmptyString(value, "model", issues);
+  requireNonNegativeInteger(value, "input_tokens", issues);
+  requireNonNegativeInteger(value, "output_tokens", issues);
+  optionalNonNegativeInteger(value, "cached_input_tokens", issues);
+  optionalNonNegativeInteger(value, "reasoning_tokens", issues);
+  optionalNonNegativeInteger(value, "tool_call_tokens", issues);
+  requireNonNegativeInteger(value, "total_tokens", issues);
+  optionalNonNegativeNumber(value, "estimated_cost", issues);
+  optionalEnum(value, "currency", LEDGER_TOKEN_CURRENCIES, issues);
+  requireEnum(value, "measurement_source", LEDGER_TOKEN_MEASUREMENT_SOURCES, issues);
+
+  return issues.length === 0 ? ok(value as unknown as TokenUsage) : fail(issues);
+}
+
+export function validateTokenAssessment(value: unknown): ValidationResult<TokenAssessment> {
+  const issues: MutableIssueList = [];
+  if (!isRecord(value)) {
+    return failObject();
+  }
+
+  requireString(value, "task_id", issues);
+  requireEnum(value, "value_category", LEDGER_TOKEN_VALUE_CATEGORIES, issues);
+  optionalIntegerRange(value, "usefulness_score", 0, 100, issues);
+  requireEnum(value, "assessed_by", LEDGER_TOKEN_ASSESSORS, issues);
+  requireEnum(value, "confidence", LEDGER_TOKEN_CONFIDENCE_LEVELS, issues);
+  optionalNonEmptyString(value, "reason", issues);
+
+  return issues.length === 0 ? ok(value as unknown as TokenAssessment) : fail(issues);
+}
+
+export function validateLedgerEvent(value: unknown): ValidationResult<LedgerEvent> {
+  const issues: MutableIssueList = [];
+  if (!isRecord(value)) {
+    return failObject();
+  }
+
+  requireString(value, "event_id", issues);
+  optionalNonEmptyString(value, "task_id", issues);
+  requireString(value, "session_id", issues);
+  requireString(value, "repo_id", issues);
+  requireEnum(value, "event_type", LEDGER_EVENT_TYPES, issues);
+  requireTimestamp(value, "timestamp", issues);
+  requireString(value, "summary", issues);
+  requireEnum(value, "severity", LEDGER_EVENT_SEVERITIES, issues);
+  requireStringArray(value, "affected_paths", issues);
+  optionalRecord(value, "metadata", issues);
+
+  return issues.length === 0 ? ok(value as unknown as LedgerEvent) : fail(issues);
+}
+
+export function validateCheckpoint(value: unknown): ValidationResult<Checkpoint> {
+  const issues: MutableIssueList = [];
+  if (!isRecord(value)) {
+    return failObject();
+  }
+
+  requireString(value, "checkpoint_id", issues);
+  requireString(value, "repo_id", issues);
+  requireEnum(value, "kind", LEDGER_CHECKPOINT_KINDS, issues);
+  optionalNonEmptyString(value, "external_id", issues);
+  requireString(value, "title", issues);
+  requireEnum(value, "status", LEDGER_CHECKPOINT_STATUSES, issues);
+  requireTimestamp(value, "created_at", issues);
+  optionalTimestamp(value, "completed_at", issues);
+  requireStringArray(value, "related_task_ids", issues);
+  requireStringArray(value, "related_issue_ids", issues);
+  requireStringArray(value, "related_session_ids", issues);
+  requireString(value, "summary", issues);
+
+  return issues.length === 0 ? ok(value as unknown as Checkpoint) : fail(issues);
+}
+
 function optionalPresenceSource(record: Record<string, unknown>, issues: MutableIssueList): void {
   const value = record.source;
   if (value === undefined) {
@@ -393,6 +513,27 @@ function optionalNonNegativeNumber(record: Record<string, unknown>, key: string,
   }
 }
 
+function optionalIntegerRange(
+  record: Record<string, unknown>,
+  key: string,
+  min: number,
+  max: number,
+  issues: MutableIssueList,
+  path = key
+): void {
+  const value = record[key];
+  if (value === undefined) {
+    return;
+  }
+  if (!Number.isInteger(value) || Number(value) < min || Number(value) > max) {
+    issues.push({
+      code: "invalid_type",
+      path,
+      message: `${path} must be an integer between ${min} and ${max} when provided.`
+    });
+  }
+}
+
 function requireStringArray(record: Record<string, unknown>, key: string, issues: MutableIssueList): void {
   if (!isStringArray(record[key])) {
     issues.push({
@@ -413,6 +554,16 @@ function optionalStringArray(record: Record<string, unknown>, key: string, issue
   }
 }
 
+function optionalRecord(record: Record<string, unknown>, key: string, issues: MutableIssueList, path = key): void {
+  if (record[key] !== undefined && !isRecord(record[key])) {
+    issues.push({
+      code: "invalid_type",
+      path,
+      message: `${path} must be an object when provided.`
+    });
+  }
+}
+
 function requireEnum<T extends readonly string[]>(
   record: Record<string, unknown>,
   key: string,
@@ -425,6 +576,22 @@ function requireEnum<T extends readonly string[]>(
       code: record[key] === undefined ? "missing_field" : "invalid_value",
       path: issuePath,
       message: `${issuePath} must be one of: ${allowed.join(", ")}.`
+    });
+  }
+}
+
+function optionalEnum<T extends readonly string[]>(
+  record: Record<string, unknown>,
+  key: string,
+  allowed: T,
+  issues: MutableIssueList,
+  issuePath = key
+): void {
+  if (record[key] !== undefined && (typeof record[key] !== "string" || !allowed.includes(record[key]))) {
+    issues.push({
+      code: "invalid_value",
+      path: issuePath,
+      message: `${issuePath} must be one of: ${allowed.join(", ")} when provided.`
     });
   }
 }

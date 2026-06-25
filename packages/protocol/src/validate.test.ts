@@ -1,7 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { LedgerPointer, TeamConnectionSummary } from "./index.js";
-import { validatePointer } from "./index.js";
+import type {
+  Checkpoint,
+  LedgerEvent,
+  LedgerPointer,
+  TaskEntry,
+  TeamConnectionSummary,
+  TokenAssessment,
+  TokenUsage
+} from "./index.js";
+import {
+  validateCheckpoint,
+  validateLedgerEvent,
+  validatePointer,
+  validateTaskEntry,
+  validateTokenAssessment,
+  validateTokenUsage
+} from "./index.js";
 
 test("accepts a valid presence pointer", () => {
   const result = validatePointer({
@@ -339,6 +354,253 @@ test("rejects malformed coding ledger pointers", () => {
     assert.ok(result.issues.some((issue) => issue.path === "token_usage.estimated_cost_usd" && issue.code === "invalid_type"));
     assert.ok(result.issues.some((issue) => issue.path === "token_usage.model" && issue.code === "invalid_type"));
     assert.ok(result.issues.some((issue) => issue.path === "created_at" && issue.code === "invalid_timestamp"));
+  }
+});
+
+test("accepts valid ledger task entries", () => {
+  const task = {
+    task_id: "task_01",
+    session_id: "session-a",
+    repo_id: "repo-a",
+    workspace_id: "workspace-a",
+    title: "Fix landing guide overlap",
+    intent_summary: "Move dashboard docs into the landing guide and keep the canvas clean.",
+    task_type: "implementation",
+    status: "completed",
+    started_at: "2026-06-24T18:00:00.000Z",
+    completed_at: "2026-06-24T18:40:00.000Z",
+    related_issue_ids: ["165"],
+    related_claim_ids: ["claim_dashboard_landing"],
+    related_checkpoint_ids: ["checkpoint_pr_165"]
+  } satisfies TaskEntry;
+
+  const result = validateTaskEntry(task);
+
+  assert.equal(result.ok, true);
+});
+
+test("rejects malformed ledger task entries", () => {
+  const result = validateTaskEntry({
+    task_id: "",
+    session_id: 123,
+    repo_id: "",
+    workspace_id: "",
+    title: "",
+    intent_summary: "",
+    task_type: "build",
+    status: "done",
+    started_at: "not-a-date",
+    completed_at: 123,
+    related_issue_ids: "165",
+    related_claim_ids: ["claim-a", 10],
+    related_checkpoint_ids: []
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(result.issues.some((issue) => issue.path === "task_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "session_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "repo_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "workspace_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "task_type" && issue.code === "invalid_value"));
+    assert.ok(result.issues.some((issue) => issue.path === "status" && issue.code === "invalid_value"));
+    assert.ok(result.issues.some((issue) => issue.path === "started_at" && issue.code === "invalid_timestamp"));
+    assert.ok(result.issues.some((issue) => issue.path === "completed_at" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "related_issue_ids" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "related_claim_ids" && issue.code === "invalid_type"));
+  }
+});
+
+test("accepts valid ledger token usage", () => {
+  const usage = {
+    task_id: "task_01",
+    provider: "openai",
+    model: "gpt-5",
+    input_tokens: 2300,
+    output_tokens: 4100,
+    cached_input_tokens: 900,
+    reasoning_tokens: 700,
+    tool_call_tokens: 300,
+    total_tokens: 6400,
+    estimated_cost: 0.18,
+    currency: "USD",
+    measurement_source: "api"
+  } satisfies TokenUsage;
+
+  const result = validateTokenUsage(usage);
+
+  assert.equal(result.ok, true);
+});
+
+test("rejects invalid ledger token usage", () => {
+  const result = validateTokenUsage({
+    task_id: "",
+    provider: "other-ai",
+    model: "",
+    input_tokens: -1,
+    output_tokens: 1.5,
+    cached_input_tokens: -10,
+    reasoning_tokens: "700",
+    tool_call_tokens: -2,
+    total_tokens: -1,
+    estimated_cost: -0.01,
+    currency: "EUR",
+    measurement_source: "logs"
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(result.issues.some((issue) => issue.path === "task_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "provider" && issue.code === "invalid_value"));
+    assert.ok(result.issues.some((issue) => issue.path === "model" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "input_tokens" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "output_tokens" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "cached_input_tokens" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "reasoning_tokens" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "tool_call_tokens" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "total_tokens" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "estimated_cost" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "currency" && issue.code === "invalid_value"));
+    assert.ok(result.issues.some((issue) => issue.path === "measurement_source" && issue.code === "invalid_value"));
+  }
+});
+
+test("accepts valid ledger token assessments", () => {
+  const assessment = {
+    task_id: "task_01",
+    value_category: "delivery",
+    usefulness_score: 82,
+    assessed_by: "rule",
+    confidence: "medium",
+    reason: "Task produced a merged PR with passing validation."
+  } satisfies TokenAssessment;
+
+  const result = validateTokenAssessment(assessment);
+
+  assert.equal(result.ok, true);
+});
+
+test("rejects invalid ledger token assessments", () => {
+  const result = validateTokenAssessment({
+    task_id: "",
+    value_category: "waste",
+    usefulness_score: 101,
+    assessed_by: "manager",
+    confidence: "certain",
+    reason: ""
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(result.issues.some((issue) => issue.path === "task_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "value_category" && issue.code === "invalid_value"));
+    assert.ok(result.issues.some((issue) => issue.path === "usefulness_score" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "assessed_by" && issue.code === "invalid_value"));
+    assert.ok(result.issues.some((issue) => issue.path === "confidence" && issue.code === "invalid_value"));
+    assert.ok(result.issues.some((issue) => issue.path === "reason" && issue.code === "invalid_type"));
+  }
+});
+
+test("accepts valid ledger events", () => {
+  const event = {
+    event_id: "event_01",
+    task_id: "task_01",
+    session_id: "session-a",
+    repo_id: "repo-a",
+    event_type: "file_changed",
+    timestamp: "2026-06-24T18:20:00.000Z",
+    summary: "Updated landing guide CTA layout.",
+    severity: "info",
+    affected_paths: ["apps/dashboard/src/main.tsx"],
+    metadata: {
+      change_kind: "modified"
+    }
+  } satisfies LedgerEvent;
+
+  const result = validateLedgerEvent(event);
+
+  assert.equal(result.ok, true);
+});
+
+test("rejects invalid ledger events", () => {
+  const result = validateLedgerEvent({
+    event_id: "",
+    task_id: "",
+    session_id: "",
+    repo_id: 123,
+    event_type: "file_modified",
+    timestamp: "not-a-date",
+    summary: "",
+    severity: "debug",
+    affected_paths: ["apps/dashboard/src/main.tsx", 10],
+    metadata: []
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(result.issues.some((issue) => issue.path === "event_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "task_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "session_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "repo_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "event_type" && issue.code === "invalid_value"));
+    assert.ok(result.issues.some((issue) => issue.path === "timestamp" && issue.code === "invalid_timestamp"));
+    assert.ok(result.issues.some((issue) => issue.path === "summary" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "severity" && issue.code === "invalid_value"));
+    assert.ok(result.issues.some((issue) => issue.path === "affected_paths" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "metadata" && issue.code === "invalid_type"));
+  }
+});
+
+test("accepts valid ledger checkpoints", () => {
+  const checkpoint = {
+    checkpoint_id: "checkpoint_pr_165",
+    repo_id: "repo-a",
+    kind: "pr",
+    external_id: "165",
+    title: "Move docs to landing page",
+    status: "merged",
+    created_at: "2026-06-24T18:30:00.000Z",
+    completed_at: "2026-06-24T19:20:00.000Z",
+    related_task_ids: ["task_01", "task_02"],
+    related_issue_ids: ["165"],
+    related_session_ids: ["session-a"],
+    summary: "Landing guide moved docs out of the dashboard top bar."
+  } satisfies Checkpoint;
+
+  const result = validateCheckpoint(checkpoint);
+
+  assert.equal(result.ok, true);
+});
+
+test("rejects invalid ledger checkpoints", () => {
+  const result = validateCheckpoint({
+    checkpoint_id: "",
+    repo_id: "",
+    kind: "pull_request",
+    external_id: "",
+    title: "",
+    status: "done",
+    created_at: "not-a-date",
+    completed_at: 123,
+    related_task_ids: "task_01",
+    related_issue_ids: ["165", 165],
+    related_session_ids: [],
+    summary: ""
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(result.issues.some((issue) => issue.path === "checkpoint_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "repo_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "kind" && issue.code === "invalid_value"));
+    assert.ok(result.issues.some((issue) => issue.path === "external_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "title" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "status" && issue.code === "invalid_value"));
+    assert.ok(result.issues.some((issue) => issue.path === "created_at" && issue.code === "invalid_timestamp"));
+    assert.ok(result.issues.some((issue) => issue.path === "completed_at" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "related_task_ids" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "related_issue_ids" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "summary" && issue.code === "invalid_type"));
   }
 });
 
