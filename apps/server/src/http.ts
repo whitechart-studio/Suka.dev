@@ -10,7 +10,7 @@ import { ProjectTrackingError, ProjectTrackingWorker } from "./project-tracker.j
 import { inspectLocalProject } from "./projects.js";
 import { RealtimeHub } from "./realtime.js";
 import { buildRepoMap } from "./repo-map.js";
-import { createSukaService, type SukaService } from "./service.js";
+import { createSukaService, type LedgerRecordFilters, type SukaService } from "./service.js";
 import type { LocalProject } from "./state.js";
 
 const require = createRequire(import.meta.url);
@@ -194,6 +194,41 @@ async function routeRequest(
     return;
   }
 
+  if (method === "GET" && url.pathname === "/api/ledger/tasks") {
+    writeJson(response, 200, {
+      data: service.listLedgerTasks(parseLedgerFilters(url))
+    });
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/api/ledger/token-usage") {
+    writeJson(response, 200, {
+      data: service.listLedgerTokenUsage(parseLedgerFilters(url))
+    });
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/api/ledger/token-assessments") {
+    writeJson(response, 200, {
+      data: service.listLedgerTokenAssessments(parseLedgerFilters(url))
+    });
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/api/ledger/events") {
+    writeJson(response, 200, {
+      data: service.listLedgerEvents(parseLedgerFilters(url))
+    });
+    return;
+  }
+
+  if (method === "GET" && url.pathname === "/api/ledger/checkpoints") {
+    writeJson(response, 200, {
+      data: service.listLedgerCheckpoints(parseLedgerFilters(url))
+    });
+    return;
+  }
+
   if (method === "GET" && url.pathname === "/api/projects") {
     writeJson(response, 200, {
       data: service.listProjects()
@@ -366,6 +401,91 @@ async function routeRequest(
     realtime.broadcast({
       data: service.getTeamSummary(),
       type: "team.updated"
+    });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/ledger/tasks") {
+    const result = service.recordLedgerTask(await readJson(request));
+    if (!result.ok) {
+      writeLedgerValidationError(response, "Ledger task validation failed.", result.issues);
+      return;
+    }
+
+    writeJson(response, 201, {
+      data: result.value
+    });
+    realtime.broadcast({
+      data: service.getState(),
+      type: "state.updated"
+    });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/ledger/token-usage") {
+    const result = service.recordLedgerTokenUsage(await readJson(request));
+    if (!result.ok) {
+      writeLedgerValidationError(response, "Ledger token usage validation failed.", result.issues);
+      return;
+    }
+
+    writeJson(response, 201, {
+      data: result.value
+    });
+    realtime.broadcast({
+      data: service.getState(),
+      type: "state.updated"
+    });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/ledger/token-assessments") {
+    const result = service.recordLedgerTokenAssessment(await readJson(request));
+    if (!result.ok) {
+      writeLedgerValidationError(response, "Ledger token assessment validation failed.", result.issues);
+      return;
+    }
+
+    writeJson(response, 201, {
+      data: result.value
+    });
+    realtime.broadcast({
+      data: service.getState(),
+      type: "state.updated"
+    });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/ledger/events") {
+    const result = service.recordLedgerEvent(await readJson(request));
+    if (!result.ok) {
+      writeLedgerValidationError(response, "Ledger event validation failed.", result.issues);
+      return;
+    }
+
+    writeJson(response, 201, {
+      data: result.value
+    });
+    realtime.broadcast({
+      data: service.getState(),
+      type: "state.updated"
+    });
+    return;
+  }
+
+  if (method === "POST" && url.pathname === "/api/ledger/checkpoints") {
+    const result = service.recordLedgerCheckpoint(await readJson(request));
+    if (!result.ok) {
+      writeLedgerValidationError(response, "Ledger checkpoint validation failed.", result.issues);
+      return;
+    }
+
+    writeJson(response, 201, {
+      data: result.value
+    });
+    realtime.broadcast({
+      data: service.getState(),
+      type: "state.updated"
     });
     return;
   }
@@ -654,6 +774,17 @@ function parseNow(body: unknown): Date {
   return parsed;
 }
 
+function parseLedgerFilters(url: URL): LedgerRecordFilters {
+  const filters: LedgerRecordFilters = {};
+  for (const key of ["workspace_id", "repo_id", "session_id", "task_id", "checkpoint_id"] as const) {
+    const value = url.searchParams.get(key);
+    if (value !== null && value.length > 0) {
+      filters[key] = value;
+    }
+  }
+  return filters;
+}
+
 function registerProject(service: SukaService, body: unknown): LocalProject {
   if (!isRecord(body)) {
     throw new HttpInputError("invalid_body", "Project registration body must be an object.");
@@ -698,6 +829,16 @@ function writeJson(response: ServerResponse, statusCode: number, payload: unknow
     "cache-control": "no-store"
   });
   response.end(JSON.stringify(payload));
+}
+
+function writeLedgerValidationError(response: ServerResponse, message: string, issues: unknown): void {
+  writeJson(response, 400, {
+    error: {
+      code: "validation_failed",
+      issues,
+      message
+    }
+  });
 }
 
 function writeHtml(response: ServerResponse, statusCode: number, html: string): void {

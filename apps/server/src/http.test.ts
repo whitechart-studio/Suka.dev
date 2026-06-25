@@ -1011,6 +1011,171 @@ test("POST /api/ledger stores append-only ledger entries", async () => {
   }
 });
 
+test("ledger MVP API stores and filters structured ledger records", async () => {
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  try {
+    const taskResponse = await postJson(`${running.url}/api/ledger/tasks`, {
+      task_id: "task_api_01",
+      session_id: "session-a",
+      repo_id: "repo-a",
+      workspace_id: "workspace-a",
+      title: "Expose ledger API",
+      intent_summary: "Add HTTP routes for structured ledger records.",
+      task_type: "implementation",
+      status: "completed",
+      started_at: "2026-06-25T07:00:00.000Z",
+      related_issue_ids: ["170"],
+      related_claim_ids: [],
+      related_checkpoint_ids: ["checkpoint_pr_178"]
+    });
+    await postJson(`${running.url}/api/ledger/tasks`, {
+      task_id: "task_api_other",
+      session_id: "session-b",
+      repo_id: "repo-b",
+      title: "Other repo task",
+      intent_summary: "This task should not appear in repo-a filtered reads.",
+      task_type: "planning",
+      status: "active",
+      started_at: "2026-06-25T07:05:00.000Z",
+      related_issue_ids: [],
+      related_claim_ids: [],
+      related_checkpoint_ids: []
+    });
+    const tokenUsageResponse = await postJson(`${running.url}/api/ledger/token-usage`, {
+      task_id: "task_api_01",
+      provider: "openai",
+      model: "gpt-5",
+      input_tokens: 2300,
+      output_tokens: 4100,
+      total_tokens: 6400,
+      estimated_cost: 0.18,
+      currency: "USD",
+      measurement_source: "api"
+    });
+    const assessmentResponse = await postJson(`${running.url}/api/ledger/token-assessments`, {
+      task_id: "task_api_01",
+      value_category: "delivery",
+      usefulness_score: 88,
+      assessed_by: "rule",
+      confidence: "medium",
+      reason: "API routes were added with tests."
+    });
+    const eventResponse = await postJson(`${running.url}/api/ledger/events`, {
+      event_id: "event_api_01",
+      task_id: "task_api_01",
+      session_id: "session-a",
+      repo_id: "repo-a",
+      event_type: "file_changed",
+      timestamp: "2026-06-25T07:10:00.000Z",
+      summary: "Added ledger API routes.",
+      severity: "info",
+      affected_paths: ["apps/server/src/http.ts"]
+    });
+    const checkpointResponse = await postJson(`${running.url}/api/ledger/checkpoints`, {
+      checkpoint_id: "checkpoint_pr_178",
+      repo_id: "repo-a",
+      kind: "pr",
+      external_id: "178",
+      title: "Expose ledger API",
+      status: "open",
+      created_at: "2026-06-25T07:20:00.000Z",
+      related_task_ids: ["task_api_01"],
+      related_issue_ids: ["170"],
+      related_session_ids: ["session-a"],
+      summary: "HTTP routes expose structured ledger records."
+    });
+
+    assert.equal(taskResponse.status, 201);
+    assert.equal(tokenUsageResponse.status, 201);
+    assert.equal(assessmentResponse.status, 201);
+    assert.equal(eventResponse.status, 201);
+    assert.equal(checkpointResponse.status, 201);
+
+    const tasksResponse = await fetch(`${running.url}/api/ledger/tasks?repo_id=repo-a`);
+    const tasksBody = await tasksResponse.json() as { data: Array<{ task_id: string }> };
+    const tokenUsageListResponse = await fetch(`${running.url}/api/ledger/token-usage?repo_id=repo-a`);
+    const tokenUsageListBody = await tokenUsageListResponse.json() as { data: Array<{ total_tokens: number }> };
+    const assessmentsResponse = await fetch(`${running.url}/api/ledger/token-assessments?task_id=task_api_01`);
+    const assessmentsBody = await assessmentsResponse.json() as { data: Array<{ value_category: string }> };
+    const eventsResponse = await fetch(`${running.url}/api/ledger/events?session_id=session-a`);
+    const eventsBody = await eventsResponse.json() as { data: Array<{ event_id: string }> };
+    const checkpointsResponse = await fetch(`${running.url}/api/ledger/checkpoints?task_id=task_api_01`);
+    const checkpointsBody = await checkpointsResponse.json() as { data: Array<{ checkpoint_id: string }> };
+    const stateResponse = await fetch(`${running.url}/api/state`);
+    const stateBody = await stateResponse.json() as { data: { ledger_tasks: Array<{ task_id: string }> } };
+
+    assert.deepEqual(tasksBody.data.map((entry) => entry.task_id), ["task_api_01"]);
+    assert.deepEqual(tokenUsageListBody.data.map((entry) => entry.total_tokens), [6400]);
+    assert.deepEqual(assessmentsBody.data.map((entry) => entry.value_category), ["delivery"]);
+    assert.deepEqual(eventsBody.data.map((entry) => entry.event_id), ["event_api_01"]);
+    assert.deepEqual(checkpointsBody.data.map((entry) => entry.checkpoint_id), ["checkpoint_pr_178"]);
+    assert.deepEqual(stateBody.data.ledger_tasks.map((entry) => entry.task_id), ["task_api_01", "task_api_other"]);
+  } finally {
+    await running.close();
+  }
+});
+
+test("ledger MVP API returns validation errors without persisting malformed records", async () => {
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  try {
+    const taskResponse = await postJson(`${running.url}/api/ledger/tasks`, {
+      task_id: "",
+      session_id: "session-a",
+      repo_id: "repo-a",
+      title: "Invalid task",
+      intent_summary: "Invalid task",
+      task_type: "implementation",
+      status: "completed",
+      started_at: "not-a-date",
+      related_issue_ids: [],
+      related_claim_ids: [],
+      related_checkpoint_ids: []
+    });
+    const tokenUsageResponse = await postJson(`${running.url}/api/ledger/token-usage`, {
+      task_id: "task_invalid",
+      provider: "openai",
+      input_tokens: -1,
+      output_tokens: 1,
+      total_tokens: 0,
+      measurement_source: "api"
+    });
+    const eventResponse = await postJson(`${running.url}/api/ledger/events`, {
+      event_id: "event_invalid",
+      session_id: "session-a",
+      repo_id: "repo-a",
+      event_type: "file_changed",
+      timestamp: "not-a-date",
+      summary: "Invalid event",
+      severity: "info",
+      affected_paths: []
+    });
+    const taskBody = await taskResponse.json() as { error: { code: string; issues: Array<{ path: string }> } };
+    const tokenUsageBody = await tokenUsageResponse.json() as { error: { issues: Array<{ path: string }> } };
+    const eventBody = await eventResponse.json() as { error: { issues: Array<{ path: string }> } };
+    const stateResponse = await fetch(`${running.url}/api/state`);
+    const stateBody = await stateResponse.json() as {
+      data: {
+        ledger_events: unknown[];
+        ledger_tasks: unknown[];
+        ledger_token_usage: unknown[];
+      };
+    };
+
+    assert.equal(taskResponse.status, 400);
+    assert.equal(taskBody.error.code, "validation_failed");
+    assert.ok(taskBody.error.issues.some((issue) => issue.path === "task_id"));
+    assert.equal(tokenUsageResponse.status, 400);
+    assert.ok(tokenUsageBody.error.issues.some((issue) => issue.path === "input_tokens"));
+    assert.equal(eventResponse.status, 400);
+    assert.ok(eventBody.error.issues.some((issue) => issue.path === "timestamp"));
+    assert.equal(stateBody.data.ledger_tasks.length, 0);
+    assert.equal(stateBody.data.ledger_token_usage.length, 0);
+    assert.equal(stateBody.data.ledger_events.length, 0);
+  } finally {
+    await running.close();
+  }
+});
+
 test("POST /api/ledger rejects non-ledger pointers without persisting them", async () => {
   const running = await listen({ port: 0 }, createSukaHttpServer());
   try {
