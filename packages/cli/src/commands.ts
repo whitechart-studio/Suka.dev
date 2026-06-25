@@ -8,6 +8,17 @@ import {
   type DecisionConfidence,
   type DecisionStatus,
   type EventType,
+  type LedgerCheckpointKind,
+  type LedgerCheckpointStatus,
+  type LedgerEventSeverity,
+  type LedgerEventType,
+  type LedgerTaskStatus,
+  type LedgerTaskType,
+  type LedgerTokenAssessor,
+  type LedgerTokenConfidence,
+  type LedgerTokenMeasurementSource,
+  type LedgerTokenProvider,
+  type LedgerTokenValueCategory,
   type PresenceStatus
 } from "@suka/protocol";
 import { findConfigPath, initProject, loadConfig, resolveProjectPath } from "./config.js";
@@ -33,6 +44,7 @@ import {
 } from "./format.js";
 import { parseArgv, readCsvFlag, readNumberFlag, readStringFlag } from "./parse.js";
 import type { CliContext, CliResult } from "./types.js";
+import type { LedgerRecordFilters } from "./client.js";
 
 const DEFAULT_SERVER_URL = "http://127.0.0.1:4366";
 const DEFAULT_PRESENCE_TTL_SECONDS = 120;
@@ -174,6 +186,9 @@ export async function runCli(context: CliContext): Promise<CliResult> {
 
       case "brief":
         return await briefCommand(context, client, parsed.args, parsed.flags, config, now);
+
+      case "ledger":
+        return await ledgerCommand(context, client, parsed.args, parsed.flags, config, now);
 
       case "conflicts": {
         const result = await client.checkConflicts({
@@ -530,6 +545,275 @@ async function briefReadCommand(
   const briefs = Array.isArray(result) ? result.filter((brief) => matchesContextFilter(brief, filter)) : result;
   context.io.stdout.write(formatJson(briefs));
   return { exitCode: 0 };
+}
+
+async function ledgerCommand(
+  context: CliContext,
+  client: SukaApiClient,
+  args: string[],
+  flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>,
+  now: Date
+): Promise<CliResult> {
+  const group = args[0];
+  const rest = args.slice(1);
+
+  if (group === "task") {
+    return await ledgerTaskCommand(context, client, rest, flags, config, now);
+  }
+  if (group === "token") {
+    return await ledgerTokenCommand(context, client, rest, flags, config);
+  }
+  if (group === "event") {
+    return await ledgerEventCommand(context, client, rest, flags, config, now);
+  }
+  if (group === "checkpoint") {
+    return await ledgerCheckpointCommand(context, client, rest, flags, config, now);
+  }
+
+  throw new Error("ledger requires a supported group: task, token, event, or checkpoint.");
+}
+
+async function ledgerTaskCommand(
+  context: CliContext,
+  client: SukaApiClient,
+  args: string[],
+  flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>,
+  now: Date
+): Promise<CliResult> {
+  const action = args[0];
+  if (action === "start") {
+    const title = readStringFlag(flags, "title") ?? args.slice(1).join(" ").trim();
+    const summary = readStringFlag(flags, "summary");
+    if (title.length === 0) {
+      throw new Error("ledger task start requires a title.");
+    }
+    if (summary === undefined) {
+      throw new Error("ledger task start requires --summary.");
+    }
+
+    const taskContext = requireLedgerSessionContext(flags, config, context.env, "ledger task start");
+    const task = {
+      ...taskContext,
+      task_id: readStringFlag(flags, "task-id") ?? createPointerId("task", now),
+      title,
+      intent_summary: summary,
+      task_type: (readStringFlag(flags, "type") ?? "implementation") as LedgerTaskType,
+      status: (readStringFlag(flags, "status") ?? "active") as LedgerTaskStatus,
+      started_at: readStringFlag(flags, "started-at") ?? now.toISOString(),
+      related_issue_ids: readCsvFlag(flags, "issue-id"),
+      related_claim_ids: readCsvFlag(flags, "claim-id"),
+      related_checkpoint_ids: readCsvFlag(flags, "checkpoint-id")
+    };
+    const result = await client.createLedgerTask(task);
+    context.io.stdout.write(formatJson(result));
+    return { exitCode: 0 };
+  }
+
+  if (action === "finish") {
+    const taskId = args[1];
+    if (taskId === undefined) {
+      throw new Error("ledger task finish requires a task id.");
+    }
+
+    const existing = await client.listLedgerTasks({ task_id: taskId });
+    const task = Array.isArray(existing) ? existing.find((entry) => isRecord(entry) && entry.task_id === taskId) : undefined;
+    if (!isRecord(task)) {
+      throw new Error(`ledger task finish could not find task ${taskId}.`);
+    }
+
+    const title = readStringFlag(flags, "title");
+    const summary = readStringFlag(flags, "summary");
+    const update: Record<string, unknown> = {
+      ...task,
+      completed_at: readStringFlag(flags, "completed-at") ?? now.toISOString(),
+      status: (readStringFlag(flags, "status") ?? "completed") as LedgerTaskStatus
+    };
+    if (title !== undefined) update.title = title;
+    if (summary !== undefined) update.intent_summary = summary;
+    const type = readStringFlag(flags, "type");
+    if (type !== undefined) update.task_type = type as LedgerTaskType;
+    const issueIds = readCsvFlag(flags, "issue-id");
+    if (issueIds.length > 0) update.related_issue_ids = issueIds;
+    const claimIds = readCsvFlag(flags, "claim-id");
+    if (claimIds.length > 0) update.related_claim_ids = claimIds;
+    const checkpointIds = readCsvFlag(flags, "checkpoint-id");
+    if (checkpointIds.length > 0) update.related_checkpoint_ids = checkpointIds;
+
+    const result = await client.createLedgerTask(update);
+    context.io.stdout.write(formatJson(result));
+    return { exitCode: 0 };
+  }
+
+  if (action === "read") {
+    const result = await client.listLedgerTasks(ledgerFilters(flags, config, context.env));
+    context.io.stdout.write(formatJson(result));
+    return { exitCode: 0 };
+  }
+
+  throw new Error("ledger task requires a supported action: start, finish, or read.");
+}
+
+async function ledgerTokenCommand(
+  context: CliContext,
+  client: SukaApiClient,
+  args: string[],
+  flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>
+): Promise<CliResult> {
+  const action = args[0];
+  if (action === "record") {
+    const taskId = args[1] ?? readStringFlag(flags, "task-id");
+    if (taskId === undefined) {
+      throw new Error("ledger token record requires a task id.");
+    }
+
+    const inputTokens = readRequiredIntegerFlag(flags, "input");
+    const outputTokens = readRequiredIntegerFlag(flags, "output");
+    const totalTokens = readIntegerFlag(flags, "total") ?? inputTokens + outputTokens;
+    const tokenUsage: Record<string, unknown> = {
+      task_id: taskId,
+      provider: (readStringFlag(flags, "provider") ?? "unknown") as LedgerTokenProvider,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      total_tokens: totalTokens,
+      measurement_source: (readStringFlag(flags, "source") ?? "manual") as LedgerTokenMeasurementSource
+    };
+    addOptionalString(tokenUsage, "model", readStringFlag(flags, "model"));
+    addOptionalNumber(tokenUsage, "cached_input_tokens", readIntegerFlag(flags, "cached-input"));
+    addOptionalNumber(tokenUsage, "reasoning_tokens", readIntegerFlag(flags, "reasoning"));
+    addOptionalNumber(tokenUsage, "tool_call_tokens", readIntegerFlag(flags, "tool-call"));
+    addOptionalNumber(tokenUsage, "estimated_cost", readDecimalFlag(flags, "cost"));
+    addOptionalString(tokenUsage, "currency", readStringFlag(flags, "currency"));
+
+    const result = await client.createLedgerTokenUsage(tokenUsage);
+    context.io.stdout.write(formatJson(result));
+    return { exitCode: 0 };
+  }
+
+  if (action === "assess") {
+    const taskId = args[1] ?? readStringFlag(flags, "task-id");
+    if (taskId === undefined) {
+      throw new Error("ledger token assess requires a task id.");
+    }
+
+    const assessment: Record<string, unknown> = {
+      task_id: taskId,
+      value_category: (readStringFlag(flags, "category") ?? "unknown") as LedgerTokenValueCategory,
+      assessed_by: (readStringFlag(flags, "by") ?? "user") as LedgerTokenAssessor,
+      confidence: (readStringFlag(flags, "confidence") ?? "medium") as LedgerTokenConfidence
+    };
+    addOptionalNumber(assessment, "usefulness_score", readIntegerFlag(flags, "score"));
+    addOptionalString(assessment, "reason", readStringFlag(flags, "reason"));
+
+    const result = await client.createLedgerTokenAssessment(assessment);
+    context.io.stdout.write(formatJson(result));
+    return { exitCode: 0 };
+  }
+
+  if (action === "read") {
+    const result = await client.listLedgerTokenUsage(ledgerFilters(flags, config, context.env));
+    context.io.stdout.write(formatJson(result));
+    return { exitCode: 0 };
+  }
+
+  if (action === "assessments") {
+    const result = await client.listLedgerTokenAssessments(ledgerFilters(flags, config, context.env));
+    context.io.stdout.write(formatJson(result));
+    return { exitCode: 0 };
+  }
+
+  throw new Error("ledger token requires a supported action: record, assess, read, or assessments.");
+}
+
+async function ledgerEventCommand(
+  context: CliContext,
+  client: SukaApiClient,
+  args: string[],
+  flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>,
+  now: Date
+): Promise<CliResult> {
+  const action = args[0];
+  if (action === "write") {
+    const eventType = args[1] ?? readStringFlag(flags, "type");
+    const summary = readStringFlag(flags, "summary") ?? args.slice(2).join(" ").trim();
+    if (eventType === undefined || summary.length === 0) {
+      throw new Error("ledger event write requires an event type and summary.");
+    }
+
+    const eventContext = requireLedgerSessionContext(flags, config, context.env, "ledger event write");
+    const event: Record<string, unknown> = {
+      ...eventContext,
+      event_id: readStringFlag(flags, "event-id") ?? createPointerId("ledger-event", now),
+      event_type: eventType as LedgerEventType,
+      timestamp: readStringFlag(flags, "timestamp") ?? now.toISOString(),
+      summary,
+      severity: (readStringFlag(flags, "severity") ?? "info") as LedgerEventSeverity,
+      affected_paths: readCsvFlag(flags, "path")
+    };
+    addOptionalString(event, "task_id", readStringFlag(flags, "task-id"));
+
+    const result = await client.createLedgerEvent(event);
+    context.io.stdout.write(formatJson(result));
+    return { exitCode: 0 };
+  }
+
+  if (action === "read") {
+    const result = await client.listLedgerEvents(ledgerFilters(flags, config, context.env));
+    context.io.stdout.write(formatJson(result));
+    return { exitCode: 0 };
+  }
+
+  throw new Error("ledger event requires a supported action: write or read.");
+}
+
+async function ledgerCheckpointCommand(
+  context: CliContext,
+  client: SukaApiClient,
+  args: string[],
+  flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>,
+  now: Date
+): Promise<CliResult> {
+  const action = args[0];
+  if (action === "read") {
+    const result = await client.listLedgerCheckpoints(ledgerFilters(flags, config, context.env));
+    context.io.stdout.write(formatJson(result));
+    return { exitCode: 0 };
+  }
+
+  if (action === "pr" || action === "commit" || action === "merge" || action === "release" || action === "handoff") {
+    const externalId = args[1] ?? readStringFlag(flags, "external-id");
+    const title = readStringFlag(flags, "title") ?? args.slice(2).join(" ").trim();
+    if (externalId === undefined || title.length === 0) {
+      throw new Error(`ledger checkpoint ${action} requires an external id and title.`);
+    }
+
+    const checkpointContext = requireLedgerRepoContext(flags, config, context.env, `ledger checkpoint ${action}`);
+    const relatedSessions = readCsvFlag(flags, "related-session");
+    const checkpoint: Record<string, unknown> = {
+      ...checkpointContext,
+      checkpoint_id: readStringFlag(flags, "checkpoint-id") ?? createPointerId("checkpoint", now),
+      kind: action as LedgerCheckpointKind,
+      external_id: externalId,
+      title,
+      status: (readStringFlag(flags, "status") ?? (action === "commit" ? "merged" : "open")) as LedgerCheckpointStatus,
+      created_at: readStringFlag(flags, "created-at") ?? now.toISOString(),
+      related_task_ids: readCsvFlag(flags, "task-id"),
+      related_issue_ids: readCsvFlag(flags, "issue-id"),
+      related_session_ids: relatedSessions.length > 0 ? relatedSessions : checkpointContext.session_id === undefined ? [] : [checkpointContext.session_id],
+      summary: readStringFlag(flags, "summary") ?? title
+    };
+    addOptionalString(checkpoint, "completed_at", readStringFlag(flags, "completed-at"));
+
+    const result = await client.createLedgerCheckpoint(checkpoint);
+    context.io.stdout.write(formatJson(result));
+    return { exitCode: 0 };
+  }
+
+  throw new Error("ledger checkpoint requires a supported action: pr, commit, merge, release, handoff, or read.");
 }
 
 async function decisionCommand(
@@ -1002,6 +1286,113 @@ function coordinationContext(
   if (repoId !== undefined) context.repo_id = repoId;
   if (sessionId !== undefined) context.session_id = sessionId;
   return context;
+}
+
+function requireLedgerSessionContext(
+  flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>,
+  env: NodeJS.ProcessEnv,
+  command: string
+): { repo_id: string; session_id: string; workspace_id?: string } {
+  const context = coordinationContext(flags, config, env);
+  if (context.repo_id === undefined || context.session_id === undefined) {
+    throw new Error(`${command} requires --repo-id and --session context.`);
+  }
+
+  const result: { repo_id: string; session_id: string; workspace_id?: string } = {
+    repo_id: context.repo_id,
+    session_id: context.session_id
+  };
+  if (context.workspace_id !== undefined) {
+    result.workspace_id = context.workspace_id;
+  }
+  return result;
+}
+
+function requireLedgerRepoContext(
+  flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>,
+  env: NodeJS.ProcessEnv,
+  command: string
+): { repo_id: string; session_id?: string; workspace_id?: string } {
+  const context = coordinationContext(flags, config, env);
+  if (context.repo_id === undefined) {
+    throw new Error(`${command} requires --repo-id context.`);
+  }
+
+  const result: { repo_id: string; session_id?: string; workspace_id?: string } = {
+    repo_id: context.repo_id
+  };
+  if (context.session_id !== undefined) {
+    result.session_id = context.session_id;
+  }
+  if (context.workspace_id !== undefined) {
+    result.workspace_id = context.workspace_id;
+  }
+  return result;
+}
+
+function ledgerFilters(
+  flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>,
+  env: NodeJS.ProcessEnv
+): LedgerRecordFilters {
+  const context = coordinationContext(flags, config, env);
+  const filters: LedgerRecordFilters = {};
+  if (context.workspace_id !== undefined) filters.workspace_id = context.workspace_id;
+  if (context.repo_id !== undefined) filters.repo_id = context.repo_id;
+  if (context.session_id !== undefined) filters.session_id = context.session_id;
+  const taskId = readStringFlag(flags, "task-id");
+  if (taskId !== undefined) filters.task_id = taskId;
+  const checkpointId = readStringFlag(flags, "checkpoint-id");
+  if (checkpointId !== undefined) filters.checkpoint_id = checkpointId;
+  return filters;
+}
+
+function readRequiredIntegerFlag(flags: Parameters<typeof readStringFlag>[0], key: string): number {
+  const value = readIntegerFlag(flags, key);
+  if (value === undefined) {
+    throw new Error(`--${key} is required.`);
+  }
+  return value;
+}
+
+function readIntegerFlag(flags: Parameters<typeof readStringFlag>[0], key: string): number | undefined {
+  const value = readStringFlag(flags, key);
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`--${key} must be a non-negative integer.`);
+  }
+  return parsed;
+}
+
+function readDecimalFlag(flags: Parameters<typeof readStringFlag>[0], key: string): number | undefined {
+  const value = readStringFlag(flags, key);
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`--${key} must be a non-negative number.`);
+  }
+  return parsed;
+}
+
+function addOptionalString(target: Record<string, unknown>, key: string, value: string | undefined): void {
+  if (value !== undefined) {
+    target[key] = value;
+  }
+}
+
+function addOptionalNumber(target: Record<string, unknown>, key: string, value: number | undefined): void {
+  if (value !== undefined) {
+    target[key] = value;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -216,9 +216,25 @@ Usage:
   suka decisions [--server URL]
   suka brief write <summary> --next TEXT [--changed PATH] [--decision TEXT] [--assumption TEXT] [--skipped TEXT] [--risk TEXT] [--blocker TEXT] [--related-claim ID] [--related-session ID] [--worktree NAME] [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
   suka brief read [--workspace ID] [--repo-id ID] [--session ID|current] [--server URL] [--json]
+  suka ledger task start <title> --summary TEXT [--type implementation] [--task-id ID] [--issue-id ID] [--claim-id ID] [--checkpoint-id ID] [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
+  suka ledger task finish <task-id> [--status completed] [--checkpoint-id ID] [--server URL]
+  suka ledger task read [--workspace ID] [--repo-id ID] [--session ID] [--task-id ID] [--checkpoint-id ID] [--server URL]
+  suka ledger token record <task-id> --input N --output N [--total N] [--provider openai|anthropic|local|unknown] [--model MODEL] [--source api|cli|estimated|manual] [--server URL]
+  suka ledger token assess <task-id> [--category delivery|planning|review|rework|discarded|blocked|handoff|unknown] [--score 0-100] [--by user|agent|rule|system] [--confidence low|medium|high] [--reason TEXT] [--server URL]
+  suka ledger token read [--workspace ID] [--repo-id ID] [--session ID] [--task-id ID] [--server URL]
+  suka ledger token assessments [--workspace ID] [--repo-id ID] [--session ID] [--task-id ID] [--server URL]
+  suka ledger event write <type> <summary> [--task-id ID] [--path PATH] [--severity info|warning|critical] [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
+  suka ledger event read [--workspace ID] [--repo-id ID] [--session ID] [--task-id ID] [--server URL]
+  suka ledger checkpoint pr <number> <title> [--task-id ID] [--issue-id ID] [--summary TEXT] [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
+  suka ledger checkpoint commit <sha> <title> [--task-id ID] [--issue-id ID] [--summary TEXT] [--repo-id ID] [--session ID] [--server URL]
+  suka ledger checkpoint read [--repo-id ID] [--task-id ID] [--checkpoint-id ID] [--server URL]
   suka conflicts [--changed] [--workspace ID] [--repo-id ID] [--session ID] [--path PATH] [--api API] [--table TABLE] [--env NAME] [--domain DOMAIN] [--since ISO] [--since-session-start] [--server URL]
   suka release <claim-id> [--server URL]
   suka cleanup [--workspace ID] [--repo ID] [--session ID] [--server URL]
+
+Ledger:
+  task = one prompt or work unit.
+  checkpoint = a PR, commit, review, or other reviewable milestone.
 
 Environment:
   SUKA_SERVER_URL  Default server URL
