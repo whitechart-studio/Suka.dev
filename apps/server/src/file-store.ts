@@ -2,13 +2,23 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname } from "node:path";
 import {
   validatePointer,
+  validateCheckpoint,
+  validateLedgerEvent,
+  validateTaskEntry,
+  validateTokenAssessment,
+  validateTokenUsage,
   type BriefPointer,
+  type Checkpoint,
   type ClaimPointer,
   type CoordinationContext,
   type DecisionPointer,
   type EventPointer,
+  type LedgerEvent,
   type LedgerPointer,
-  type PresencePointer
+  type PresencePointer,
+  type TaskEntry,
+  type TokenAssessment,
+  type TokenUsage
 } from "@suka/protocol";
 import { MemorySukaStore, type SukaStore } from "./memory-store.js";
 import { createEmptyState, type LocalProject, type SukaCleanupResult, type SukaState } from "./state.js";
@@ -72,6 +82,31 @@ export class FileSukaStore implements SukaStore {
     this.#persist();
   }
 
+  upsertLedgerTask(task: TaskEntry): void {
+    this.#store.upsertLedgerTask(task);
+    this.#persist();
+  }
+
+  upsertLedgerTokenUsage(tokenUsage: TokenUsage): void {
+    this.#store.upsertLedgerTokenUsage(tokenUsage);
+    this.#persist();
+  }
+
+  upsertLedgerTokenAssessment(assessment: TokenAssessment): void {
+    this.#store.upsertLedgerTokenAssessment(assessment);
+    this.#persist();
+  }
+
+  appendLedgerEvent(event: LedgerEvent): void {
+    this.#store.appendLedgerEvent(event);
+    this.#persist();
+  }
+
+  upsertLedgerCheckpoint(checkpoint: Checkpoint): void {
+    this.#store.upsertLedgerCheckpoint(checkpoint);
+    this.#persist();
+  }
+
   upsertProject(project: LocalProject): void {
     this.#store.upsertProject(project);
     this.#persist();
@@ -117,7 +152,12 @@ function hasRemovedPointers(result: SukaCleanupResult): boolean {
     result.removed.events > 0 ||
     result.removed.decisions > 0 ||
     result.removed.briefs > 0 ||
-    result.removed.ledger > 0;
+    result.removed.ledger > 0 ||
+    result.removed.ledger_tasks > 0 ||
+    result.removed.ledger_token_usage > 0 ||
+    result.removed.ledger_token_assessments > 0 ||
+    result.removed.ledger_events > 0 ||
+    result.removed.ledger_checkpoints > 0;
 }
 
 function loadState(path: string): SukaState {
@@ -135,6 +175,15 @@ function loadState(path: string): SukaState {
     decisions: Array.isArray(parsed.decisions) ? parsed.decisions : [],
     briefs: Array.isArray(parsed.briefs) ? parsed.briefs : [],
     ledger: Array.isArray(parsed.ledger) ? parsed.ledger.filter(isValidLedgerPointer) : [],
+    ledger_tasks: Array.isArray(parsed.ledger_tasks) ? parsed.ledger_tasks.filter(isValidTaskEntry) : [],
+    ledger_token_usage: Array.isArray(parsed.ledger_token_usage) ? parsed.ledger_token_usage.filter(isValidTokenUsage) : [],
+    ledger_token_assessments: Array.isArray(parsed.ledger_token_assessments) ?
+      parsed.ledger_token_assessments.filter(isValidTokenAssessment) :
+      [],
+    ledger_events: Array.isArray(parsed.ledger_events) ? parsed.ledger_events.filter(isValidLedgerEvent) : [],
+    ledger_checkpoints: Array.isArray(parsed.ledger_checkpoints) ?
+      parsed.ledger_checkpoints.filter(isValidCheckpoint) :
+      [],
     projects: Array.isArray(parsed.projects) ? parsed.projects : []
   };
 
@@ -148,4 +197,24 @@ function loadState(path: string): SukaState {
 function isValidLedgerPointer(value: unknown): value is LedgerPointer {
   const result = validatePointer(value);
   return result.ok && result.value.type === "ledger";
+}
+
+function isValidTaskEntry(value: unknown): value is TaskEntry {
+  return validateTaskEntry(value).ok;
+}
+
+function isValidTokenUsage(value: unknown): value is TokenUsage {
+  return validateTokenUsage(value).ok;
+}
+
+function isValidTokenAssessment(value: unknown): value is TokenAssessment {
+  return validateTokenAssessment(value).ok;
+}
+
+function isValidLedgerEvent(value: unknown): value is LedgerEvent {
+  return validateLedgerEvent(value).ok;
+}
+
+function isValidCheckpoint(value: unknown): value is Checkpoint {
+  return validateCheckpoint(value).ok;
 }
