@@ -261,6 +261,125 @@ test("publishes ledger entries as append-only session history", () => {
   ]);
 });
 
+test("records structured ledger MVP records and filters by repo session task and checkpoint", () => {
+  const service = createSukaService();
+  const task = {
+    task_id: "task_ledger_01",
+    session_id: "session-a",
+    repo_id: "repo-a",
+    workspace_id: "workspace-a",
+    title: "Add ledger persistence",
+    intent_summary: "Persist task, token, event, and checkpoint records.",
+    task_type: "implementation",
+    status: "completed",
+    started_at: "2026-06-25T06:00:00.000Z",
+    completed_at: "2026-06-25T06:20:00.000Z",
+    related_issue_ids: ["169"],
+    related_claim_ids: [],
+    related_checkpoint_ids: ["checkpoint_pr_177"]
+  };
+
+  assert.equal(service.recordLedgerTask(task).ok, true);
+  assert.equal(service.recordLedgerTokenUsage({
+    task_id: "task_ledger_01",
+    provider: "openai",
+    model: "gpt-5",
+    input_tokens: 2300,
+    output_tokens: 4100,
+    total_tokens: 6400,
+    estimated_cost: 0.18,
+    currency: "USD",
+    measurement_source: "api"
+  }).ok, true);
+  assert.equal(service.recordLedgerTokenAssessment({
+    task_id: "task_ledger_01",
+    value_category: "delivery",
+    usefulness_score: 86,
+    assessed_by: "rule",
+    confidence: "medium",
+    reason: "Task produced persisted server records."
+  }).ok, true);
+  assert.equal(service.recordLedgerEvent({
+    event_id: "event_ledger_01",
+    task_id: "task_ledger_01",
+    session_id: "session-a",
+    repo_id: "repo-a",
+    event_type: "file_changed",
+    timestamp: "2026-06-25T06:10:00.000Z",
+    summary: "Updated server store state.",
+    severity: "info",
+    affected_paths: ["apps/server/src/state.ts"]
+  }).ok, true);
+  assert.equal(service.recordLedgerCheckpoint({
+    checkpoint_id: "checkpoint_pr_177",
+    repo_id: "repo-a",
+    kind: "pr",
+    external_id: "177",
+    title: "Persist ledger MVP records",
+    status: "open",
+    created_at: "2026-06-25T06:20:00.000Z",
+    related_task_ids: ["task_ledger_01"],
+    related_issue_ids: ["169"],
+    related_session_ids: ["session-a"],
+    summary: "Server can store and reload structured ledger records."
+  }).ok, true);
+  service.recordLedgerTask({
+    ...task,
+    task_id: "task_other_repo",
+    repo_id: "repo-b",
+    session_id: "session-b",
+    related_checkpoint_ids: []
+  });
+
+  assert.deepEqual(service.listLedgerTasks({ repo_id: "repo-a" }).map((entry) => entry.task_id), ["task_ledger_01"]);
+  assert.deepEqual(service.listLedgerTasks({ session_id: "session-a" }).map((entry) => entry.task_id), ["task_ledger_01"]);
+  assert.deepEqual(service.listLedgerTasks({ checkpoint_id: "checkpoint_pr_177" }).map((entry) => entry.task_id), ["task_ledger_01"]);
+  assert.deepEqual(service.listLedgerTokenUsage({ repo_id: "repo-a" }).map((entry) => entry.total_tokens), [6400]);
+  assert.deepEqual(service.listLedgerTokenAssessments({ task_id: "task_ledger_01" }).map((entry) => entry.value_category), ["delivery"]);
+  assert.deepEqual(service.listLedgerEvents({ session_id: "session-a" }).map((entry) => entry.event_id), ["event_ledger_01"]);
+  assert.deepEqual(service.listLedgerCheckpoints({ task_id: "task_ledger_01" }).map((entry) => entry.checkpoint_id), ["checkpoint_pr_177"]);
+});
+
+test("rejects invalid structured ledger records before persistence", () => {
+  const service = createSukaService();
+
+  assert.equal(service.recordLedgerTask({
+    task_id: "",
+    session_id: "session-a",
+    repo_id: "repo-a",
+    title: "Invalid",
+    intent_summary: "Invalid",
+    task_type: "implementation",
+    status: "completed",
+    started_at: "2026-06-25T06:00:00.000Z",
+    related_issue_ids: [],
+    related_claim_ids: [],
+    related_checkpoint_ids: []
+  }).ok, false);
+  assert.equal(service.recordLedgerTokenUsage({
+    task_id: "task_invalid",
+    provider: "openai",
+    input_tokens: -1,
+    output_tokens: 1,
+    total_tokens: 0,
+    measurement_source: "api"
+  }).ok, false);
+  assert.equal(service.recordLedgerEvent({
+    event_id: "event_invalid",
+    session_id: "session-a",
+    repo_id: "repo-a",
+    event_type: "file_changed",
+    timestamp: "not-a-date",
+    summary: "Invalid",
+    severity: "info",
+    affected_paths: []
+  }).ok, false);
+
+  assert.equal(service.getState().ledger_tasks.length, 0);
+  assert.equal(service.getState().ledger_token_usage.length, 0);
+  assert.equal(service.getState().ledger_events.length, 0);
+});
+
 test("cleans up pointers only inside provided coordination context", () => {
   const service = createSukaService();
   service.publish({
@@ -357,6 +476,58 @@ test("cleans up pointers only inside provided coordination context", () => {
     worktree: "/worktrees/suka/session-a",
     created_at: "2026-06-12T10:00:00.000Z"
   });
+  service.recordLedgerTask({
+    task_id: "task_session_a",
+    workspace_id: "workspace-a",
+    repo_id: "repo-a",
+    session_id: "session-a",
+    title: "Session A task",
+    intent_summary: "Session A ledger task should be cleanable.",
+    task_type: "implementation",
+    status: "completed",
+    started_at: "2026-06-12T10:00:00.000Z",
+    related_issue_ids: [],
+    related_claim_ids: [],
+    related_checkpoint_ids: ["checkpoint_session_a"]
+  });
+  service.recordLedgerTokenUsage({
+    task_id: "task_session_a",
+    provider: "openai",
+    input_tokens: 10,
+    output_tokens: 20,
+    total_tokens: 30,
+    measurement_source: "api"
+  });
+  service.recordLedgerTokenAssessment({
+    task_id: "task_session_a",
+    value_category: "delivery",
+    assessed_by: "rule",
+    confidence: "low"
+  });
+  service.recordLedgerEvent({
+    event_id: "event_session_a",
+    task_id: "task_session_a",
+    repo_id: "repo-a",
+    session_id: "session-a",
+    event_type: "file_changed",
+    timestamp: "2026-06-12T10:00:00.000Z",
+    summary: "Session A structured ledger event should be cleanable.",
+    severity: "info",
+    affected_paths: ["src/billing/webhook.ts"]
+  });
+  service.recordLedgerCheckpoint({
+    checkpoint_id: "checkpoint_session_a",
+    repo_id: "repo-a",
+    kind: "pr",
+    external_id: "100",
+    title: "Session A checkpoint",
+    status: "open",
+    created_at: "2026-06-12T10:00:00.000Z",
+    related_task_ids: ["task_session_a"],
+    related_issue_ids: [],
+    related_session_ids: ["session-a"],
+    summary: "Session A structured checkpoint should be cleanable."
+  });
   service.publish({
     type: "claim",
     id: "ptr_claim_session_b",
@@ -385,11 +556,21 @@ test("cleans up pointers only inside provided coordination context", () => {
     events: 1,
     decisions: 1,
     briefs: 1,
-    ledger: 1
+    ledger: 1,
+    ledger_tasks: 1,
+    ledger_token_usage: 1,
+    ledger_token_assessments: 1,
+    ledger_events: 1,
+    ledger_checkpoints: 1
   });
   assert.deepEqual(result.state.claims.map((claim) => claim.id), ["ptr_claim_session_b"]);
   assert.deepEqual(result.state.briefs, []);
   assert.deepEqual(result.state.ledger, []);
+  assert.deepEqual(result.state.ledger_tasks, []);
+  assert.deepEqual(result.state.ledger_token_usage, []);
+  assert.deepEqual(result.state.ledger_token_assessments, []);
+  assert.deepEqual(result.state.ledger_events, []);
+  assert.deepEqual(result.state.ledger_checkpoints, []);
 });
 
 test("rejects invalid pointers before persistence", () => {

@@ -96,6 +96,11 @@ test("builds scoped team summary across workspaces and sessions", () => {
       workspace_id: "workspace-a"
     }],
     ledger: [],
+    ledger_tasks: [],
+    ledger_token_usage: [],
+    ledger_token_assessments: [],
+    ledger_events: [],
+    ledger_checkpoints: [],
     presence: [{
       agent_id: "codex-a",
       current_files: ["apps/server/src/http.ts"],
