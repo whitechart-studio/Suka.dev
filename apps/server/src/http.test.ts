@@ -1149,14 +1149,36 @@ test("ledger MVP API returns validation errors without persisting malformed reco
       severity: "info",
       affected_paths: []
     });
+    const assessmentResponse = await postJson(`${running.url}/api/ledger/token-assessments`, {
+      task_id: "task_invalid",
+      value_category: "waste",
+      assessed_by: "rule",
+      confidence: "medium"
+    });
+    const checkpointResponse = await postJson(`${running.url}/api/ledger/checkpoints`, {
+      checkpoint_id: "checkpoint_invalid",
+      repo_id: "repo-a",
+      kind: "pull_request",
+      title: "Invalid checkpoint",
+      status: "open",
+      created_at: "2026-06-25T07:20:00.000Z",
+      related_task_ids: [],
+      related_issue_ids: [],
+      related_session_ids: [],
+      summary: "Invalid checkpoint"
+    });
     const taskBody = await taskResponse.json() as { error: { code: string; issues: Array<{ path: string }> } };
     const tokenUsageBody = await tokenUsageResponse.json() as { error: { issues: Array<{ path: string }> } };
     const eventBody = await eventResponse.json() as { error: { issues: Array<{ path: string }> } };
+    const assessmentBody = await assessmentResponse.json() as { error: { issues: Array<{ path: string }> } };
+    const checkpointBody = await checkpointResponse.json() as { error: { issues: Array<{ path: string }> } };
     const stateResponse = await fetch(`${running.url}/api/state`);
     const stateBody = await stateResponse.json() as {
       data: {
+        ledger_checkpoints: unknown[];
         ledger_events: unknown[];
         ledger_tasks: unknown[];
+        ledger_token_assessments: unknown[];
         ledger_token_usage: unknown[];
       };
     };
@@ -1168,9 +1190,15 @@ test("ledger MVP API returns validation errors without persisting malformed reco
     assert.ok(tokenUsageBody.error.issues.some((issue) => issue.path === "input_tokens"));
     assert.equal(eventResponse.status, 400);
     assert.ok(eventBody.error.issues.some((issue) => issue.path === "timestamp"));
+    assert.equal(assessmentResponse.status, 400);
+    assert.ok(assessmentBody.error.issues.some((issue) => issue.path === "value_category"));
+    assert.equal(checkpointResponse.status, 400);
+    assert.ok(checkpointBody.error.issues.some((issue) => issue.path === "kind"));
     assert.equal(stateBody.data.ledger_tasks.length, 0);
     assert.equal(stateBody.data.ledger_token_usage.length, 0);
+    assert.equal(stateBody.data.ledger_token_assessments.length, 0);
     assert.equal(stateBody.data.ledger_events.length, 0);
+    assert.equal(stateBody.data.ledger_checkpoints.length, 0);
   } finally {
     await running.close();
   }
