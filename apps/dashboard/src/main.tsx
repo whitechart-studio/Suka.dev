@@ -341,29 +341,6 @@ const emptyState: SukaState = {
   presence: []
 };
 
-const fallbackDomains: Domain[] = [
-  { id: "auth", name: "Auth", color: "#14b8a6", path: "auth", x: 120, y: 120, keys: ["auth", "session", "login", "oauth"] },
-  { id: "api", name: "API", color: "#3b82f6", path: "api", x: 360, y: 84, keys: ["api", "route", "server", "endpoint"] },
-  { id: "billing", name: "Billing", color: "#e11d48", path: "billing", x: 640, y: 160, keys: ["billing", "payment", "stripe", "invoice", "webhook"] },
-  { id: "ui", name: "UI", color: "#f97316", path: "ui", x: 180, y: 345, keys: ["app", "ui", "component", "page", "view"] },
-  { id: "checkout", name: "Checkout", color: "#f59e0b", path: "checkout", x: 455, y: 315, keys: ["checkout", "cart", "payment-client"] },
-  { id: "database", name: "Database", color: "#22c55e", path: "database", x: 690, y: 410, keys: ["db", "database", "migration", "schema", "table"] },
-  { id: "tests", name: "Tests", color: "#e11d48", path: "tests", x: 360, y: 525, keys: ["test", "spec", "__tests__"] },
-  { id: "infra", name: "Infra", color: "#94a3b8", path: "infra", x: 105, y: 540, keys: ["infra", "deploy", "docker", "ci", "env"] }
-];
-
-const graphEdges = [
-  ["auth", "api"],
-  ["api", "billing"],
-  ["billing", "checkout"],
-  ["checkout", "ui"],
-  ["checkout", "database"],
-  ["database", "tests"],
-  ["ui", "tests"],
-  ["infra", "tests"],
-  ["infra", "api"]
-] as const;
-
 type AppSettings = {
   theme: "dark" | "light";
   pollingInterval: 5 | 10 | 30;
@@ -435,7 +412,7 @@ type SelectedDetails =
 
 function Dashboard(): React.ReactElement {
   const [state, setState] = useState<SukaState>(emptyState);
-  const [repoMap, setRepoMap] = useState<RepoMap>({ domains: fallbackDomains, edges: [] });
+  const [repoMap, setRepoMap] = useState<RepoMap>({ domains: [], edges: [], root: "workspace" });
   const [status, setStatus] = useState("connecting");
   const [projectPath, setProjectPath] = useState(() => readStoredString("projectPath"));
   const [leftOpen, setLeftOpen] = useState(true);
@@ -462,6 +439,7 @@ function Dashboard(): React.ReactElement {
   const [trackingStatus, setTrackingStatus] = useState<ProjectTrackingStatus>(emptyTrackingStatus);
   const [projectError, setProjectError] = useState("");
   const [trackingBusy, setTrackingBusy] = useState(false);
+  const [removingProjectId, setRemovingProjectId] = useState("");
   const [customZones, setCustomZones] = useState<CustomCanvasZone[]>([]);
   const [hydratedLayoutScope, setHydratedLayoutScope] = useState("");
   const [nodePositions, setNodePositions] = useState<NodePositionMap>({});
@@ -495,9 +473,7 @@ function Dashboard(): React.ReactElement {
       const response = await fetch("/api/repo-map", { cache: "no-store" });
       if (!response.ok) return;
       const payload = await response.json() as { data: RepoMap };
-      if (payload.data.domains.length > 0) {
-        setRepoMap(payload.data);
-      }
+      setRepoMap(payload.data);
     } catch {
       setRepoMap((current) => current);
     }
@@ -702,7 +678,7 @@ function Dashboard(): React.ReactElement {
     updateCustomZones((current) => current.filter((zone) => zone.id !== zoneId));
   }, [customZones, updateCustomZones]);
 
-  const domainCatalog = repoMap.domains.length > 0 ? repoMap.domains : fallbackDomains;
+  const domainCatalog = repoMap.domains;
   const model = useMemo(() => buildDomainModel(state, domainCatalog), [domainCatalog, state]);
   const sessionRooms = useMemo(
     () => buildSessionRooms(teamSummary.members.length > 0 ? teamSummary.members : state.presence),
@@ -873,7 +849,7 @@ function Dashboard(): React.ReactElement {
       const startPayload = await startResponse.json() as { data: ProjectTrackingStatus };
       manualTrackingStopped.current = false;
       setTrackingStatus(startPayload.data);
-      await Promise.all([loadProjects(), loadState(), loadTeamSummary()]);
+      await Promise.all([loadProjects(), loadState(), loadTeamSummary(), loadRepoMap()]);
       return true;
     } catch (error) {
       setProjectError(error instanceof Error ? error.message : "Tracking could not be started.");
@@ -881,7 +857,7 @@ function Dashboard(): React.ReactElement {
     } finally {
       setTrackingBusy(false);
     }
-  }, [activeProject, loadProjects, loadState, loadTeamSummary, projectPath, projects, suggestedProject?.path]);
+  }, [activeProject, loadProjects, loadRepoMap, loadState, loadTeamSummary, projectPath, projects, suggestedProject?.path]);
 
   useEffect(() => {
     if (activeProject === undefined || trackingBusy || trackingStatus.running || manualTrackingStopped.current) return;
@@ -941,6 +917,40 @@ function Dashboard(): React.ReactElement {
       setTrackingBusy(false);
     }
   }, [loadState, loadTeamSummary]);
+
+  const removeProject = useCallback(async (project: LocalProject) => {
+    if (!window.confirm(`Remove "${project.name}" from Suka? Local files will stay on disk.`)) return;
+    setProjectError("");
+    setRemovingProjectId(project.id);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(project.id)}`, {
+        method: "DELETE"
+      });
+      if (!response.ok) {
+        throw new Error("Project could not be removed.");
+      }
+      const payload = await response.json() as {
+        data: {
+          active_project: LocalProject | null;
+          project: LocalProject;
+          projects: LocalProject[];
+        };
+      };
+      const nextActiveProject = payload.data.active_project ?? undefined;
+      manualTrackingStopped.current = true;
+      setProjects(payload.data.projects);
+      setActiveProject(nextActiveProject);
+      setProjectPath(nextActiveProject?.path ?? "");
+      if (nextActiveProject === undefined) {
+        setRepoMap({ domains: [], edges: [], generated_at: new Date().toISOString(), root: "workspace" });
+      }
+      await Promise.all([loadTrackingStatus(), loadState(), loadTeamSummary(), nextActiveProject === undefined ? Promise.resolve() : loadRepoMap()]);
+    } catch (error) {
+      setProjectError(error instanceof Error ? error.message : "Project could not be removed.");
+    } finally {
+      setRemovingProjectId("");
+    }
+  }, [loadRepoMap, loadState, loadTeamSummary, loadTrackingStatus]);
 
   const enterWorkspace = useCallback(() => {
     setWelcomeDismissed(true);
@@ -1237,6 +1247,8 @@ function Dashboard(): React.ReactElement {
               setProjectPath(value);
               void startProjectTracking(value);
             }}
+            onRemoveProject={(project) => void removeProject(project)}
+            removingProjectId={removingProjectId}
           />
           <button aria-label="Open team connection panel" className="top-action top-action-labeled" title="Team" type="button" onClick={toggleTeamPanel}>
             <Link2 size={14} />
@@ -2528,12 +2540,14 @@ function ProjectTrackingControl({
   busy,
   error,
   onPathChange,
+  onRemoveProject,
   onSelectFolder,
   onStart,
   onStop,
   onTrackPath,
   path,
   projects,
+  removingProjectId,
   status,
   suggestedProject
 }: {
@@ -2541,12 +2555,14 @@ function ProjectTrackingControl({
   busy: boolean;
   error: string;
   onPathChange(value: string): void;
+  onRemoveProject(project: LocalProject): void;
   onSelectFolder(): void;
   onStart(): void;
   onStop(): void;
   onTrackPath(value: string): void;
   path: string;
   projects: LocalProject[];
+  removingProjectId: string;
   status: ProjectTrackingStatus;
   suggestedProject: LocalProjectSuggestion | undefined;
 }): React.ReactElement {
@@ -2631,16 +2647,27 @@ function ProjectTrackingControl({
             <div className="project-list">
               <h3>Recent folders</h3>
               {recentProjects.map((project) => (
+                <div className={project.id === activeProject?.id ? "project-row active" : "project-row"} key={project.id}>
                 <button
                   className={project.id === activeProject?.id ? "project-option active" : "project-option"}
                   disabled={busy}
-                  key={project.id}
                   type="button"
                   onClick={() => onTrackPath(project.path)}
                 >
                   <span><GitBranch size={13} /> Track {project.name}</span>
                   <code>{project.path}</code>
                 </button>
+                  <button
+                    aria-label={`Remove ${project.name}`}
+                    className="project-remove-action"
+                    disabled={busy || removingProjectId.length > 0}
+                    title="Remove folder from Suka"
+                    type="button"
+                    onClick={() => onRemoveProject(project)}
+                  >
+                    {removingProjectId === project.id ? <RefreshCw size={13} /> : <Trash2 size={13} />}
+                  </button>
+                </div>
               ))}
             </div>
           ) : (
@@ -3856,9 +3883,7 @@ function buildFlow(
     })
   ];
 
-  const baseEdges = repoEdges.length > 0
-    ? repoEdges.map((item) => [item.source, item.target] as const)
-    : graphEdges;
+  const baseEdges = repoEdges.map((item) => [item.source, item.target] as const);
 
   const edges: Edge[] = [
     ...baseEdges.map(([source, target]) => {

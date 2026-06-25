@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import WebSocket from "ws";
@@ -103,6 +104,47 @@ test("project API registers, lists, and activates local folders", async () => {
   }
 });
 
+test("GET /api/repo-map uses the active project folder", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-project-map-api-"));
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  try {
+    const parentRepoDir = join(tempDir, "parent-repo");
+    const projectDir = join(parentRepoDir, "Quorexx");
+    mkdirSync(join(parentRepoDir, "apps", "dashboard", "src"), { recursive: true });
+    mkdirSync(join(projectDir, "src"), { recursive: true });
+    execFileSync("git", ["init"], { cwd: parentRepoDir, stdio: "ignore" });
+    writeFileSync(join(parentRepoDir, "apps", "dashboard", "src", "index.ts"), "export const dashboard = true;\n");
+    writeFileSync(join(projectDir, "src", "index.ts"), "export const app = true;\n");
+
+    const createResponse = await postJson(`${running.url}/api/projects`, {
+      path: projectDir
+    });
+    const createBody = await createResponse.json() as {
+      data: {
+        id: string;
+      };
+    };
+    await postJson(`${running.url}/api/projects/${encodeURIComponent(createBody.data.id)}/activate`, {});
+
+    const response = await fetch(`${running.url}/api/repo-map`);
+    const body = await response.json() as {
+      data: {
+        domains: Array<{ path: string }>;
+        root: string;
+      };
+    };
+
+    assert.equal(createResponse.status, 201);
+    assert.equal(response.status, 200);
+    assert.equal(body.data.root, "Quorexx");
+    assert.ok(body.data.domains.some((domain) => domain.path === "src"));
+    assert.ok(!body.data.domains.some((domain) => domain.path === "apps/dashboard"));
+  } finally {
+    await running.close();
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
 test("project API suggests the server launch folder", async () => {
   const running = await listen({ port: 0 }, createSukaHttpServer());
   try {
@@ -114,10 +156,11 @@ test("project API suggests the server launch folder", async () => {
         repo_root: string;
       };
     };
+    const launchFolder = realpathSync(process.cwd());
     const repoRoot = realpathSync(join(process.cwd(), "../.."));
 
     assert.equal(response.status, 200);
-    assert.equal(body.data.path, repoRoot);
+    assert.equal(body.data.path, launchFolder);
     assert.equal(body.data.repo_root, repoRoot);
     assert.ok(body.data.name.length > 0);
   } finally {
@@ -206,6 +249,62 @@ test("project API persists active project with file-backed state", async () => {
   }
 });
 
+test("project API removes registered folders without deleting local files", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-project-delete-api-"));
+  try {
+    const firstDir = join(tempDir, "first");
+    const secondDir = join(tempDir, "second");
+    mkdirSync(firstDir);
+    mkdirSync(secondDir);
+    const service = createSukaService();
+    const first = service.registerProject({
+      path: firstDir
+    });
+    const second = service.registerProject({
+      path: secondDir
+    });
+    service.activateProject(first.id);
+    const tracker = new ProjectTrackingWorker(service, {
+      detectLocalAgents: () => trackingDetectionReport(first.repo_root),
+      now: () => new Date("2026-06-18T10:05:00.000Z")
+    });
+    const running = await listen({ port: 0 }, createSukaHttpServer({
+      projectTracker: tracker,
+      service
+    }));
+    try {
+      const startResponse = await postJson(`${running.url}/api/projects/tracking/start`, {
+        project_id: first.id
+      });
+      assert.equal(startResponse.status, 200);
+      assert.equal(service.getState().presence.length, 1);
+
+      const deleteResponse = await fetch(`${running.url}/api/projects/${encodeURIComponent(first.id)}`, {
+        method: "DELETE"
+      });
+      const deleteBody = await deleteResponse.json() as {
+        data: {
+          active_project: { id: string } | null;
+          project: { id: string };
+          projects: Array<{ id: string }>;
+        };
+      };
+
+      assert.equal(deleteResponse.status, 200);
+      assert.equal(deleteBody.data.project.id, first.id);
+      assert.deepEqual(deleteBody.data.projects.map((project) => project.id), [second.id]);
+      assert.equal(deleteBody.data.active_project?.id, second.id);
+      assert.equal(service.getState().presence.length, 0);
+      assert.equal(tracker.status().running, false);
+      assert.equal(existsSync(firstDir), true);
+    } finally {
+      await running.close();
+    }
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
 test("project API returns client errors for invalid project paths", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "suka-project-api-"));
   const running = await listen({ port: 0 }, createSukaHttpServer());
@@ -235,6 +334,22 @@ test("project API returns not found when activating a missing project", async ()
   const running = await listen({ port: 0 }, createSukaHttpServer());
   try {
     const response = await postJson(`${running.url}/api/projects/missing/activate`, {});
+    const body = await response.json() as { error: { code: string; message: string } };
+
+    assert.equal(response.status, 404);
+    assert.equal(body.error.code, "project_not_found");
+    assert.match(body.error.message, /not found/);
+  } finally {
+    await running.close();
+  }
+});
+
+test("project API returns not found when removing a missing project", async () => {
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  try {
+    const response = await fetch(`${running.url}/api/projects/missing`, {
+      method: "DELETE"
+    });
     const body = await response.json() as { error: { code: string; message: string } };
 
     assert.equal(response.status, 404);

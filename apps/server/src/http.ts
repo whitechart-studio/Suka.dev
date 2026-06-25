@@ -164,8 +164,11 @@ async function routeRequest(
   }
 
   if (method === "GET" && url.pathname === "/api/repo-map") {
+    const activeProject = service.getActiveProject();
     writeJson(response, 200, {
-      data: await buildRepoMap()
+      data: activeProject === undefined
+        ? await buildRepoMap()
+        : await buildRepoMap(activeProject.path, { climbToWorkspaceRoot: false })
     });
     return;
   }
@@ -486,6 +489,33 @@ async function routeRequest(
 
     writeJson(response, 200, {
       data: project
+    });
+    return;
+  }
+
+  const projectDeleteMatch = /^\/api\/projects\/([^/]+)$/.exec(url.pathname);
+  if (method === "DELETE" && projectDeleteMatch?.[1] !== undefined) {
+    const id = decodeURIComponent(projectDeleteMatch[1]);
+    if (projectTracker.status().active_project_id === id) {
+      projectTracker.stop();
+    }
+    const project = service.removeProject(id);
+    if (project === undefined) {
+      writeJson(response, 404, {
+        error: {
+          code: "project_not_found",
+          message: "Project was not found."
+        }
+      });
+      return;
+    }
+
+    writeJson(response, 200, {
+      data: {
+        active_project: service.getActiveProject() ?? null,
+        project,
+        projects: service.listProjects()
+      }
     });
     return;
   }

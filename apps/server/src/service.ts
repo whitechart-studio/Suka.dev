@@ -24,6 +24,7 @@ export interface SukaService {
   getActiveProject(): LocalProject | undefined;
   registerProject(input: LocalProjectInput): LocalProject;
   activateProject(id: string): LocalProject | undefined;
+  removeProject(id: string): LocalProject | undefined;
   publish(pointer: unknown): ValidationResult<Pointer>;
   checkConflicts(subject: ConflictSubject): ConflictWarning[];
   releaseClaim(id: string): boolean;
@@ -57,7 +58,7 @@ export function createSukaService(store: SukaStore = new MemorySukaStore()): Suk
     registerProject(input: LocalProjectInput) {
       const state = store.getState();
       const metadata = inspectLocalProject(input);
-      const existing = state.projects.find((project) => project.path === metadata.path || project.repo_root === metadata.repo_root);
+      const existing = state.projects.find((project) => project.path === metadata.path);
       const project = buildLocalProjectFromMetadata(metadata, input, existing);
       store.upsertProject(project);
       return project;
@@ -81,6 +82,20 @@ export function createSukaService(store: SukaStore = new MemorySukaStore()): Suk
         return undefined;
       }
       return updated;
+    },
+
+    removeProject(id: string) {
+      const project = store.getState().projects.find((item) => item.id === id);
+      if (project === undefined) {
+        return undefined;
+      }
+
+      store.cleanup({
+        repo_id: project.repo_id,
+        session_id: projectTrackingSessionId(project),
+        workspace_id: project.workspace_id
+      });
+      return store.removeProject(id);
     },
 
     publish(pointer: unknown) {
@@ -138,4 +153,8 @@ function persistPointer(store: SukaStore, pointer: Pointer): void {
       store.appendLedger(pointer as LedgerPointer);
       return;
   }
+}
+
+function projectTrackingSessionId(project: LocalProject): string {
+  return `project-tracking-${project.id}`;
 }

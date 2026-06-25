@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { createSukaService } from "./index.js";
 
@@ -31,7 +31,7 @@ test("registers local projects from folder metadata", () => {
   }
 });
 
-test("deduplicates registered projects by normalized repo root", () => {
+test("registers nested project folders separately from their parent git repo", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "suka-project-"));
   try {
     const repoDir = join(tempDir, "repo");
@@ -49,10 +49,77 @@ test("deduplicates registered projects by normalized repo root", () => {
       path: nestedDir
     });
 
-    assert.equal(first.id, second.id);
-    assert.equal(service.listProjects().length, 1);
-    assert.equal(service.listProjects()[0]?.created_at, "2026-06-18T10:00:00.000Z");
-    assert.equal(service.listProjects()[0]?.updated_at, "2026-06-18T10:05:00.000Z");
+    assert.notEqual(first.id, second.id);
+    assert.equal(second.name, "server");
+    assert.equal(basename(second.path), "server");
+    assert.equal(basename(second.repo_root), "repo");
+    assert.ok(toSlash(second.path).endsWith("/repo/apps/server"));
+    assert.ok(toSlash(second.repo_root).endsWith("/repo"));
+    assert.equal(second.repo_id, "repo-apps-server");
+    assert.deepEqual(service.listProjects().map((project) => project.id), [first.id, second.id]);
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
+function toSlash(path: string): string {
+  return path.replaceAll("\\", "/");
+}
+
+test("removes registered projects without deleting local folders", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-project-remove-"));
+  try {
+    const firstDir = join(tempDir, "first");
+    const secondDir = join(tempDir, "second");
+    mkdirSync(firstDir);
+    mkdirSync(secondDir);
+
+    const service = createSukaService();
+    const first = service.registerProject({
+      now: new Date("2026-06-18T10:00:00.000Z"),
+      path: firstDir
+    });
+    const second = service.registerProject({
+      now: new Date("2026-06-18T10:01:00.000Z"),
+      path: secondDir
+    });
+    service.activateProject(first.id);
+    service.publish({
+      type: "presence",
+      id: "ptr_presence_tracked",
+      workspace_id: first.workspace_id,
+      repo_id: first.repo_id,
+      session_id: `project-tracking-${first.id}`,
+      agent_id: "codex-pid-101",
+      tool: "codex",
+      repo: first.repo,
+      status: "online",
+      current_files: ["src/index.ts"],
+      last_seen: "2026-06-18T10:02:00.000Z",
+      expires_at: "2099-06-18T10:02:00.000Z"
+    });
+    service.publish({
+      type: "presence",
+      id: "ptr_presence_manual",
+      workspace_id: first.workspace_id,
+      repo_id: first.repo_id,
+      session_id: "manual-session",
+      agent_id: "manual-agent",
+      tool: "codex",
+      repo: first.repo,
+      status: "online",
+      current_files: ["src/manual.ts"],
+      last_seen: "2026-06-18T10:02:00.000Z",
+      expires_at: "2099-06-18T10:02:00.000Z"
+    });
+
+    const removed = service.removeProject(first.id);
+
+    assert.equal(removed?.id, first.id);
+    assert.deepEqual(service.listProjects().map((project) => project.id), [second.id]);
+    assert.equal(service.getActiveProject()?.id, second.id);
+    assert.deepEqual(service.getState().presence.map((presence) => presence.id), ["ptr_presence_manual"]);
+    assert.equal(existsSync(firstDir), true);
   } finally {
     rmSync(tempDir, { force: true, recursive: true });
   }

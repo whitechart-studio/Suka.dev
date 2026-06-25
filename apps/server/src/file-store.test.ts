@@ -113,6 +113,34 @@ test("file store persists registered projects and active project", () => {
   }
 });
 
+test("file store persists removed projects and active fallback", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-store-"));
+  try {
+    const dataFile = join(tempDir, "state.json");
+    const first = createSukaService(new FileSukaStore(dataFile));
+    const firstDir = join(tempDir, "first");
+    const secondDir = join(tempDir, "second");
+    mkdirSync(firstDir);
+    mkdirSync(secondDir);
+
+    const removedProject = first.registerProject({
+      path: firstDir
+    });
+    const fallbackProject = first.registerProject({
+      path: secondDir
+    });
+    first.activateProject(removedProject.id);
+    first.removeProject(removedProject.id);
+
+    const second = createSukaService(new FileSukaStore(dataFile));
+
+    assert.deepEqual(second.listProjects().map((project) => project.id), [fallbackProject.id]);
+    assert.equal(second.getActiveProject()?.id, fallbackProject.id);
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
 test("file store ignores active project ids that do not exist", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "suka-store-"));
   try {

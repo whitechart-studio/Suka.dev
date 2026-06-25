@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { realpathSync, statSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { basename, isAbsolute, relative, resolve } from "node:path";
 import type { LocalProject } from "./state.js";
 
 export interface LocalProjectInput {
@@ -25,11 +25,11 @@ export function inspectLocalProject(input: LocalProjectInput): LocalProjectMetad
   const normalizedRepoRoot = normalizeExistingDirectory(repoRoot);
   const repo = gitRepoName(normalizedRepoRoot) ?? basename(normalizedRepoRoot);
   const branch = gitOutput(normalizedRepoRoot, ["branch", "--show-current"]);
-  const repoId = slug(repo);
+  const repoId = slug(projectScopedRepoId(repo, normalizedRepoRoot, projectPath));
 
   return {
-    name: basename(normalizedRepoRoot),
-    path: normalizedRepoRoot,
+    name: basename(projectPath),
+    path: projectPath,
     repo,
     repo_id: repoId,
     repo_root: normalizedRepoRoot,
@@ -49,7 +49,7 @@ export function buildLocalProjectFromMetadata(
   existing?: LocalProject
 ): LocalProject {
   const timestamp = (input.now ?? new Date()).toISOString();
-  const id = existing?.id ?? `project_${hashId(metadata.repo_root)}`;
+  const id = existing?.id ?? `project_${hashId(metadata.path)}`;
 
   return {
     id,
@@ -93,6 +93,54 @@ function gitOutput(cwd: string, args: string[]): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function projectScopedRepoId(repo: string, repoRoot: string, projectPath: string): string {
+  const relativePath = repoRelativePath(repoRoot, projectPath);
+  if (relativePath === undefined) {
+    return repo;
+  }
+  return `${repo}/${relativePath}`;
+}
+
+function repoRelativePath(repoRoot: string, projectPath: string): string | undefined {
+  const relativePath = relative(repoRoot, projectPath);
+  const normalizedRelativePath = toSlash(relativePath);
+  if (normalizedRelativePath.length > 0 && !normalizedRelativePath.startsWith("..") && !isAbsolute(relativePath)) {
+    return normalizedRelativePath;
+  }
+
+  return aliasSafeRelativePath(repoRoot, projectPath);
+}
+
+function aliasSafeRelativePath(repoRoot: string, projectPath: string): string | undefined {
+  const repoSegments = pathSegments(repoRoot);
+  const projectSegments = pathSegments(projectPath);
+
+  for (let repoStart = 0; repoStart < repoSegments.length; repoStart += 1) {
+    const repoSuffix = repoSegments.slice(repoStart);
+    for (let projectStart = 0; projectStart <= projectSegments.length - repoSuffix.length; projectStart += 1) {
+      const projectSlice = projectSegments.slice(projectStart, projectStart + repoSuffix.length);
+      if (segmentsEqual(repoSuffix, projectSlice)) {
+        const nestedSegments = projectSegments.slice(projectStart + repoSuffix.length);
+        return nestedSegments.length > 0 ? nestedSegments.join("/") : undefined;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function pathSegments(path: string): string[] {
+  return toSlash(path).split("/").filter(Boolean);
+}
+
+function segmentsEqual(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((segment, index) => segment.toLowerCase() === right[index]?.toLowerCase());
+}
+
+function toSlash(path: string): string {
+  return path.replaceAll("\\", "/");
 }
 
 function slug(value: string): string {
