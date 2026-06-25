@@ -1381,9 +1381,14 @@ function ledgerEfficiencyFilters(
     if (budgetScope === undefined || warningThreshold === undefined || hardLimit === undefined) {
       throw new Error("ledger token efficiency budget requires --budget-scope, --warning-threshold, and --hard-limit.");
     }
+    const warningTokens = readIntegerFlag(flags, "warning-threshold");
+    const hardLimitTokens = readIntegerFlag(flags, "hard-limit");
+    if (warningTokens === undefined || hardLimitTokens === undefined) {
+      throw new Error("ledger token efficiency budget thresholds must be integers.");
+    }
     filters.budget_scope = budgetScope;
-    filters.warning_threshold_tokens = String(readIntegerFlag(flags, "warning-threshold"));
-    filters.hard_limit_tokens = String(readIntegerFlag(flags, "hard-limit"));
+    filters.warning_threshold_tokens = String(warningTokens);
+    filters.hard_limit_tokens = String(hardLimitTokens);
   }
   return filters;
 }

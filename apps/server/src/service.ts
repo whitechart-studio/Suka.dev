@@ -73,6 +73,15 @@ export const DEFAULT_LEDGER_PRIVACY_DEFAULTS: LedgerPrivacyDefaults = {
   retention_days: 7
 };
 
+export class LedgerBudgetPolicyError extends Error {
+  readonly code = "invalid_ledger_budget";
+
+  constructor(message = "Ledger budget policy validation failed.") {
+    super(message);
+    this.name = "LedgerBudgetPolicyError";
+  }
+}
+
 export interface LedgerCheckpointSummary {
   checkpoint: Checkpoint;
   related_task_ids: string[];
@@ -154,7 +163,7 @@ export function createSukaService(store: SukaStore = new MemorySukaStore()): Suk
       if (budgetPolicy !== undefined) {
         const result = validateLedgerBudgetPolicy(budgetPolicy);
         if (!result.ok) {
-          throw new Error("Ledger budget policy validation failed.");
+          throw new LedgerBudgetPolicyError();
         }
       }
       return [buildTokenEfficiencyRollup(filters, store.getState(), budgetPolicy)];
@@ -425,7 +434,7 @@ function buildTokenEfficiencyRollup(
 
   const rollup: TokenEfficiencyRollup = {
     scope: tokenEfficiencyScope(filters),
-    related_task_ids: tokenUsage.map((usage) => usage.task_id),
+    related_task_ids: uniqueStrings(tokenUsage.map((usage) => usage.task_id)),
     assessed_task_ids: uniqueStrings(assessedTaskIds),
     unassessed_task_ids: uniqueStrings(unassessedTaskIds),
     totals

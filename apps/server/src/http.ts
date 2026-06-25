@@ -10,8 +10,8 @@ import { ProjectTrackingError, ProjectTrackingWorker } from "./project-tracker.j
 import { inspectLocalProject } from "./projects.js";
 import { RealtimeHub } from "./realtime.js";
 import { buildRepoMap } from "./repo-map.js";
-import { createSukaService, type LedgerRecordFilters, type SukaService } from "./service.js";
-import type { LedgerBudgetPolicy } from "@suka/protocol";
+import { createSukaService, LedgerBudgetPolicyError, type LedgerRecordFilters, type SukaService } from "./service.js";
+import { validateLedgerBudgetPolicy, type LedgerBudgetPolicy, type LedgerBudgetScope } from "@suka/protocol";
 import type { LocalProject } from "./state.js";
 
 const require = createRequire(import.meta.url);
@@ -49,12 +49,12 @@ export function createSukaHttpServer(options: HttpServerOptions = {}): Server {
       await routeRequest(service, realtime, projectTracker, folderPicker, request, response);
     } catch (error) {
       logger?.log("error", "request failed", {
-        error_code: error instanceof HttpInputError ? error.code : "internal_error",
+        error_code: error instanceof HttpInputError || error instanceof LedgerBudgetPolicyError ? error.code : "internal_error",
         error_message: error instanceof Error ? error.message : "Unexpected server error.",
         method: request.method ?? "GET",
         path: request.url ?? "/"
       });
-      if (error instanceof HttpInputError) {
+      if (error instanceof HttpInputError || error instanceof LedgerBudgetPolicyError) {
         writeJson(response, 400, {
           error: {
             code: error.code,
@@ -817,21 +817,35 @@ function parseLedgerBudgetPolicy(url: URL): LedgerBudgetPolicy | undefined {
   if (scope === null || warningThreshold === null || hardLimit === null) {
     throw new HttpInputError("invalid_ledger_budget", "Budget policy requires budget_scope, warning_threshold_tokens, and hard_limit_tokens.");
   }
+  if (!isLedgerBudgetScope(scope)) {
+    throw new HttpInputError("invalid_ledger_budget", "budget_scope must be either session or task.");
+  }
 
-  const policy = {
+  const policy: LedgerBudgetPolicy = {
     scope,
     warning_threshold_tokens: parseNonNegativeInteger(warningThreshold, "warning_threshold_tokens"),
     hard_limit_tokens: parseNonNegativeInteger(hardLimit, "hard_limit_tokens")
   };
-  return policy as LedgerBudgetPolicy;
+  const result = validateLedgerBudgetPolicy(policy);
+  if (!result.ok) {
+    throw new HttpInputError("invalid_ledger_budget", "Ledger budget policy validation failed.");
+  }
+  return policy;
 }
 
 function parseNonNegativeInteger(value: string, key: string): number {
+  if (value.trim().length === 0) {
+    throw new HttpInputError("invalid_ledger_budget", `${key} must be a non-negative integer.`);
+  }
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 0) {
     throw new HttpInputError("invalid_ledger_budget", `${key} must be a non-negative integer.`);
   }
   return parsed;
+}
+
+function isLedgerBudgetScope(value: string): value is LedgerBudgetScope {
+  return value === "session" || value === "task";
 }
 
 function registerProject(service: SukaService, body: unknown): LocalProject {

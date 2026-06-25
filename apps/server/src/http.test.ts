@@ -1175,6 +1175,33 @@ test("ledger MVP API stores and filters structured ledger records", async () => 
   }
 });
 
+test("ledger token efficiency rejects malformed budget query parameters", async () => {
+  const running = await listen({ port: 0 }, createSukaHttpServer());
+  try {
+    const invalidScopeResponse = await fetch(
+      `${running.url}/api/ledger/token-efficiency?budget_scope=project&warning_threshold_tokens=100&hard_limit_tokens=200`
+    );
+    const invalidScopeBody = await invalidScopeResponse.json() as { error: { code: string } };
+    const blankThresholdResponse = await fetch(
+      `${running.url}/api/ledger/token-efficiency?budget_scope=session&warning_threshold_tokens=&hard_limit_tokens=200`
+    );
+    const blankThresholdBody = await blankThresholdResponse.json() as { error: { code: string } };
+    const invertedLimitResponse = await fetch(
+      `${running.url}/api/ledger/token-efficiency?budget_scope=session&warning_threshold_tokens=300&hard_limit_tokens=200`
+    );
+    const invertedLimitBody = await invertedLimitResponse.json() as { error: { code: string } };
+
+    assert.equal(invalidScopeResponse.status, 400);
+    assert.equal(invalidScopeBody.error.code, "invalid_ledger_budget");
+    assert.equal(blankThresholdResponse.status, 400);
+    assert.equal(blankThresholdBody.error.code, "invalid_ledger_budget");
+    assert.equal(invertedLimitResponse.status, 400);
+    assert.equal(invertedLimitBody.error.code, "invalid_ledger_budget");
+  } finally {
+    await running.close();
+  }
+});
+
 test("ledger MVP API returns validation errors without persisting malformed records", async () => {
   const running = await listen({ port: 0 }, createSukaHttpServer());
   try {

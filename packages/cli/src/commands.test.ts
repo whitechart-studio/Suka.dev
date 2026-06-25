@@ -1964,6 +1964,39 @@ test("ledger token efficiency requires complete budget flags", async () => {
   assert.match(errors.join(""), /budget requires --budget-scope, --warning-threshold, and --hard-limit/);
 });
 
+test("ledger token efficiency rejects invalid budget thresholds before requesting", async () => {
+  const requests: unknown[] = [];
+  const errors: string[] = [];
+  const result = await runCli({
+    argv: [
+      "ledger",
+      "token",
+      "efficiency",
+      "--server",
+      "http://suka.test",
+      "--budget-scope",
+      "session",
+      "--warning-threshold",
+      "abc",
+      "--hard-limit",
+      "1400"
+    ],
+    env: {},
+    fetch: async (url, init) => {
+      requests.push({ init, url });
+      return jsonResponse(200, []);
+    },
+    io: {
+      stdout: { write: () => undefined },
+      stderr: { write: (value: string) => errors.push(value) }
+    }
+  });
+
+  assert.equal(result.exitCode, 1);
+  assert.equal(requests.length, 0);
+  assert.match(errors.join(""), /--warning-threshold must be a non-negative integer/);
+});
+
 test("ledger governance reads privacy defaults", async () => {
   const requests: string[] = [];
   const output: string[] = [];
