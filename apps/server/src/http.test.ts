@@ -1112,6 +1112,34 @@ test("ledger MVP API stores and filters structured ledger records", async () => 
         totals: { total_tokens: number };
       }>;
     };
+    const efficiencyResponse = await fetch(
+      `${running.url}/api/ledger/token-efficiency?issue_id=170&budget_scope=session&warning_threshold_tokens=6000&hard_limit_tokens=7000`
+    );
+    const efficiencyBody = await efficiencyResponse.json() as {
+      data: Array<{
+        assessed_task_ids: string[];
+        budget: { level: string; remaining_tokens: number };
+        related_task_ids: string[];
+        totals: {
+          estimated_cost: number;
+          total_tokens: number;
+          useful_tokens: number;
+        };
+        useful_token_ratio: number;
+      }>;
+    };
+    const governanceResponse = await fetch(`${running.url}/api/ledger/governance`);
+    const governanceBody = await governanceResponse.json() as {
+      data: {
+        privacy_defaults: {
+          publish_diff_content: boolean;
+          publish_file_paths: boolean;
+          publish_prompt_text: boolean;
+          publish_terminal_logs: boolean;
+          retention_days: number;
+        };
+      };
+    };
     const stateResponse = await fetch(`${running.url}/api/state`);
     const stateBody = await stateResponse.json() as { data: { ledger_tasks: Array<{ task_id: string }> } };
 
@@ -1126,6 +1154,21 @@ test("ledger MVP API stores and filters structured ledger records", async () => 
     assert.deepEqual(checkpointSummariesBody.data[0]?.related_session_ids, ["session-a"]);
     assert.deepEqual(checkpointSummariesBody.data[0]?.affected_paths, ["apps/server/src/http.ts"]);
     assert.equal(checkpointSummariesBody.data[0]?.totals.total_tokens, 6400);
+    assert.deepEqual(efficiencyBody.data[0]?.related_task_ids, ["task_api_01"]);
+    assert.deepEqual(efficiencyBody.data[0]?.assessed_task_ids, ["task_api_01"]);
+    assert.equal(efficiencyBody.data[0]?.totals.total_tokens, 6400);
+    assert.equal(efficiencyBody.data[0]?.totals.estimated_cost, 0.18);
+    assert.equal(efficiencyBody.data[0]?.totals.useful_tokens, 6400);
+    assert.equal(efficiencyBody.data[0]?.useful_token_ratio, 1);
+    assert.equal(efficiencyBody.data[0]?.budget.level, "warning");
+    assert.equal(efficiencyBody.data[0]?.budget.remaining_tokens, 600);
+    assert.deepEqual(governanceBody.data.privacy_defaults, {
+      publish_file_paths: true,
+      publish_diff_content: false,
+      publish_terminal_logs: false,
+      publish_prompt_text: false,
+      retention_days: 7
+    });
     assert.deepEqual(stateBody.data.ledger_tasks.map((entry) => entry.task_id), ["task_api_01", "task_api_other"]);
   } finally {
     await running.close();

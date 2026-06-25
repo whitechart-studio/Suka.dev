@@ -1884,6 +1884,117 @@ test("ledger checkpoint summary reads checkpoint rollups", async () => {
   assert.match(output.join(""), /1600/);
 });
 
+test("ledger token efficiency reads rollups with budget policy", async () => {
+  const requests: string[] = [];
+  const output: string[] = [];
+  const result = await runCli({
+    argv: [
+      "ledger",
+      "token",
+      "efficiency",
+      "--server",
+      "http://suka.test",
+      "--repo-id",
+      "repo-a",
+      "--issue-id",
+      "173",
+      "--budget-scope",
+      "session",
+      "--warning-threshold",
+      "1000",
+      "--hard-limit",
+      "1400"
+    ],
+    env: {},
+    fetch: async (url, init) => {
+      requests.push(String(url));
+      assert.equal(init?.method, "GET");
+      return jsonResponse(200, [{
+        related_task_ids: ["task_delivery"],
+        totals: {
+          total_tokens: 1200,
+          useful_tokens: 900
+        },
+        useful_token_ratio: 0.75
+      }]);
+    },
+    io: {
+      stdout: { write: (value: string) => output.push(value) },
+      stderr: { write: () => undefined }
+    }
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(
+    requests[0],
+    "http://suka.test/api/ledger/token-efficiency?repo_id=repo-a&issue_id=173&budget_scope=session&warning_threshold_tokens=1000&hard_limit_tokens=1400"
+  );
+  assert.match(output.join(""), /task_delivery/);
+  assert.match(output.join(""), /0.75/);
+});
+
+test("ledger token efficiency requires complete budget flags", async () => {
+  const requests: unknown[] = [];
+  const errors: string[] = [];
+  const result = await runCli({
+    argv: [
+      "ledger",
+      "token",
+      "efficiency",
+      "--server",
+      "http://suka.test",
+      "--budget-scope",
+      "session",
+      "--warning-threshold",
+      "1000"
+    ],
+    env: {},
+    fetch: async (url, init) => {
+      requests.push({ init, url });
+      return jsonResponse(200, []);
+    },
+    io: {
+      stdout: { write: () => undefined },
+      stderr: { write: (value: string) => errors.push(value) }
+    }
+  });
+
+  assert.equal(result.exitCode, 1);
+  assert.equal(requests.length, 0);
+  assert.match(errors.join(""), /budget requires --budget-scope, --warning-threshold, and --hard-limit/);
+});
+
+test("ledger governance reads privacy defaults", async () => {
+  const requests: string[] = [];
+  const output: string[] = [];
+  const result = await runCli({
+    argv: ["ledger", "governance", "--server", "http://suka.test"],
+    env: {},
+    fetch: async (url, init) => {
+      requests.push(String(url));
+      assert.equal(init?.method, "GET");
+      return jsonResponse(200, {
+        privacy_defaults: {
+          publish_file_paths: true,
+          publish_diff_content: false,
+          publish_terminal_logs: false,
+          publish_prompt_text: false,
+          retention_days: 7
+        }
+      });
+    },
+    io: {
+      stdout: { write: (value: string) => output.push(value) },
+      stderr: { write: () => undefined }
+    }
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(requests[0], "http://suka.test/api/ledger/governance");
+  assert.match(output.join(""), /publish_prompt_text/);
+  assert.match(output.join(""), /false/);
+});
+
 test("remind reports missing shared-truth updates for changed files", async () => {
   const requests: Array<{ init?: RequestInit; url: string }> = [];
   const output: string[] = [];

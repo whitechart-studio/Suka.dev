@@ -570,8 +570,13 @@ async function ledgerCommand(
   if (group === "checkpoint") {
     return await ledgerCheckpointCommand(context, client, rest, flags, config, now);
   }
+  if (group === "governance") {
+    const result = await client.getLedgerGovernance();
+    context.io.stdout.write(formatJson(result));
+    return { exitCode: 0 };
+  }
 
-  throw new Error("ledger requires a supported group: task, token, event, or checkpoint.");
+  throw new Error("ledger requires a supported group: task, token, event, checkpoint, or governance.");
 }
 
 async function ledgerTaskCommand(
@@ -724,7 +729,13 @@ async function ledgerTokenCommand(
     return { exitCode: 0 };
   }
 
-  throw new Error("ledger token requires a supported action: record, assess, read, or assessments.");
+  if (action === "efficiency") {
+    const result = await client.listLedgerTokenEfficiency(ledgerEfficiencyFilters(flags, config, context.env));
+    context.io.stdout.write(formatJson(result));
+    return { exitCode: 0 };
+  }
+
+  throw new Error("ledger token requires a supported action: record, assess, read, assessments, or efficiency.");
 }
 
 async function ledgerEventCommand(
@@ -1352,6 +1363,28 @@ function ledgerFilters(
   if (taskId !== undefined) filters.task_id = taskId;
   const checkpointId = readStringFlag(flags, "checkpoint-id");
   if (checkpointId !== undefined) filters.checkpoint_id = checkpointId;
+  const issueId = readStringFlag(flags, "issue-id");
+  if (issueId !== undefined) filters.issue_id = issueId;
+  return filters;
+}
+
+function ledgerEfficiencyFilters(
+  flags: Parameters<typeof readStringFlag>[0],
+  config: ReturnType<typeof loadConfig>,
+  env: NodeJS.ProcessEnv
+): LedgerRecordFilters {
+  const filters = ledgerFilters(flags, config, env);
+  const budgetScope = readStringFlag(flags, "budget-scope");
+  const warningThreshold = readStringFlag(flags, "warning-threshold");
+  const hardLimit = readStringFlag(flags, "hard-limit");
+  if (budgetScope !== undefined || warningThreshold !== undefined || hardLimit !== undefined) {
+    if (budgetScope === undefined || warningThreshold === undefined || hardLimit === undefined) {
+      throw new Error("ledger token efficiency budget requires --budget-scope, --warning-threshold, and --hard-limit.");
+    }
+    filters.budget_scope = budgetScope;
+    filters.warning_threshold_tokens = String(readIntegerFlag(flags, "warning-threshold"));
+    filters.hard_limit_tokens = String(readIntegerFlag(flags, "hard-limit"));
+  }
   return filters;
 }
 

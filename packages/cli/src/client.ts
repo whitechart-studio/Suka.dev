@@ -14,9 +14,13 @@ export interface ApiResponse<T> {
 
 export interface LedgerRecordFilters {
   checkpoint_id?: string;
+  hard_limit_tokens?: string;
+  issue_id?: string;
   repo_id?: string;
   session_id?: string;
   task_id?: string;
+  budget_scope?: string;
+  warning_threshold_tokens?: string;
   workspace_id?: string;
 }
 
@@ -75,6 +79,14 @@ export class SukaApiClient {
 
   async listLedgerTokenAssessments(filters?: LedgerRecordFilters): Promise<unknown> {
     return this.#request("GET", withQuery("/api/ledger/token-assessments", filters));
+  }
+
+  async listLedgerTokenEfficiency(filters?: LedgerRecordFilters): Promise<unknown> {
+    return this.#request("GET", withQuery("/api/ledger/token-efficiency", filters));
+  }
+
+  async getLedgerGovernance(): Promise<unknown> {
+    return this.#request("GET", "/api/ledger/governance");
   }
 
   async createLedgerTokenAssessment(assessment: unknown): Promise<unknown> {

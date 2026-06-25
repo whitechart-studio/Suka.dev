@@ -481,6 +481,133 @@ test("builds checkpoint summaries across tasks issues sessions events and token 
   );
 });
 
+test("computes token efficiency rollups with empty partial and mixed-category data", () => {
+  const service = createSukaService();
+
+  assert.deepEqual(service.getLedgerGovernance().privacy_defaults, {
+    publish_file_paths: true,
+    publish_diff_content: false,
+    publish_terminal_logs: false,
+    publish_prompt_text: false,
+    retention_days: 7
+  });
+  assert.deepEqual(service.listLedgerTokenEfficiencyRollups({ repo_id: "repo-empty" }), [{
+    scope: {
+      repo_id: "repo-empty"
+    },
+    related_task_ids: [],
+    assessed_task_ids: [],
+    unassessed_task_ids: [],
+    totals: {
+      discarded_tokens: 0,
+      estimated_cost: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+      rework_tokens: 0,
+      total_tokens: 0,
+      unassessed_tokens: 0,
+      unknown_tokens: 0,
+      useful_tokens: 0
+    }
+  }]);
+
+  const baseTask = {
+    session_id: "session-a",
+    repo_id: "repo-a",
+    workspace_id: "workspace-a",
+    task_type: "implementation",
+    status: "completed",
+    started_at: "2026-06-25T06:00:00.000Z",
+    related_claim_ids: [],
+    related_checkpoint_ids: ["checkpoint_pr_181"]
+  };
+  for (const task of [
+    {
+      ...baseTask,
+      task_id: "task_delivery",
+      title: "Delivery task",
+      intent_summary: "Useful implementation.",
+      related_issue_ids: ["173"]
+    },
+    {
+      ...baseTask,
+      task_id: "task_rework",
+      title: "Rework task",
+      intent_summary: "Correct earlier implementation.",
+      related_issue_ids: ["173"]
+    },
+    {
+      ...baseTask,
+      task_id: "task_discarded",
+      title: "Discarded task",
+      intent_summary: "Unused exploration.",
+      related_issue_ids: ["173"]
+    },
+    {
+      ...baseTask,
+      task_id: "task_unassessed",
+      session_id: "session-b",
+      title: "Unassessed task",
+      intent_summary: "No assessment yet.",
+      related_issue_ids: ["174"]
+    }
+  ]) {
+    assert.equal(service.recordLedgerTask(task).ok, true);
+  }
+  for (const usage of [
+    { task_id: "task_delivery", input_tokens: 100, output_tokens: 200, total_tokens: 300, estimated_cost: 0.03 },
+    { task_id: "task_rework", input_tokens: 200, output_tokens: 300, total_tokens: 500, estimated_cost: 0.05 },
+    { task_id: "task_discarded", input_tokens: 300, output_tokens: 400, total_tokens: 700, estimated_cost: 0.07 },
+    { task_id: "task_unassessed", input_tokens: 400, output_tokens: 500, total_tokens: 900, estimated_cost: 0.09 }
+  ]) {
+    assert.equal(service.recordLedgerTokenUsage({
+      ...usage,
+      provider: "openai",
+      measurement_source: "manual"
+    }).ok, true);
+  }
+  for (const assessment of [
+    { task_id: "task_delivery", value_category: "delivery" },
+    { task_id: "task_rework", value_category: "rework" },
+    { task_id: "task_discarded", value_category: "discarded" }
+  ]) {
+    assert.equal(service.recordLedgerTokenAssessment({
+      ...assessment,
+      assessed_by: "user",
+      confidence: "high"
+    }).ok, true);
+  }
+
+  const issueRollup = service.listLedgerTokenEfficiencyRollups({ issue_id: "173" }, {
+    scope: "session",
+    warning_threshold_tokens: 1000,
+    hard_limit_tokens: 1400
+  })[0];
+  assert.deepEqual(issueRollup?.related_task_ids, ["task_delivery", "task_rework", "task_discarded"]);
+  assert.deepEqual(issueRollup?.assessed_task_ids, ["task_delivery", "task_rework", "task_discarded"]);
+  assert.deepEqual(issueRollup?.unassessed_task_ids, []);
+  assert.equal(issueRollup?.totals.input_tokens, 600);
+  assert.equal(issueRollup?.totals.output_tokens, 900);
+  assert.equal(issueRollup?.totals.total_tokens, 1500);
+  assert.equal(issueRollup?.totals.useful_tokens, 300);
+  assert.equal(issueRollup?.totals.rework_tokens, 500);
+  assert.equal(issueRollup?.totals.discarded_tokens, 700);
+  assert.equal(issueRollup?.totals.unassessed_tokens, 0);
+  assert.equal(issueRollup?.useful_token_ratio, 0.2);
+  assert.equal(issueRollup?.budget?.level, "exceeded");
+  assert.equal(issueRollup?.budget?.remaining_tokens, 0);
+
+  const sessionRollup = service.listLedgerTokenEfficiencyRollups({ session_id: "session-b" }, {
+    scope: "session",
+    warning_threshold_tokens: 800,
+    hard_limit_tokens: 1000
+  })[0];
+  assert.deepEqual(sessionRollup?.related_task_ids, ["task_unassessed"]);
+  assert.deepEqual(sessionRollup?.unassessed_task_ids, ["task_unassessed"]);
+  assert.equal(sessionRollup?.totals.unassessed_tokens, 900);
+  assert.equal(sessionRollup?.budget?.level, "warning");
+});
+
 test("rejects invalid structured ledger records before persistence", () => {
   const service = createSukaService();
 

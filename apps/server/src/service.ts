@@ -7,14 +7,18 @@ import {
   type EventPointer,
   type LedgerEvent,
   type LedgerPointer,
+  type LedgerBudgetPolicy,
+  type LedgerPrivacyDefaults,
   type Pointer,
   type PresencePointer,
   type TaskEntry,
+  type TokenEfficiencyRollup,
   type TokenAssessment,
   type TokenUsage,
   type CoordinationContext,
   type ValidationResult,
   validateCheckpoint,
+  validateLedgerBudgetPolicy,
   validateLedgerEvent,
   validatePointer,
   validateTaskEntry,
@@ -36,6 +40,8 @@ export interface SukaService {
   listLedgerEvents(filters?: LedgerRecordFilters): LedgerEvent[];
   listLedgerCheckpoints(filters?: LedgerRecordFilters): Checkpoint[];
   listLedgerCheckpointSummaries(filters?: LedgerRecordFilters): LedgerCheckpointSummary[];
+  listLedgerTokenEfficiencyRollups(filters?: LedgerRecordFilters, budgetPolicy?: LedgerBudgetPolicy): TokenEfficiencyRollup[];
+  getLedgerGovernance(): { privacy_defaults: LedgerPrivacyDefaults };
   listProjects(): LocalProject[];
   getActiveProject(): LocalProject | undefined;
   registerProject(input: LocalProjectInput): LocalProject;
@@ -56,7 +62,16 @@ export interface SukaService {
 export interface LedgerRecordFilters extends CoordinationContext {
   task_id?: string;
   checkpoint_id?: string;
+  issue_id?: string;
 }
+
+export const DEFAULT_LEDGER_PRIVACY_DEFAULTS: LedgerPrivacyDefaults = {
+  publish_file_paths: true,
+  publish_diff_content: false,
+  publish_terminal_logs: false,
+  publish_prompt_text: false,
+  retention_days: 7
+};
 
 export interface LedgerCheckpointSummary {
   checkpoint: Checkpoint;
@@ -133,6 +148,22 @@ export function createSukaService(store: SukaStore = new MemorySukaStore()): Suk
           return (filters.task_id === undefined || summary.related_task_ids.includes(filters.task_id)) &&
             (filters.session_id === undefined || summary.related_session_ids.includes(filters.session_id));
         });
+    },
+
+    listLedgerTokenEfficiencyRollups(filters = {}, budgetPolicy) {
+      if (budgetPolicy !== undefined) {
+        const result = validateLedgerBudgetPolicy(budgetPolicy);
+        if (!result.ok) {
+          throw new Error("Ledger budget policy validation failed.");
+        }
+      }
+      return [buildTokenEfficiencyRollup(filters, store.getState(), budgetPolicy)];
+    },
+
+    getLedgerGovernance() {
+      return {
+        privacy_defaults: DEFAULT_LEDGER_PRIVACY_DEFAULTS
+      };
     },
 
     listProjects() {
@@ -338,6 +369,108 @@ function buildCheckpointSummary(checkpoint: Checkpoint, state: SukaState): Ledge
   };
 }
 
+function buildTokenEfficiencyRollup(
+  filters: LedgerRecordFilters,
+  state: SukaState,
+  budgetPolicy: LedgerBudgetPolicy | undefined
+): TokenEfficiencyRollup {
+  const tasks = state.ledger_tasks.filter((task) => matchesLedgerFilters(task, filters));
+  const taskIds = new Set(tasks.map((task) => task.task_id));
+  const tokenUsage = state.ledger_token_usage.filter((usage) => matchesTaskLinkedRecord(usage.task_id, taskIds, filters));
+  const usageTaskIds = new Set(tokenUsage.map((usage) => usage.task_id));
+  const assessments = state.ledger_token_assessments.filter((assessment) => usageTaskIds.has(assessment.task_id));
+  const assessmentByTaskId = new Map(assessments.map((assessment) => [assessment.task_id, assessment]));
+  const assessedTaskIds = tokenUsage
+    .map((usage) => usage.task_id)
+    .filter((taskId) => assessmentByTaskId.has(taskId));
+  const unassessedTaskIds = tokenUsage
+    .map((usage) => usage.task_id)
+    .filter((taskId) => !assessmentByTaskId.has(taskId));
+  const totals = {
+    discarded_tokens: 0,
+    estimated_cost: 0,
+    input_tokens: 0,
+    output_tokens: 0,
+    rework_tokens: 0,
+    total_tokens: 0,
+    unassessed_tokens: 0,
+    unknown_tokens: 0,
+    useful_tokens: 0
+  };
+
+  for (const usage of tokenUsage) {
+    totals.input_tokens += usage.input_tokens;
+    totals.output_tokens += usage.output_tokens;
+    totals.total_tokens += usage.total_tokens;
+    totals.estimated_cost += usage.estimated_cost ?? 0;
+    const assessment = assessmentByTaskId.get(usage.task_id);
+    if (assessment === undefined) {
+      totals.unassessed_tokens += usage.total_tokens;
+      continue;
+    }
+    if (isUsefulTokenCategory(assessment.value_category)) {
+      totals.useful_tokens += usage.total_tokens;
+      continue;
+    }
+    if (assessment.value_category === "rework") {
+      totals.rework_tokens += usage.total_tokens;
+      continue;
+    }
+    if (assessment.value_category === "discarded") {
+      totals.discarded_tokens += usage.total_tokens;
+      continue;
+    }
+    totals.unknown_tokens += usage.total_tokens;
+  }
+
+  const rollup: TokenEfficiencyRollup = {
+    scope: tokenEfficiencyScope(filters),
+    related_task_ids: tokenUsage.map((usage) => usage.task_id),
+    assessed_task_ids: uniqueStrings(assessedTaskIds),
+    unassessed_task_ids: uniqueStrings(unassessedTaskIds),
+    totals
+  };
+  if (totals.total_tokens > 0) {
+    rollup.useful_token_ratio = totals.useful_tokens / totals.total_tokens;
+  }
+  if (budgetPolicy !== undefined) {
+    rollup.budget = buildBudgetStatus(totals.total_tokens, budgetPolicy);
+  }
+  return rollup;
+}
+
+function tokenEfficiencyScope(filters: LedgerRecordFilters): TokenEfficiencyRollup["scope"] {
+  const scope: TokenEfficiencyRollup["scope"] = {};
+  if (filters.workspace_id !== undefined) scope.workspace_id = filters.workspace_id;
+  if (filters.repo_id !== undefined) scope.repo_id = filters.repo_id;
+  if (filters.session_id !== undefined) scope.session_id = filters.session_id;
+  if (filters.task_id !== undefined) scope.task_id = filters.task_id;
+  if (filters.checkpoint_id !== undefined) scope.checkpoint_id = filters.checkpoint_id;
+  if (filters.issue_id !== undefined) scope.issue_id = filters.issue_id;
+  return scope;
+}
+
+function buildBudgetStatus(usedTokens: number, policy: LedgerBudgetPolicy): NonNullable<TokenEfficiencyRollup["budget"]> {
+  const level = usedTokens >= policy.hard_limit_tokens ? "exceeded" :
+    usedTokens >= policy.warning_threshold_tokens ? "warning" :
+    "ok";
+  return {
+    hard_limit_tokens: policy.hard_limit_tokens,
+    level,
+    remaining_tokens: Math.max(policy.hard_limit_tokens - usedTokens, 0),
+    used_tokens: usedTokens,
+    utilization_ratio: policy.hard_limit_tokens === 0 ? 0 : usedTokens / policy.hard_limit_tokens,
+    warning_threshold_tokens: policy.warning_threshold_tokens
+  };
+}
+
+function isUsefulTokenCategory(category: TokenAssessment["value_category"]): boolean {
+  return category === "delivery" ||
+    category === "planning" ||
+    category === "review" ||
+    category === "handoff";
+}
+
 function uniqueStrings(values: string[]): string[] {
   return [...new Set(values)];
 }
@@ -353,14 +486,22 @@ function matchesTaskLinkedRecord(taskId: string, taskIds: Set<string>, filters: 
 }
 
 function matchesLedgerFilters(
-  item: { repo_id?: string; session_id?: string; workspace_id?: string; task_id?: string; related_checkpoint_ids?: string[] },
+  item: {
+    repo_id?: string;
+    session_id?: string;
+    workspace_id?: string;
+    task_id?: string;
+    related_checkpoint_ids?: string[];
+    related_issue_ids?: string[];
+  },
   filters: LedgerRecordFilters
 ): boolean {
   return (filters.workspace_id === undefined || item.workspace_id === undefined || item.workspace_id === filters.workspace_id) &&
     (filters.repo_id === undefined || item.repo_id === filters.repo_id) &&
     (filters.session_id === undefined || item.session_id === filters.session_id) &&
     (filters.task_id === undefined || item.task_id === filters.task_id) &&
-    (filters.checkpoint_id === undefined || item.related_checkpoint_ids?.includes(filters.checkpoint_id) === true);
+    (filters.checkpoint_id === undefined || item.related_checkpoint_ids?.includes(filters.checkpoint_id) === true) &&
+    (filters.issue_id === undefined || readRelatedIssueIds(item).includes(filters.issue_id));
 }
 
 function hasLedgerFilter(filters: LedgerRecordFilters): boolean {
@@ -368,9 +509,15 @@ function hasLedgerFilter(filters: LedgerRecordFilters): boolean {
     filters.repo_id !== undefined ||
     filters.session_id !== undefined ||
     filters.task_id !== undefined ||
-    filters.checkpoint_id !== undefined;
+    filters.checkpoint_id !== undefined ||
+    filters.issue_id !== undefined;
 }
 
 function matchesCheckpointFilters(checkpoint: Checkpoint, filters: LedgerRecordFilters): boolean {
-  return filters.repo_id === undefined || checkpoint.repo_id === filters.repo_id;
+  return (filters.repo_id === undefined || checkpoint.repo_id === filters.repo_id) &&
+    (filters.issue_id === undefined || checkpoint.related_issue_ids.includes(filters.issue_id));
+}
+
+function readRelatedIssueIds(item: { related_issue_ids?: string[] }): string[] {
+  return item.related_issue_ids ?? [];
 }
