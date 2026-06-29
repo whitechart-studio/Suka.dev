@@ -17,9 +17,9 @@
     "typecheck": "tsc -b --pretty false && npm run typecheck --workspace @suka/dashboard"
   },
   "devDependencies": {
-    "@types/node": "^26.0.0",
+    "@types/node": "^26.0.1",
     "@types/ws": "^8.18.1",
-    "danger": "^13.0.8",
+    "danger": "^13.0.10",
     "typescript": "^6.0.3"
   },
   "engines": {
