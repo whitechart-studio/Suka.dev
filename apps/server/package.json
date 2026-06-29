@@ -24,7 +24,7 @@
     "@suka/local-agents": "0.0.0",
     "@suka/protocol": "0.0.0",
     "cytoscape": "^3.34.0",
-    "lucide": "^1.21.0",
+    "lucide": "^1.22.0",
     "ws": "^8.21.0"
   }
 }
