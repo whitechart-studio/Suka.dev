@@ -1853,6 +1853,45 @@ test("ledger token collect rejects malformed usage fixtures before publishing", 
   }
 });
 
+test("ledger token collect reports unreadable usage files clearly", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-token-collect-unreadable-"));
+  try {
+    const invalidJson = join(tempDir, "codex-invalid-json.json");
+    writeFileSync(invalidJson, "{", "utf8");
+    const requests: unknown[] = [];
+    const errors: string[] = [];
+    const result = await runCli({
+      argv: [
+        "ledger",
+        "token",
+        "collect",
+        "task_collect_invalid_json",
+        "--server",
+        "http://suka.test",
+        "--from",
+        "codex",
+        "--file",
+        invalidJson
+      ],
+      env: {},
+      fetch: async (url, init) => {
+        requests.push({ init, url });
+        return jsonResponse(201, {});
+      },
+      io: {
+        stdout: { write: () => undefined },
+        stderr: { write: (value: string) => errors.push(value) }
+      }
+    });
+
+    assert.equal(result.exitCode, 1);
+    assert.equal(requests.length, 0);
+    assert.match(errors.join(""), /ledger token collect could not read or parse --file/);
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
 test("ledger token record validates required token counts before publishing", async () => {
   const requests: unknown[] = [];
   const errors: string[] = [];

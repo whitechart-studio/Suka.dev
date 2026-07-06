@@ -717,15 +717,22 @@ async function ledgerTokenCommand(
       throw new Error("ledger token collect requires --file.");
     }
 
-    const tokenUsage = collectAgentTokenUsage(collector as AgentTokenCollector, JSON.parse(readFileSync(resolve(file), "utf8")), {
+    const collectContext = coordinationContext(flags, config, context.env);
+    let parsedUsage: unknown;
+    try {
+      parsedUsage = JSON.parse(readFileSync(resolve(file), "utf8"));
+    } catch (error) {
+      throw new Error(`ledger token collect could not read or parse --file: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    const tokenUsage = collectAgentTokenUsage(collector as AgentTokenCollector, parsedUsage, {
       agentId: readStringFlag(flags, "agent") ?? context.env.SUKA_AGENT_ID,
       checkpointId: readStringFlag(flags, "checkpoint-id"),
-      repoId: coordinationContext(flags, config, context.env).repo_id,
-      sessionId: coordinationContext(flags, config, context.env).session_id,
+      repoId: collectContext.repo_id,
+      sessionId: collectContext.session_id,
       sourceRunId: readStringFlag(flags, "source-run-id"),
       taskId,
       tool: readStringFlag(flags, "tool") ?? (collector === "codex" ? "codex" : "claude-code"),
-      workspaceId: coordinationContext(flags, config, context.env).workspace_id
+      workspaceId: collectContext.workspace_id
     });
     const result = await client.createLedgerTokenUsage(tokenUsage);
     context.io.stdout.write(formatJson(result));
