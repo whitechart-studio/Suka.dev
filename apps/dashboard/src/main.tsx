@@ -585,6 +585,8 @@ function Dashboard(): React.ReactElement {
   const autoStartedProjectId = useRef("");
   const manualTrackingStopped = useRef(false);
   const viewportRestored = useRef(false);
+  const modalTriggerRef = useRef<HTMLElement | null>(null);
+  const activeModalRef = useRef("");
   const shellRef = useRef<HTMLElement | null>(null);
   const { fitView, setViewport, zoomIn, zoomOut } = useReactFlow();
   const layoutScope = useMemo(() => {
@@ -1234,9 +1236,14 @@ function Dashboard(): React.ReactElement {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setLedgerOpen(false);
+        setSettingsOpen(false);
+        setTeamPanelOpen(false);
+        return;
+      }
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
-      if (e.key === "Escape") { setLedgerOpen(false); setSettingsOpen(false); }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -1311,9 +1318,31 @@ function Dashboard(): React.ReactElement {
     "--tracking-popover-right": rightOpen && !focusMode ? `${rightRailWidth + 20}px` : "12px"
   } as React.CSSProperties;
   const modalPanelOpen = ledgerOpen || settingsOpen || teamPanelOpen;
+  const activeModalId = ledgerOpen ? "ledger" : settingsOpen ? "settings" : teamPanelOpen ? "team" : "";
   const modalBackgroundProps = modalPanelOpen
     ? { "aria-hidden": true, inert: true }
     : {};
+
+  useEffect(() => {
+    if (activeModalId.length > 0) {
+      if (activeModalRef.current.length === 0) {
+        const activeElement = document.activeElement;
+        modalTriggerRef.current = activeElement instanceof HTMLElement ? activeElement : null;
+      }
+      activeModalRef.current = activeModalId;
+      window.requestAnimationFrame(() => {
+        document.querySelector<HTMLElement>(`[data-modal-panel="${activeModalId}"]`)?.focus();
+      });
+      return;
+    }
+    if (activeModalRef.current.length > 0) {
+      activeModalRef.current = "";
+      window.requestAnimationFrame(() => {
+        modalTriggerRef.current?.focus();
+        modalTriggerRef.current = null;
+      });
+    }
+  }, [activeModalId]);
 
   if (showWelcome) {
     return (
@@ -2137,7 +2166,7 @@ function TeamConnectionPanel({
   const primaryWorkspace = summary.workspaces[0];
 
   return (
-    <section aria-label="Team connection" aria-modal="true" className="team-panel" role="dialog">
+    <section aria-label="Team connection" aria-modal="true" className="team-panel" data-modal-panel="team" role="dialog" tabIndex={-1}>
       <div className="team-panel-head">
         <div>
           <h2><Users size={14} /> Team Connection</h2>
@@ -2426,7 +2455,7 @@ function SettingsPanel({
   status: string;
 }): React.ReactElement {
   return (
-    <section aria-label="Settings" aria-modal="true" className="settings-panel" role="dialog">
+    <section aria-label="Settings" aria-modal="true" className="settings-panel" data-modal-panel="settings" role="dialog" tabIndex={-1}>
       <div className="settings-head">
         <div>
           <h2><Settings size={14} /> Settings</h2>
@@ -3611,7 +3640,7 @@ function LedgerPage({
   const hasLedgerData = timeline.length > 0;
 
   return (
-    <section aria-label="Coding Ledger" aria-modal="true" className="ledger-page" role="dialog">
+    <section aria-label="Coding Ledger" aria-modal="true" className="ledger-page" data-modal-panel="ledger" role="dialog" tabIndex={-1}>
       <div className="ledger-page-shell">
         <header className="ledger-page-top">
           <div className="ledger-title-row">
