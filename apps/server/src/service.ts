@@ -26,6 +26,7 @@ import {
   validateTokenUsage
 } from "@suka/protocol";
 import { MemorySukaStore, type SukaStore } from "./memory-store.js";
+import { hasConflictingLedgerScope, scopedLedgerTaskKey } from "./ledger-scope.js";
 import { buildLocalProjectFromMetadata, inspectLocalProject, type LocalProjectInput } from "./projects.js";
 import type { LocalProject, SukaState } from "./state.js";
 import { buildTeamSummary } from "./team.js";
@@ -386,15 +387,15 @@ function buildTokenEfficiencyRollup(
   const tasks = state.ledger_tasks.filter((task) => matchesLedgerFilters(task, filters));
   const taskIds = new Set(tasks.map((task) => task.task_id));
   const tokenUsage = state.ledger_token_usage.filter((usage) => matchesTaskLinkedRecord(usage, taskIds, filters));
-  const usageTaskIds = new Set(tokenUsage.map((usage) => usage.task_id));
-  const assessments = state.ledger_token_assessments.filter((assessment) => usageTaskIds.has(assessment.task_id));
-  const assessmentByTaskId = new Map(assessments.map((assessment) => [assessment.task_id, assessment]));
+  const usageTaskKeys = new Set(tokenUsage.map(scopedLedgerTaskKey));
+  const assessments = state.ledger_token_assessments.filter((assessment) => usageTaskKeys.has(scopedLedgerTaskKey(assessment)));
+  const assessmentByTaskKey = new Map(assessments.map((assessment) => [scopedLedgerTaskKey(assessment), assessment]));
   const assessedTaskIds = tokenUsage
-    .map((usage) => usage.task_id)
-    .filter((taskId) => assessmentByTaskId.has(taskId));
+    .filter((usage) => assessmentByTaskKey.has(scopedLedgerTaskKey(usage)))
+    .map((usage) => usage.task_id);
   const unassessedTaskIds = tokenUsage
-    .map((usage) => usage.task_id)
-    .filter((taskId) => !assessmentByTaskId.has(taskId));
+    .filter((usage) => !assessmentByTaskKey.has(scopedLedgerTaskKey(usage)))
+    .map((usage) => usage.task_id);
   const totals = {
     discarded_tokens: 0,
     estimated_cost: 0,
@@ -412,7 +413,7 @@ function buildTokenEfficiencyRollup(
     totals.output_tokens += usage.output_tokens;
     totals.total_tokens += usage.total_tokens;
     totals.estimated_cost += usage.estimated_cost ?? 0;
-    const assessment = assessmentByTaskId.get(usage.task_id);
+    const assessment = assessmentByTaskKey.get(scopedLedgerTaskKey(usage));
     if (assessment === undefined) {
       totals.unassessed_tokens += usage.total_tokens;
       continue;
@@ -489,7 +490,7 @@ function matchesTaskLinkedRecord(
   taskIds: Set<string>,
   filters: LedgerRecordFilters
 ): boolean {
-  if (hasConflictingLedgerContext(record, filters)) {
+  if (hasConflictingLedgerScope(record, filters)) {
     return false;
   }
   if (filters.task_id !== undefined) {
@@ -499,15 +500,6 @@ function matchesTaskLinkedRecord(
     return taskIds.has(record.task_id) || matchesLedgerFilters(record, filters);
   }
   return true;
-}
-
-function hasConflictingLedgerContext(
-  item: { repo_id?: string; session_id?: string; workspace_id?: string },
-  filters: LedgerRecordFilters
-): boolean {
-  return (filters.workspace_id !== undefined && item.workspace_id !== undefined && item.workspace_id !== filters.workspace_id) ||
-    (filters.repo_id !== undefined && item.repo_id !== undefined && item.repo_id !== filters.repo_id) ||
-    (filters.session_id !== undefined && item.session_id !== undefined && item.session_id !== filters.session_id);
 }
 
 function matchesLedgerFilters(

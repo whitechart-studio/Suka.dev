@@ -12,6 +12,7 @@ import type {
   TokenAssessment,
   TokenUsage
 } from "@suka/protocol";
+import { hasConflictingLedgerScope, scopedLedgerTaskKey } from "./ledger-scope.js";
 import { createEmptyState, type LocalProject, type SukaCleanupResult, type SukaState } from "./state.js";
 
 export interface SukaStore {
@@ -98,7 +99,7 @@ export class MemorySukaStore implements SukaStore {
     const removedTaskKeys = new Set(
       this.#state.ledger_tasks
         .filter((task) => matchesLedgerContext(task, context))
-        .map(scopedTaskKey)
+        .map(scopedLedgerTaskKey)
     );
     this.#state.presence = this.#state.presence.filter((presence) => !matchesContext(presence, context));
     this.#state.claims = this.#state.claims.filter((claim) => !matchesContext(claim, context));
@@ -109,10 +110,12 @@ export class MemorySukaStore implements SukaStore {
     this.#state.ledger_tasks = this.#state.ledger_tasks.filter((task) => !matchesLedgerContext(task, context));
     this.#state.ledger_token_usage = this.#state.ledger_token_usage.filter((tokenUsage) =>
       !matchesLedgerContext(tokenUsage, context) &&
-      !(removedTaskKeys.has(scopedTaskKey(tokenUsage)) || (removedTaskIds.has(tokenUsage.task_id) && !hasConflictingContext(tokenUsage, context)))
+      !(removedTaskKeys.has(scopedLedgerTaskKey(tokenUsage)) || (removedTaskIds.has(tokenUsage.task_id) && !hasConflictingLedgerScope(tokenUsage, context)))
     );
     this.#state.ledger_token_assessments = this.#state.ledger_token_assessments.filter(
-      (assessment) => !removedTaskKeys.has(scopedTaskKey(assessment)) && !removedTaskIds.has(assessment.task_id)
+      (assessment) =>
+        !matchesLedgerContext(assessment, context) &&
+        !(removedTaskKeys.has(scopedLedgerTaskKey(assessment)) || (removedTaskIds.has(assessment.task_id) && !hasConflictingLedgerScope(assessment, context)))
     );
     this.#state.ledger_events = this.#state.ledger_events.filter((event) => !matchesLedgerContext(event, context));
     this.#state.ledger_checkpoints = this.#state.ledger_checkpoints.filter((checkpoint) => !matchesLedgerContext(checkpoint, context));
@@ -154,7 +157,7 @@ export class MemorySukaStore implements SukaStore {
   }
 
   upsertLedgerTask(task: TaskEntry): void {
-    this.#state.ledger_tasks = upsertByIdentity(this.#state.ledger_tasks, task, scopedTaskKey);
+    this.#state.ledger_tasks = upsertByIdentity(this.#state.ledger_tasks, task, scopedLedgerTaskKey);
   }
 
   upsertLedgerTokenUsage(tokenUsage: TokenUsage): void {
@@ -162,7 +165,7 @@ export class MemorySukaStore implements SukaStore {
   }
 
   upsertLedgerTokenAssessment(assessment: TokenAssessment): void {
-    this.#state.ledger_token_assessments = upsertByKey(this.#state.ledger_token_assessments, assessment, "task_id");
+    this.#state.ledger_token_assessments = upsertByIdentity(this.#state.ledger_token_assessments, assessment, scopedLedgerTaskKey);
   }
 
   appendLedgerEvent(event: LedgerEvent): void {
@@ -249,18 +252,9 @@ function upsertByIdentity<T>(items: T[], item: T, identity: (value: T) => string
   return next;
 }
 
-function scopedTaskKey(item: { repo_id?: string; session_id?: string; task_id: string; workspace_id?: string }): string {
-  return [
-    item.workspace_id ?? "",
-    item.repo_id ?? "",
-    item.session_id ?? "",
-    item.task_id
-  ].join("\u001f");
-}
-
 function scopedTokenUsageKey(item: TokenUsage): string {
   return [
-    scopedTaskKey(item),
+    scopedLedgerTaskKey(item),
     item.source_run_id ?? ""
   ].join("\u001f");
 }
@@ -282,12 +276,4 @@ function matchesLedgerContext(
     const expected = context[key];
     return expected === undefined || item[key] === undefined || item[key] === expected;
   });
-}
-
-function hasConflictingContext(
-  item: { repo_id?: string; session_id?: string; workspace_id?: string },
-  context: CoordinationContext
-): boolean {
-  const keys = ["workspace_id", "repo_id", "session_id"] as const;
-  return keys.some((key) => context[key] !== undefined && item[key] !== undefined && item[key] !== context[key]);
 }

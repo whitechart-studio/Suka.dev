@@ -738,12 +738,19 @@ async function ledgerTokenCommand(
       throw new Error("ledger token assess requires a task id.");
     }
 
+    const contextDefaults = coordinationContext(flags, config, context.env);
     const assessment: Record<string, unknown> = {
       task_id: taskId,
       value_category: (readStringFlag(flags, "category") ?? "unknown") as LedgerTokenValueCategory,
       assessed_by: (readStringFlag(flags, "by") ?? "user") as LedgerTokenAssessor,
       confidence: (readStringFlag(flags, "confidence") ?? "medium") as LedgerTokenConfidence
     };
+    addOptionalString(assessment, "agent_id", readStringFlag(flags, "agent") ?? context.env.SUKA_AGENT_ID);
+    addOptionalString(assessment, "checkpoint_id", readStringFlag(flags, "checkpoint-id"));
+    addOptionalString(assessment, "repo_id", contextDefaults.repo_id);
+    addOptionalString(assessment, "session_id", contextDefaults.session_id);
+    addOptionalString(assessment, "tool", readStringFlag(flags, "tool") ?? context.env.SUKA_AGENT_TOOL);
+    addOptionalString(assessment, "workspace_id", contextDefaults.workspace_id);
     addOptionalNumber(assessment, "usefulness_score", readIntegerFlag(flags, "score"));
     addOptionalString(assessment, "reason", readStringFlag(flags, "reason"));
 

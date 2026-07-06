@@ -493,6 +493,12 @@ test("rejects invalid ledger token usage", () => {
 test("accepts valid ledger token assessments", () => {
   const assessment = {
     task_id: "task_01",
+    workspace_id: "workspace-a",
+    repo_id: "repo-a",
+    session_id: "session-a",
+    checkpoint_id: "checkpoint-pr-196",
+    agent_id: "codex-a",
+    tool: "codex",
     value_category: "delivery",
     usefulness_score: 82,
     assessed_by: "rule",
@@ -508,6 +514,12 @@ test("accepts valid ledger token assessments", () => {
 test("rejects invalid ledger token assessments", () => {
   const result = validateTokenAssessment({
     task_id: "",
+    workspace_id: "",
+    repo_id: 42,
+    session_id: "",
+    checkpoint_id: "",
+    agent_id: "",
+    tool: "",
     value_category: "waste",
     usefulness_score: 101,
     assessed_by: "manager",
@@ -518,6 +530,12 @@ test("rejects invalid ledger token assessments", () => {
   assert.equal(result.ok, false);
   if (!result.ok) {
     assert.ok(result.issues.some((issue) => issue.path === "task_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "workspace_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "repo_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "session_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "checkpoint_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "agent_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "tool" && issue.code === "invalid_type"));
     assert.ok(result.issues.some((issue) => issue.path === "value_category" && issue.code === "invalid_value"));
     assert.ok(result.issues.some((issue) => issue.path === "usefulness_score" && issue.code === "invalid_type"));
     assert.ok(result.issues.some((issue) => issue.path === "assessed_by" && issue.code === "invalid_value"));

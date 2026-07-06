@@ -1633,6 +1633,18 @@ test("ledger token commands record usage and assessment", async () => {
       "user",
       "--confidence",
       "high",
+      "--workspace",
+      "workspace-a",
+      "--repo-id",
+      "repo-a",
+      "--session",
+      "session-a",
+      "--agent",
+      "codex-local",
+      "--tool",
+      "codex",
+      "--checkpoint-id",
+      "checkpoint_pr_196",
       "--reason",
       "Useful implementation output."
     ],
@@ -1651,13 +1663,25 @@ test("ledger token commands record usage and assessment", async () => {
   assert.equal(assessmentResult.exitCode, 0);
   assert.equal(requests[1]?.url, "http://suka.test/api/ledger/token-assessments");
   const assessment = JSON.parse(String(requests[1]?.init?.body)) as {
+    agent_id: string;
+    checkpoint_id: string;
     confidence: string;
+    repo_id: string;
     reason: string;
+    session_id: string;
     task_id: string;
+    tool: string;
     usefulness_score: number;
     value_category: string;
+    workspace_id: string;
   };
   assert.equal(assessment.task_id, "task_cli_01");
+  assert.equal(assessment.workspace_id, "workspace-a");
+  assert.equal(assessment.repo_id, "repo-a");
+  assert.equal(assessment.session_id, "session-a");
+  assert.equal(assessment.agent_id, "codex-local");
+  assert.equal(assessment.tool, "codex");
+  assert.equal(assessment.checkpoint_id, "checkpoint_pr_196");
   assert.equal(assessment.value_category, "delivery");
   assert.equal(assessment.usefulness_score, 86);
   assert.equal(assessment.confidence, "high");
@@ -1785,6 +1809,45 @@ test("ledger token collect ingests Codex and Claude usage fixtures", async () =>
     assert.equal(claudeUsage.measurement_source, "transcript");
     assert.equal(claudeUsage.source_run_id, "claude-session-01");
     assert.equal(claudeUsage.tool, "claude-code");
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
+test("ledger token collect rejects malformed usage fixtures before publishing", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-token-collect-invalid-"));
+  try {
+    const invalidFixture = join(tempDir, "codex-invalid.json");
+    writeFileSync(invalidFixture, JSON.stringify({ model: "gpt-5-codex", usage: { total_tokens: 10 } }), "utf8");
+    const requests: unknown[] = [];
+    const errors: string[] = [];
+    const result = await runCli({
+      argv: [
+        "ledger",
+        "token",
+        "collect",
+        "task_collect_invalid",
+        "--server",
+        "http://suka.test",
+        "--from",
+        "codex",
+        "--file",
+        invalidFixture
+      ],
+      env: {},
+      fetch: async (url, init) => {
+        requests.push({ init, url });
+        return jsonResponse(201, {});
+      },
+      io: {
+        stdout: { write: () => undefined },
+        stderr: { write: (value: string) => errors.push(value) }
+      }
+    });
+
+    assert.equal(result.exitCode, 1);
+    assert.equal(requests.length, 0);
+    assert.match(errors.join(""), /Codex input tokens must be a non-negative integer/);
   } finally {
     rmSync(tempDir, { force: true, recursive: true });
   }

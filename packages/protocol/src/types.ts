@@ -212,6 +212,12 @@ export interface TokenUsage {
 
 export interface TokenAssessment {
   task_id: string;
+  workspace_id?: string;
+  repo_id?: string;
+  session_id?: string;
+  checkpoint_id?: string;
+  agent_id?: string;
+  tool?: string;
   value_category: LedgerTokenValueCategory;
   usefulness_score?: number;
   assessed_by: LedgerTokenAssessor;

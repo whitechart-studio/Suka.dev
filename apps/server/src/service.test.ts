@@ -678,13 +678,48 @@ test("keeps ledger token accounting scoped when projects reuse task ids", () => 
       measurement_source: "agent_reported"
     }).ok, true);
   }
+  for (const assessment of [
+    {
+      task_id: sharedTaskId,
+      workspace_id: "workspace-a",
+      repo_id: "repo-a",
+      session_id: "session-a",
+      checkpoint_id: "checkpoint_a",
+      agent_id: "codex-a",
+      tool: "codex",
+      value_category: "delivery",
+      usefulness_score: 90
+    },
+    {
+      task_id: sharedTaskId,
+      workspace_id: "workspace-b",
+      repo_id: "repo-b",
+      session_id: "session-b",
+      checkpoint_id: "checkpoint_b",
+      agent_id: "claude-b",
+      tool: "claude-code",
+      value_category: "rework",
+      usefulness_score: 30
+    }
+  ]) {
+    assert.equal(service.recordLedgerTokenAssessment({
+      ...assessment,
+      assessed_by: "user",
+      confidence: "high"
+    }).ok, true);
+  }
 
   assert.equal(service.getState().ledger_tasks.length, 2);
   assert.equal(service.getState().ledger_token_usage.length, 2);
+  assert.equal(service.getState().ledger_token_assessments.length, 2);
   assert.deepEqual(service.listLedgerTokenUsage({ repo_id: "repo-a" }).map((usage) => usage.total_tokens), [300]);
   assert.deepEqual(service.listLedgerTokenUsage({ repo_id: "repo-b" }).map((usage) => usage.total_tokens), [900]);
+  assert.deepEqual(service.listLedgerTokenAssessments({ repo_id: "repo-a" }).map((assessment) => assessment.value_category), ["delivery"]);
+  assert.deepEqual(service.listLedgerTokenAssessments({ repo_id: "repo-b" }).map((assessment) => assessment.value_category), ["rework"]);
   assert.equal(service.listLedgerTokenEfficiencyRollups({ repo_id: "repo-a" })[0]?.totals.total_tokens, 300);
   assert.equal(service.listLedgerTokenEfficiencyRollups({ repo_id: "repo-b" })[0]?.totals.total_tokens, 900);
+  assert.deepEqual(service.listLedgerTokenEfficiencyRollups({ repo_id: "repo-a" })[0]?.assessed_task_ids, [sharedTaskId]);
+  assert.deepEqual(service.listLedgerTokenEfficiencyRollups({ repo_id: "repo-b" })[0]?.assessed_task_ids, [sharedTaskId]);
 });
 
 test("rejects invalid structured ledger records before persistence", () => {

@@ -291,6 +291,12 @@ export function validateTokenAssessment(value: unknown): ValidationResult<TokenA
   }
 
   requireString(value, "task_id", issues);
+  optionalNonEmptyString(value, "workspace_id", issues);
+  optionalNonEmptyString(value, "repo_id", issues);
+  optionalNonEmptyString(value, "session_id", issues);
+  optionalNonEmptyString(value, "checkpoint_id", issues);
+  optionalNonEmptyString(value, "agent_id", issues);
+  optionalNonEmptyString(value, "tool", issues);
   requireEnum(value, "value_category", LEDGER_TOKEN_VALUE_CATEGORIES, issues);
   optionalIntegerRange(value, "usefulness_score", 0, 100, issues);
   requireEnum(value, "assessed_by", LEDGER_TOKEN_ASSESSORS, issues);

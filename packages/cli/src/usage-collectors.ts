@@ -1,4 +1,4 @@
-import type { TokenUsage } from "@suka/protocol";
+import { LEDGER_TOKEN_MEASUREMENT_SOURCES, type TokenUsage } from "@suka/protocol";
 
 export type AgentTokenCollector = "claude" | "codex";
 
@@ -52,8 +52,8 @@ interface ParsedUsage {
 function readCodexUsage(payload: unknown): ParsedUsage {
   const root = asRecord(payload);
   const usage = asOptionalRecord(root.usage) ?? root;
-  const inputTokens = readInteger(usage, ["input_tokens", "prompt_tokens"]) ?? 0;
-  const outputTokens = readInteger(usage, ["output_tokens", "completion_tokens"]) ?? 0;
+  const inputTokens = requireInteger(usage, ["input_tokens", "prompt_tokens"], "Codex input tokens");
+  const outputTokens = requireInteger(usage, ["output_tokens", "completion_tokens"], "Codex output tokens");
   const cachedInputTokens = readInteger(usage, ["cached_input_tokens", "cached_tokens", "input_cached_tokens"]);
   const reasoningTokens = readInteger(usage, ["reasoning_tokens"]);
   const toolCallTokens = readInteger(usage, ["tool_call_tokens"]);
@@ -77,8 +77,8 @@ function readClaudeUsage(payload: unknown): ParsedUsage {
   const usage = asOptionalRecord(root.usage) ?? root;
   const cacheCreation = readInteger(usage, ["cache_creation_input_tokens"]) ?? 0;
   const cacheRead = readInteger(usage, ["cache_read_input_tokens"]) ?? 0;
-  const inputTokens = readInteger(usage, ["input_tokens", "prompt_tokens"]) ?? 0;
-  const outputTokens = readInteger(usage, ["output_tokens", "completion_tokens"]) ?? 0;
+  const inputTokens = requireInteger(usage, ["input_tokens", "prompt_tokens"], "Claude input tokens");
+  const outputTokens = requireInteger(usage, ["output_tokens", "completion_tokens"], "Claude output tokens");
   const cachedInputTokens = optionalPositive(cacheCreation + cacheRead);
   const totalTokens = readInteger(usage, ["total_tokens"]) ?? inputTokens + outputTokens + (cachedInputTokens ?? 0);
   return {
@@ -121,6 +121,14 @@ function readInteger(record: Record<string, unknown>, keys: string[]): number | 
   return undefined;
 }
 
+function requireInteger(record: Record<string, unknown>, keys: string[], label: string): number {
+  const value = readInteger(record, keys);
+  if (value === undefined) {
+    throw new Error(`${label} must be a non-negative integer.`);
+  }
+  return value;
+}
+
 function readNumber(record: Record<string, unknown>, keys: string[]): number | undefined {
   for (const key of keys) {
     const value = record[key];
@@ -139,13 +147,8 @@ function readString(record: Record<string, unknown>, keys: string[]): string | u
 
 function readMeasurementSource(record: Record<string, unknown>, fallback: TokenUsage["measurement_source"]): TokenUsage["measurement_source"] {
   const value = readString(record, ["measurement_source", "source"]);
-  return value === "api" ||
-    value === "cli" ||
-    value === "transcript" ||
-    value === "agent_reported" ||
-    value === "estimated" ||
-    value === "manual"
-    ? value
+  return (LEDGER_TOKEN_MEASUREMENT_SOURCES as readonly string[]).includes(value ?? "")
+    ? value as TokenUsage["measurement_source"]
     : fallback;
 }
 
