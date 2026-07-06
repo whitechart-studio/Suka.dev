@@ -25,7 +25,7 @@ import { findConfigPath, initProject, loadConfig, resolveProjectPath } from "./c
 import { createPointerId } from "./ids.js";
 import { detectLocalAgents, type DetectedLocalAgent, type LocalAgentDetectionReport } from "./agents.js";
 import { SukaApiClient } from "./client.js";
-import { collectAgentTokenUsage, type AgentTokenCollector } from "./token-collectors.js";
+import { collectAgentTokenUsage, type AgentTokenCollector } from "./usage-collectors.js";
 import {
   formatDoctor,
   formatEnvExports,
