@@ -608,6 +608,85 @@ test("computes token efficiency rollups with empty partial and mixed-category da
   assert.equal(sessionRollup?.budget?.level, "warning");
 });
 
+test("keeps ledger token accounting scoped when projects reuse task ids", () => {
+  const service = createSukaService();
+  const sharedTaskId = "task_shared_prompt_01";
+
+  for (const task of [
+    {
+      task_id: sharedTaskId,
+      workspace_id: "workspace-a",
+      repo_id: "repo-a",
+      session_id: "session-a",
+      title: "Repo A prompt",
+      intent_summary: "Prompt in repo A.",
+      task_type: "implementation",
+      status: "completed",
+      started_at: "2026-06-25T07:00:00.000Z",
+      related_issue_ids: ["184"],
+      related_claim_ids: [],
+      related_checkpoint_ids: ["checkpoint_a"]
+    },
+    {
+      task_id: sharedTaskId,
+      workspace_id: "workspace-b",
+      repo_id: "repo-b",
+      session_id: "session-b",
+      title: "Repo B prompt",
+      intent_summary: "Prompt in repo B.",
+      task_type: "implementation",
+      status: "completed",
+      started_at: "2026-06-25T07:05:00.000Z",
+      related_issue_ids: ["187"],
+      related_claim_ids: [],
+      related_checkpoint_ids: ["checkpoint_b"]
+    }
+  ]) {
+    assert.equal(service.recordLedgerTask(task).ok, true);
+  }
+  for (const usage of [
+    {
+      task_id: sharedTaskId,
+      workspace_id: "workspace-a",
+      repo_id: "repo-a",
+      session_id: "session-a",
+      checkpoint_id: "checkpoint_a",
+      agent_id: "codex-a",
+      tool: "codex",
+      input_tokens: 100,
+      output_tokens: 200,
+      total_tokens: 300,
+      source_run_id: "run-a"
+    },
+    {
+      task_id: sharedTaskId,
+      workspace_id: "workspace-b",
+      repo_id: "repo-b",
+      session_id: "session-b",
+      checkpoint_id: "checkpoint_b",
+      agent_id: "claude-b",
+      tool: "claude-code",
+      input_tokens: 400,
+      output_tokens: 500,
+      total_tokens: 900,
+      source_run_id: "run-b"
+    }
+  ]) {
+    assert.equal(service.recordLedgerTokenUsage({
+      ...usage,
+      provider: usage.tool === "codex" ? "openai" : "anthropic",
+      measurement_source: "agent_reported"
+    }).ok, true);
+  }
+
+  assert.equal(service.getState().ledger_tasks.length, 2);
+  assert.equal(service.getState().ledger_token_usage.length, 2);
+  assert.deepEqual(service.listLedgerTokenUsage({ repo_id: "repo-a" }).map((usage) => usage.total_tokens), [300]);
+  assert.deepEqual(service.listLedgerTokenUsage({ repo_id: "repo-b" }).map((usage) => usage.total_tokens), [900]);
+  assert.equal(service.listLedgerTokenEfficiencyRollups({ repo_id: "repo-a" })[0]?.totals.total_tokens, 300);
+  assert.equal(service.listLedgerTokenEfficiencyRollups({ repo_id: "repo-b" })[0]?.totals.total_tokens, 900);
+});
+
 test("rejects invalid structured ledger records before persistence", () => {
   const service = createSukaService();
 

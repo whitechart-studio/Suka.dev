@@ -44,6 +44,7 @@ Git shows what changed after the fact. Chat explains intent to humans. Suka give
 | Conflicts | What work may collide? | API, path, domain, table, or env overlap |
 | Decisions | What should future agents remember? | Cleanup must be scoped by workspace, repo, or session |
 | Briefs | What should the next agent know? | Changed files, decisions, assumptions, risks, and next action |
+| Ledger | Where did token spend go? | A PR checkpoint used 12k tokens across three prompt tasks |
 | Projects | Which repo is Suka tracking? | `/Users/team/work/suka` is the active local workspace |
 | Zones | How should the canvas be organized? | A user-created handoff zone groups backend risk and owner notes |
 
@@ -59,6 +60,7 @@ Claims are advisory, not locks. Suka warns about risk without taking control awa
 - Deterministic conflict engine for paths, APIs, domains, tables, and environment keys.
 - Local HTTP/WebSocket server with in-memory or file-backed persistence.
 - CLI for serving, publishing, checking conflicts, writing briefs, reminders, releasing claims, and scoped cleanup.
+- Coding Ledger for prompt/task token accounting, PR checkpoints, useful/rework/discarded assessment, and model/provider cost estimates.
 - Scoped coordination context with `workspace_id`, `repo_id`, and `session_id`.
 - Local detection adapters for repo-scoped Codex and Claude Code activity.
 - Self-hostable foundation with Docker and CI gates.
@@ -234,6 +236,30 @@ node packages/cli/dist/bin.js brief read \
   --session current
 ```
 
+Record a prompt task and attach token spend without storing the raw prompt:
+
+```bash
+node packages/cli/dist/bin.js ledger task start "Fix dashboard accessibility" \
+  --server http://127.0.0.1:4366 \
+  --workspace local-whitechart-studio-suka-dev \
+  --repo-id whitechart-studio-suka-dev \
+  --session session-20260614102030 \
+  --task-id task_pr_195_accessibility \
+  --issue-id 195 \
+  --summary "Move focus into modal panels and restore it on close"
+
+node packages/cli/dist/bin.js ledger token collect task_pr_195_accessibility \
+  --server http://127.0.0.1:4366 \
+  --from codex \
+  --file .suka/token-usage/codex-run.json \
+  --workspace local-whitechart-studio-suka-dev \
+  --repo-id whitechart-studio-suka-dev \
+  --session session-20260614102030 \
+  --checkpoint-id checkpoint_pr_195
+```
+
+Ledger usage files under `.suka/ledger/`, `.suka/runtime/`, and `.suka/token-usage/` are local runtime accounting data and are ignored by default. Suka stores token counts, model/provider, source ids, task/session/project links, and optional estimated cost; prompts, code patches, and raw terminal logs stay out unless a future explicit export or sync path is enabled.
+
 View the connected team:
 
 ```bash
@@ -293,6 +319,7 @@ By default, Suka stores structured metadata:
 - paths, APIs, tables, env key names, and domains
 - conflict warnings
 - accepted decisions and evidence references
+- token counts, estimated cost, provider/model, and task/checkpoint links
 
 Suka should not store:
 
@@ -301,6 +328,8 @@ Suka should not store:
 - raw terminal logs
 - source code content
 - secrets or secret values
+
+Generated `.suka` runtime files are private by default. New projects ignore `state.json`, `session.env`, ledger state, runtime data, and token-usage fixtures so local cost/accounting records do not get committed accidentally.
 
 ## Platform Direction
 

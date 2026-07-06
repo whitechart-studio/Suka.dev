@@ -5,6 +5,10 @@ coverage/
 .agent/
 .agents/
 .suka/state.json
+.suka/state.json.tmp
+.suka/ledger/
+.suka/runtime/
+.suka/token-usage/
 .DS_Store
 *.log
 .env

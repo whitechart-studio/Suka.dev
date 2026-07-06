@@ -121,13 +121,13 @@ export function createSukaService(store: SukaStore = new MemorySukaStore()): Suk
 
     listLedgerTokenUsage(filters = {}) {
       const taskIds = taskIdsForFilters(store.getState().ledger_tasks, filters);
-      return store.getState().ledger_token_usage.filter((tokenUsage) => matchesTaskLinkedRecord(tokenUsage.task_id, taskIds, filters));
+      return store.getState().ledger_token_usage.filter((tokenUsage) => matchesTaskLinkedRecord(tokenUsage, taskIds, filters));
     },
 
     listLedgerTokenAssessments(filters = {}) {
       const taskIds = taskIdsForFilters(store.getState().ledger_tasks, filters);
       return store.getState().ledger_token_assessments.filter((assessment) => {
-        return matchesTaskLinkedRecord(assessment.task_id, taskIds, filters);
+        return matchesTaskLinkedRecord(assessment, taskIds, filters);
       });
     },
 
@@ -385,7 +385,7 @@ function buildTokenEfficiencyRollup(
 ): TokenEfficiencyRollup {
   const tasks = state.ledger_tasks.filter((task) => matchesLedgerFilters(task, filters));
   const taskIds = new Set(tasks.map((task) => task.task_id));
-  const tokenUsage = state.ledger_token_usage.filter((usage) => matchesTaskLinkedRecord(usage.task_id, taskIds, filters));
+  const tokenUsage = state.ledger_token_usage.filter((usage) => matchesTaskLinkedRecord(usage, taskIds, filters));
   const usageTaskIds = new Set(tokenUsage.map((usage) => usage.task_id));
   const assessments = state.ledger_token_assessments.filter((assessment) => usageTaskIds.has(assessment.task_id));
   const assessmentByTaskId = new Map(assessments.map((assessment) => [assessment.task_id, assessment]));
@@ -484,14 +484,30 @@ function uniqueStrings(values: string[]): string[] {
   return [...new Set(values)];
 }
 
-function matchesTaskLinkedRecord(taskId: string, taskIds: Set<string>, filters: LedgerRecordFilters): boolean {
+function matchesTaskLinkedRecord(
+  record: { repo_id?: string; session_id?: string; task_id: string; workspace_id?: string },
+  taskIds: Set<string>,
+  filters: LedgerRecordFilters
+): boolean {
+  if (hasConflictingLedgerContext(record, filters)) {
+    return false;
+  }
   if (filters.task_id !== undefined) {
-    return taskId === filters.task_id;
+    return record.task_id === filters.task_id;
   }
   if (hasLedgerFilter(filters)) {
-    return taskIds.has(taskId);
+    return taskIds.has(record.task_id) || matchesLedgerFilters(record, filters);
   }
   return true;
+}
+
+function hasConflictingLedgerContext(
+  item: { repo_id?: string; session_id?: string; workspace_id?: string },
+  filters: LedgerRecordFilters
+): boolean {
+  return (filters.workspace_id !== undefined && item.workspace_id !== undefined && item.workspace_id !== filters.workspace_id) ||
+    (filters.repo_id !== undefined && item.repo_id !== undefined && item.repo_id !== filters.repo_id) ||
+    (filters.session_id !== undefined && item.session_id !== undefined && item.session_id !== filters.session_id);
 }
 
 function matchesLedgerFilters(

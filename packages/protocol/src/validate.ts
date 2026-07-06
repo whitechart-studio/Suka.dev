@@ -262,6 +262,12 @@ export function validateTokenUsage(value: unknown): ValidationResult<TokenUsage>
   }
 
   requireString(value, "task_id", issues);
+  optionalNonEmptyString(value, "workspace_id", issues);
+  optionalNonEmptyString(value, "repo_id", issues);
+  optionalNonEmptyString(value, "session_id", issues);
+  optionalNonEmptyString(value, "checkpoint_id", issues);
+  optionalNonEmptyString(value, "agent_id", issues);
+  optionalNonEmptyString(value, "tool", issues);
   requireEnum(value, "provider", LEDGER_TOKEN_PROVIDERS, issues);
   optionalNonEmptyString(value, "model", issues);
   requireNonNegativeInteger(value, "input_tokens", issues);
@@ -273,6 +279,7 @@ export function validateTokenUsage(value: unknown): ValidationResult<TokenUsage>
   optionalNonNegativeNumber(value, "estimated_cost", issues);
   optionalEnum(value, "currency", LEDGER_TOKEN_CURRENCIES, issues);
   requireEnum(value, "measurement_source", LEDGER_TOKEN_MEASUREMENT_SOURCES, issues);
+  optionalNonEmptyString(value, "source_run_id", issues);
 
   return issues.length === 0 ? ok(value as unknown as TokenUsage) : fail(issues);
 }
