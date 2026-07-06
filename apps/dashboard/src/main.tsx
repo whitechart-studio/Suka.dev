@@ -1310,6 +1310,10 @@ function Dashboard(): React.ReactElement {
     "--right-rail-width": `${rightRailWidth}px`,
     "--tracking-popover-right": rightOpen && !focusMode ? `${rightRailWidth + 20}px` : "12px"
   } as React.CSSProperties;
+  const modalPanelOpen = ledgerOpen || settingsOpen || teamPanelOpen;
+  const modalBackgroundProps = modalPanelOpen
+    ? { "aria-hidden": true, inert: true }
+    : {};
 
   if (showWelcome) {
     return (
@@ -1346,7 +1350,7 @@ function Dashboard(): React.ReactElement {
   return (
     <div className="suka-app" data-theme={settings.theme} data-density={settings.density} style={shellStyle}>
       <header className="topbar">
-        <div className="brand">
+        <div className="brand" {...modalBackgroundProps}>
           <button aria-label="Back to landing" className="back-btn" type="button" onClick={exitToLanding}>
             <ArrowLeft size={15} />
           </button>
@@ -1362,7 +1366,7 @@ function Dashboard(): React.ReactElement {
             <p>{activeProject?.repo_root ?? "Local workspace"}</p>
           </div>
         </div>
-        <div className="top-actions">
+        <div className="top-actions" {...modalBackgroundProps}>
           <Badge tone="info" icon={<HardDrive size={12} />}>local</Badge>
           <Badge tone={teamSummary.active_agents > 0 ? "live" : "neutral"} icon={<Users size={12} />}>
             {teamSummary.active_agents > 0 ? `${teamSummary.active_agents} active` : "local only"}
@@ -1454,7 +1458,7 @@ function Dashboard(): React.ReactElement {
         />
       ) : null}
 
-      <main className={shellClass} ref={shellRef} style={shellStyle}>
+      <main className={shellClass} ref={shellRef} style={shellStyle} {...modalBackgroundProps}>
         <aside className="rail left-rail">
           <RailHeader
             count={state.presence.length}
@@ -2133,7 +2137,7 @@ function TeamConnectionPanel({
   const primaryWorkspace = summary.workspaces[0];
 
   return (
-    <section className="team-panel" aria-label="Team connection">
+    <section aria-label="Team connection" aria-modal="true" className="team-panel" role="dialog">
       <div className="team-panel-head">
         <div>
           <h2><Users size={14} /> Team Connection</h2>
@@ -2143,6 +2147,7 @@ function TeamConnectionPanel({
       </div>
       <div className="team-mode-grid">
         <button
+          aria-label="Use local-only coordination"
           className={!connected ? "mode-option active" : "mode-option"}
           type="button"
           onClick={() => onUpdate({ ...connection, mode: "local" })}
@@ -2151,6 +2156,7 @@ function TeamConnectionPanel({
           <span>Local</span>
         </button>
         <button
+          aria-label="Use team coordination mode"
           className={connected ? "mode-option active" : "mode-option"}
           type="button"
           onClick={() => onUpdate({
@@ -2166,6 +2172,7 @@ function TeamConnectionPanel({
       <label className="team-field">
         <span>workspace</span>
         <input
+          aria-label="Team workspace name"
           value={connection.workspaceName}
           onChange={(event) => onUpdate({ ...connection, workspaceName: event.target.value })}
         />
@@ -2176,6 +2183,7 @@ function TeamConnectionPanel({
           <code>{inviteLink}</code>
         </div>
         <button
+          aria-label="Copy team invite token"
           type="button"
           onClick={() => void copyText(inviteLink)}
         >
@@ -2211,6 +2219,7 @@ function TeamConnectionPanel({
           <p className="empty">No scoped sessions yet.</p>
         ) : sessionRooms.slice(0, 5).map((room) => (
           <button
+            aria-label={`Select session room ${room.session_id} with ${room.members.length} active ${room.members.length === 1 ? "agent" : "agents"}`}
             aria-pressed={room.id === activeSessionId}
             className={room.id === activeSessionId ? "session-room active" : "session-room"}
             key={room.id}
@@ -2242,11 +2251,11 @@ function TeamConnectionPanel({
         })}
       </div>
       <div className="card-actions">
-        <button type="button" onClick={() => onUpdate({ ...connection, inviteToken: createInviteToken(repoName) })}>
+        <button aria-label="Rotate team invite token" type="button" onClick={() => onUpdate({ ...connection, inviteToken: createInviteToken(repoName) })}>
           <RefreshCw size={13} />
           Rotate
         </button>
-        <button type="button" onClick={onClose}>
+        <button aria-label="Close team connection panel" type="button" onClick={onClose}>
           <CheckCheck size={13} />
           Done
         </button>
@@ -2417,7 +2426,7 @@ function SettingsPanel({
   status: string;
 }): React.ReactElement {
   return (
-    <section aria-label="Settings" className="settings-panel">
+    <section aria-label="Settings" aria-modal="true" className="settings-panel" role="dialog">
       <div className="settings-head">
         <div>
           <h2><Settings size={14} /> Settings</h2>
@@ -2437,6 +2446,7 @@ function SettingsPanel({
           </div>
           <div className="theme-toggle">
             <button
+              aria-label="Use dark theme"
               aria-pressed={settings.theme === "dark"}
               className={settings.theme === "dark" ? "active" : ""}
               type="button"
@@ -2446,6 +2456,7 @@ function SettingsPanel({
               Dark
             </button>
             <button
+              aria-label="Use light theme"
               aria-pressed={settings.theme === "light"}
               className={settings.theme === "light" ? "active" : ""}
               type="button"
@@ -2463,6 +2474,7 @@ function SettingsPanel({
           </div>
           <div className="theme-toggle">
             <button
+              aria-label="Use default density"
               aria-pressed={settings.density === "default"}
               className={settings.density === "default" ? "active" : ""}
               type="button"
@@ -2471,6 +2483,7 @@ function SettingsPanel({
               Default
             </button>
             <button
+              aria-label="Use compact density"
               aria-pressed={settings.density === "compact"}
               className={settings.density === "compact" ? "active" : ""}
               type="button"
@@ -2485,7 +2498,7 @@ function SettingsPanel({
             <span>Workspace layout</span>
             <p>{layoutScopeLabel} keeps panel sizes, block arrangement, selection, and canvas position separate.</p>
           </div>
-          <button className="settings-reset-btn" type="button" onClick={onResetLayout}>
+          <button aria-label="Reset workspace layout" className="settings-reset-btn" type="button" onClick={onResetLayout}>
             <RefreshCw size={12} />
             Reset Layout
           </button>
@@ -2500,6 +2513,7 @@ function SettingsPanel({
             <p>Show navigation minimap</p>
           </div>
           <button
+            aria-label={settings.showMinimap ? "Hide canvas minimap" : "Show canvas minimap"}
             aria-pressed={settings.showMinimap}
             className={`toggle-switch ${settings.showMinimap ? "on" : ""}`}
             type="button"
@@ -2514,6 +2528,7 @@ function SettingsPanel({
             <p>Show colour legend below canvas</p>
           </div>
           <button
+            aria-label={settings.showLegend ? "Hide canvas legend" : "Show canvas legend"}
             aria-pressed={settings.showLegend}
             className={`toggle-switch ${settings.showLegend ? "on" : ""}`}
             type="button"
@@ -2534,6 +2549,7 @@ function SettingsPanel({
           <div className="interval-group">
             {([5, 10, 30] as const).map((val) => (
               <button
+                aria-label={`Set refresh interval to ${val} seconds`}
                 aria-pressed={settings.pollingInterval === val}
                 className={settings.pollingInterval === val ? "active" : ""}
                 key={val}
@@ -2918,7 +2934,15 @@ function RailHeader(props: {
     <div className="rail-header">
       <h2>{props.icon}{props.title}</h2>
       <Badge tone={props.tone ?? "live"} icon={<Bot size={13} />}>{props.count}</Badge>
-      <button aria-label={props.open ? "Collapse rail" : "Expand rail"} type="button" onClick={props.onToggle}>{props.toggleIcon}</button>
+      <button
+        aria-hidden={props.open ? undefined : true}
+        aria-label={props.open ? "Collapse rail" : "Expand rail"}
+        tabIndex={props.open ? undefined : -1}
+        type="button"
+        onClick={props.onToggle}
+      >
+        {props.toggleIcon}
+      </button>
     </div>
   );
 }
