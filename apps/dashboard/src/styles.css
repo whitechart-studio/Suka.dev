@@ -3311,12 +3311,12 @@ body.is-resizing-rail {
   padding: 0;
   position: absolute;
   top: 0;
-  width: 10px;
+  width: 18px;
   z-index: 3;
 }
 
-.rail-resize-handle.left { left: -6px; }
-.rail-resize-handle.right { right: -6px; }
+.rail-resize-handle.left { left: -9px; }
+.rail-resize-handle.right { right: -9px; }
 
 .rail-resize-handle::after {
   background: transparent;
@@ -5637,7 +5637,18 @@ body.is-resizing-rail .rail-resize-handle::after {
   .canvas-hud-metrics { gap: 3px; max-width: 100%; overflow: auto; }
   .canvas-hud-metrics span { font-size: 10px; min-height: 22px; padding: 2px 6px; }
 
-  .canvas-toolbar { gap: 1px; padding: 3px; }
+  .canvas-toolbar {
+    bottom: 8px;
+    flex-wrap: wrap;
+    gap: 2px;
+    justify-content: center;
+    left: 8px;
+    max-width: none;
+    overflow: visible;
+    padding: 4px;
+    right: 8px;
+    transform: none;
+  }
 
   .canvas-toolbar button {
     font-size: 0;
