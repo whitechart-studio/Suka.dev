@@ -219,8 +219,9 @@ Usage:
   suka ledger task start <title> --summary TEXT [--type implementation] [--task-id ID] [--issue-id ID] [--claim-id ID] [--checkpoint-id ID] [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
   suka ledger task finish <task-id> [--status completed] [--checkpoint-id ID] [--server URL]
   suka ledger task read [--workspace ID] [--repo-id ID] [--session ID] [--task-id ID] [--checkpoint-id ID] [--server URL]
-  suka ledger token record <task-id> --input N --output N [--total N] [--provider openai|anthropic|local|unknown] [--model MODEL] [--source api|cli|estimated|manual] [--server URL]
-  suka ledger token assess <task-id> [--category delivery|planning|review|rework|discarded|blocked|handoff|unknown] [--score 0-100] [--by user|agent|rule|system] [--confidence low|medium|high] [--reason TEXT] [--server URL]
+  suka ledger token record <task-id> --input N --output N [--total N] [--provider openai|anthropic|local|unknown] [--model MODEL] [--source api|cli|transcript|agent_reported|estimated|manual] [--agent AGENT] [--tool TOOL] [--checkpoint-id ID] [--source-run-id ID] [--workspace ID] [--repo-id ID] [--session ID] [--server URL]
+  suka ledger token collect <task-id> --from codex|claude --file usage.json [--workspace ID] [--repo-id ID] [--session ID] [--agent AGENT] [--tool TOOL] [--checkpoint-id ID] [--source-run-id ID] [--server URL]
+  suka ledger token assess <task-id> [--category delivery|planning|review|rework|discarded|blocked|handoff|unknown] [--score 0-100] [--by user|agent|rule|system] [--confidence low|medium|high] [--agent AGENT] [--tool TOOL] [--checkpoint-id ID] [--workspace ID] [--repo-id ID] [--session ID] [--reason TEXT] [--server URL]
   suka ledger token read [--workspace ID] [--repo-id ID] [--session ID] [--task-id ID] [--server URL]
   suka ledger token assessments [--workspace ID] [--repo-id ID] [--session ID] [--task-id ID] [--server URL]
   suka ledger token efficiency [--workspace ID] [--repo-id ID] [--session ID] [--task-id ID] [--checkpoint-id ID] [--issue-id ID] [--budget-scope session|task --warning-threshold N --hard-limit N] [--server URL]
@@ -238,6 +239,7 @@ Usage:
 Ledger:
   task = one prompt or work unit.
   checkpoint = a PR, commit, review, or other reviewable milestone.
+  token collect reads metadata-only agent usage JSON; prompts, code patches, and terminal logs are not stored.
 
 Environment:
   SUKA_SERVER_URL  Default server URL

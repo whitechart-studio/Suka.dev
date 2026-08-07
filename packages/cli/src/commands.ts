@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { FileSukaStore, createSukaHttpServer, createSukaService, listen } from "@suka/server";
 import {
@@ -25,6 +25,7 @@ import { findConfigPath, initProject, loadConfig, resolveProjectPath } from "./c
 import { createPointerId } from "./ids.js";
 import { detectLocalAgents, type DetectedLocalAgent, type LocalAgentDetectionReport } from "./agents.js";
 import { SukaApiClient } from "./client.js";
+import { collectAgentTokenUsage, type AgentTokenCollector } from "./usage-collectors.js";
 import {
   formatDoctor,
   formatEnvExports,
@@ -679,6 +680,7 @@ async function ledgerTokenCommand(
     const totalTokens = readIntegerFlag(flags, "total") ?? inputTokens + outputTokens;
     const tokenUsage: Record<string, unknown> = {
       task_id: taskId,
+      ...coordinationContext(flags, config, context.env),
       provider: (readStringFlag(flags, "provider") ?? "unknown") as LedgerTokenProvider,
       input_tokens: inputTokens,
       output_tokens: outputTokens,
@@ -691,7 +693,47 @@ async function ledgerTokenCommand(
     addOptionalNumber(tokenUsage, "tool_call_tokens", readIntegerFlag(flags, "tool-call"));
     addOptionalNumber(tokenUsage, "estimated_cost", readDecimalFlag(flags, "cost"));
     addOptionalString(tokenUsage, "currency", readStringFlag(flags, "currency"));
+    addOptionalString(tokenUsage, "agent_id", readStringFlag(flags, "agent") ?? context.env.SUKA_AGENT_ID);
+    addOptionalString(tokenUsage, "tool", readStringFlag(flags, "tool") ?? context.env.SUKA_AGENT_TOOL);
+    addOptionalString(tokenUsage, "checkpoint_id", readStringFlag(flags, "checkpoint-id"));
+    addOptionalString(tokenUsage, "source_run_id", readStringFlag(flags, "source-run-id"));
 
+    const result = await client.createLedgerTokenUsage(tokenUsage);
+    context.io.stdout.write(formatJson(result));
+    return { exitCode: 0 };
+  }
+
+  if (action === "collect") {
+    const taskId = args[1] ?? readStringFlag(flags, "task-id");
+    const collector = readStringFlag(flags, "from") ?? readStringFlag(flags, "collector");
+    const file = readStringFlag(flags, "file");
+    if (taskId === undefined) {
+      throw new Error("ledger token collect requires a task id.");
+    }
+    if (collector !== "codex" && collector !== "claude") {
+      throw new Error("ledger token collect requires --from codex or --from claude.");
+    }
+    if (file === undefined) {
+      throw new Error("ledger token collect requires --file.");
+    }
+
+    const collectContext = coordinationContext(flags, config, context.env);
+    let parsedUsage: unknown;
+    try {
+      parsedUsage = JSON.parse(readFileSync(resolve(file), "utf8"));
+    } catch (error) {
+      throw new Error(`ledger token collect could not read or parse --file: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    const tokenUsage = collectAgentTokenUsage(collector as AgentTokenCollector, parsedUsage, {
+      agentId: readStringFlag(flags, "agent") ?? context.env.SUKA_AGENT_ID,
+      checkpointId: readStringFlag(flags, "checkpoint-id"),
+      repoId: collectContext.repo_id,
+      sessionId: collectContext.session_id,
+      sourceRunId: readStringFlag(flags, "source-run-id"),
+      taskId,
+      tool: readStringFlag(flags, "tool") ?? (collector === "codex" ? "codex" : "claude-code"),
+      workspaceId: collectContext.workspace_id
+    });
     const result = await client.createLedgerTokenUsage(tokenUsage);
     context.io.stdout.write(formatJson(result));
     return { exitCode: 0 };
@@ -703,12 +745,19 @@ async function ledgerTokenCommand(
       throw new Error("ledger token assess requires a task id.");
     }
 
+    const contextDefaults = coordinationContext(flags, config, context.env);
     const assessment: Record<string, unknown> = {
       task_id: taskId,
       value_category: (readStringFlag(flags, "category") ?? "unknown") as LedgerTokenValueCategory,
       assessed_by: (readStringFlag(flags, "by") ?? "user") as LedgerTokenAssessor,
       confidence: (readStringFlag(flags, "confidence") ?? "medium") as LedgerTokenConfidence
     };
+    addOptionalString(assessment, "agent_id", readStringFlag(flags, "agent") ?? context.env.SUKA_AGENT_ID);
+    addOptionalString(assessment, "checkpoint_id", readStringFlag(flags, "checkpoint-id"));
+    addOptionalString(assessment, "repo_id", contextDefaults.repo_id);
+    addOptionalString(assessment, "session_id", contextDefaults.session_id);
+    addOptionalString(assessment, "tool", readStringFlag(flags, "tool") ?? context.env.SUKA_AGENT_TOOL);
+    addOptionalString(assessment, "workspace_id", contextDefaults.workspace_id);
     addOptionalNumber(assessment, "usefulness_score", readIntegerFlag(flags, "score"));
     addOptionalString(assessment, "reason", readStringFlag(flags, "reason"));
 
@@ -735,7 +784,7 @@ async function ledgerTokenCommand(
     return { exitCode: 0 };
   }
 
-  throw new Error("ledger token requires a supported action: record, assess, read, assessments, or efficiency.");
+  throw new Error("ledger token requires a supported action: record, collect, assess, read, assessments, or efficiency.");
 }
 
 async function ledgerEventCommand(

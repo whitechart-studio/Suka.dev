@@ -190,6 +190,12 @@ export interface TaskEntry {
 
 export interface TokenUsage {
   task_id: string;
+  workspace_id?: string;
+  repo_id?: string;
+  session_id?: string;
+  checkpoint_id?: string;
+  agent_id?: AgentId;
+  tool?: string;
   provider: LedgerTokenProvider;
   model?: string;
   input_tokens: number;
@@ -201,10 +207,17 @@ export interface TokenUsage {
   estimated_cost?: number;
   currency?: LedgerTokenCurrency;
   measurement_source: LedgerTokenMeasurementSource;
+  source_run_id?: string;
 }
 
 export interface TokenAssessment {
   task_id: string;
+  workspace_id?: string;
+  repo_id?: string;
+  session_id?: string;
+  checkpoint_id?: string;
+  agent_id?: string;
+  tool?: string;
   value_category: LedgerTokenValueCategory;
   usefulness_score?: number;
   assessed_by: LedgerTokenAssessor;

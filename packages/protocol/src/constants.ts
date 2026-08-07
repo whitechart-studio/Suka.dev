@@ -59,7 +59,7 @@ export const LEDGER_TASK_STATUSES = ["active", "completed", "blocked", "discarde
 
 export const LEDGER_TOKEN_PROVIDERS = ["openai", "anthropic", "local", "unknown"] as const;
 
-export const LEDGER_TOKEN_MEASUREMENT_SOURCES = ["api", "cli", "estimated", "manual"] as const;
+export const LEDGER_TOKEN_MEASUREMENT_SOURCES = ["api", "cli", "transcript", "agent_reported", "estimated", "manual"] as const;
 
 export const LEDGER_TOKEN_VALUE_CATEGORIES = [
   "delivery",

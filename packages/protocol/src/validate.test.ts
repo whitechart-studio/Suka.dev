@@ -418,6 +418,12 @@ test("rejects malformed ledger task entries", () => {
 test("accepts valid ledger token usage", () => {
   const usage = {
     task_id: "task_01",
+    workspace_id: "workspace-a",
+    repo_id: "repo-a",
+    session_id: "session-a",
+    checkpoint_id: "checkpoint_pr_01",
+    agent_id: "codex-local",
+    tool: "codex",
     provider: "openai",
     model: "gpt-5",
     input_tokens: 2300,
@@ -428,7 +434,8 @@ test("accepts valid ledger token usage", () => {
     total_tokens: 6400,
     estimated_cost: 0.18,
     currency: "USD",
-    measurement_source: "api"
+    measurement_source: "agent_reported",
+    source_run_id: "run_01"
   } satisfies TokenUsage;
 
   const result = validateTokenUsage(usage);
@@ -439,6 +446,12 @@ test("accepts valid ledger token usage", () => {
 test("rejects invalid ledger token usage", () => {
   const result = validateTokenUsage({
     task_id: "",
+    workspace_id: "",
+    repo_id: "",
+    session_id: "",
+    checkpoint_id: "",
+    agent_id: "",
+    tool: "",
     provider: "other-ai",
     model: "",
     input_tokens: -1,
@@ -449,12 +462,19 @@ test("rejects invalid ledger token usage", () => {
     total_tokens: -1,
     estimated_cost: -0.01,
     currency: "EUR",
-    measurement_source: "logs"
+    measurement_source: "logs",
+    source_run_id: ""
   });
 
   assert.equal(result.ok, false);
   if (!result.ok) {
     assert.ok(result.issues.some((issue) => issue.path === "task_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "workspace_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "repo_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "session_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "checkpoint_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "agent_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "tool" && issue.code === "invalid_type"));
     assert.ok(result.issues.some((issue) => issue.path === "provider" && issue.code === "invalid_value"));
     assert.ok(result.issues.some((issue) => issue.path === "model" && issue.code === "invalid_type"));
     assert.ok(result.issues.some((issue) => issue.path === "input_tokens" && issue.code === "invalid_type"));
@@ -466,12 +486,19 @@ test("rejects invalid ledger token usage", () => {
     assert.ok(result.issues.some((issue) => issue.path === "estimated_cost" && issue.code === "invalid_type"));
     assert.ok(result.issues.some((issue) => issue.path === "currency" && issue.code === "invalid_value"));
     assert.ok(result.issues.some((issue) => issue.path === "measurement_source" && issue.code === "invalid_value"));
+    assert.ok(result.issues.some((issue) => issue.path === "source_run_id" && issue.code === "invalid_type"));
   }
 });
 
 test("accepts valid ledger token assessments", () => {
   const assessment = {
     task_id: "task_01",
+    workspace_id: "workspace-a",
+    repo_id: "repo-a",
+    session_id: "session-a",
+    checkpoint_id: "checkpoint-pr-196",
+    agent_id: "codex-a",
+    tool: "codex",
     value_category: "delivery",
     usefulness_score: 82,
     assessed_by: "rule",
@@ -487,6 +514,12 @@ test("accepts valid ledger token assessments", () => {
 test("rejects invalid ledger token assessments", () => {
   const result = validateTokenAssessment({
     task_id: "",
+    workspace_id: "",
+    repo_id: 42,
+    session_id: "",
+    checkpoint_id: "",
+    agent_id: "",
+    tool: "",
     value_category: "waste",
     usefulness_score: 101,
     assessed_by: "manager",
@@ -497,6 +530,12 @@ test("rejects invalid ledger token assessments", () => {
   assert.equal(result.ok, false);
   if (!result.ok) {
     assert.ok(result.issues.some((issue) => issue.path === "task_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "workspace_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "repo_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "session_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "checkpoint_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "agent_id" && issue.code === "invalid_type"));
+    assert.ok(result.issues.some((issue) => issue.path === "tool" && issue.code === "invalid_type"));
     assert.ok(result.issues.some((issue) => issue.path === "value_category" && issue.code === "invalid_value"));
     assert.ok(result.issues.some((issue) => issue.path === "usefulness_score" && issue.code === "invalid_type"));
     assert.ok(result.issues.some((issue) => issue.path === "assessed_by" && issue.code === "invalid_value"));

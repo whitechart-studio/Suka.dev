@@ -26,6 +26,7 @@ import {
   validateTokenUsage
 } from "@suka/protocol";
 import { MemorySukaStore, type SukaStore } from "./memory-store.js";
+import { hasConflictingLedgerScope, scopedLedgerTaskKey } from "./ledger-scope.js";
 import { buildLocalProjectFromMetadata, inspectLocalProject, type LocalProjectInput } from "./projects.js";
 import type { LocalProject, SukaState } from "./state.js";
 import { buildTeamSummary } from "./team.js";
@@ -121,13 +122,13 @@ export function createSukaService(store: SukaStore = new MemorySukaStore()): Suk
 
     listLedgerTokenUsage(filters = {}) {
       const taskIds = taskIdsForFilters(store.getState().ledger_tasks, filters);
-      return store.getState().ledger_token_usage.filter((tokenUsage) => matchesTaskLinkedRecord(tokenUsage.task_id, taskIds, filters));
+      return store.getState().ledger_token_usage.filter((tokenUsage) => matchesTaskLinkedRecord(tokenUsage, taskIds, filters));
     },
 
     listLedgerTokenAssessments(filters = {}) {
       const taskIds = taskIdsForFilters(store.getState().ledger_tasks, filters);
       return store.getState().ledger_token_assessments.filter((assessment) => {
-        return matchesTaskLinkedRecord(assessment.task_id, taskIds, filters);
+        return matchesTaskLinkedRecord(assessment, taskIds, filters);
       });
     },
 
@@ -385,16 +386,16 @@ function buildTokenEfficiencyRollup(
 ): TokenEfficiencyRollup {
   const tasks = state.ledger_tasks.filter((task) => matchesLedgerFilters(task, filters));
   const taskIds = new Set(tasks.map((task) => task.task_id));
-  const tokenUsage = state.ledger_token_usage.filter((usage) => matchesTaskLinkedRecord(usage.task_id, taskIds, filters));
-  const usageTaskIds = new Set(tokenUsage.map((usage) => usage.task_id));
-  const assessments = state.ledger_token_assessments.filter((assessment) => usageTaskIds.has(assessment.task_id));
-  const assessmentByTaskId = new Map(assessments.map((assessment) => [assessment.task_id, assessment]));
+  const tokenUsage = state.ledger_token_usage.filter((usage) => matchesTaskLinkedRecord(usage, taskIds, filters));
+  const usageTaskKeys = new Set(tokenUsage.map(scopedLedgerTaskKey));
+  const assessments = state.ledger_token_assessments.filter((assessment) => usageTaskKeys.has(scopedLedgerTaskKey(assessment)));
+  const assessmentByTaskKey = new Map(assessments.map((assessment) => [scopedLedgerTaskKey(assessment), assessment]));
   const assessedTaskIds = tokenUsage
-    .map((usage) => usage.task_id)
-    .filter((taskId) => assessmentByTaskId.has(taskId));
+    .filter((usage) => assessmentByTaskKey.has(scopedLedgerTaskKey(usage)))
+    .map((usage) => usage.task_id);
   const unassessedTaskIds = tokenUsage
-    .map((usage) => usage.task_id)
-    .filter((taskId) => !assessmentByTaskId.has(taskId));
+    .filter((usage) => !assessmentByTaskKey.has(scopedLedgerTaskKey(usage)))
+    .map((usage) => usage.task_id);
   const totals = {
     discarded_tokens: 0,
     estimated_cost: 0,
@@ -412,7 +413,7 @@ function buildTokenEfficiencyRollup(
     totals.output_tokens += usage.output_tokens;
     totals.total_tokens += usage.total_tokens;
     totals.estimated_cost += usage.estimated_cost ?? 0;
-    const assessment = assessmentByTaskId.get(usage.task_id);
+    const assessment = assessmentByTaskKey.get(scopedLedgerTaskKey(usage));
     if (assessment === undefined) {
       totals.unassessed_tokens += usage.total_tokens;
       continue;
@@ -484,12 +485,19 @@ function uniqueStrings(values: string[]): string[] {
   return [...new Set(values)];
 }
 
-function matchesTaskLinkedRecord(taskId: string, taskIds: Set<string>, filters: LedgerRecordFilters): boolean {
+function matchesTaskLinkedRecord(
+  record: { repo_id?: string; session_id?: string; task_id: string; workspace_id?: string },
+  taskIds: Set<string>,
+  filters: LedgerRecordFilters
+): boolean {
+  if (hasConflictingLedgerScope(record, filters)) {
+    return false;
+  }
   if (filters.task_id !== undefined) {
-    return taskId === filters.task_id;
+    return record.task_id === filters.task_id;
   }
   if (hasLedgerFilter(filters)) {
-    return taskIds.has(taskId);
+    return taskIds.has(record.task_id) || matchesLedgerFilters(record, filters);
   }
   return true;
 }

@@ -12,6 +12,7 @@ import type {
   TokenAssessment,
   TokenUsage
 } from "@suka/protocol";
+import { hasConflictingLedgerScope, scopedLedgerTaskKey } from "./ledger-scope.js";
 import { createEmptyState, type LocalProject, type SukaCleanupResult, type SukaState } from "./state.js";
 
 export interface SukaStore {
@@ -95,6 +96,11 @@ export class MemorySukaStore implements SukaStore {
         .filter((task) => matchesLedgerContext(task, context))
         .map((task) => task.task_id)
     );
+    const removedTaskKeys = new Set(
+      this.#state.ledger_tasks
+        .filter((task) => matchesLedgerContext(task, context))
+        .map(scopedLedgerTaskKey)
+    );
     this.#state.presence = this.#state.presence.filter((presence) => !matchesContext(presence, context));
     this.#state.claims = this.#state.claims.filter((claim) => !matchesContext(claim, context));
     this.#state.events = this.#state.events.filter((event) => !matchesContext(event, context));
@@ -102,9 +108,14 @@ export class MemorySukaStore implements SukaStore {
     this.#state.briefs = this.#state.briefs.filter((brief) => !matchesContext(brief, context));
     this.#state.ledger = this.#state.ledger.filter((entry) => !matchesContext(entry, context));
     this.#state.ledger_tasks = this.#state.ledger_tasks.filter((task) => !matchesLedgerContext(task, context));
-    this.#state.ledger_token_usage = this.#state.ledger_token_usage.filter((tokenUsage) => !removedTaskIds.has(tokenUsage.task_id));
+    this.#state.ledger_token_usage = this.#state.ledger_token_usage.filter((tokenUsage) =>
+      !matchesLedgerContext(tokenUsage, context) &&
+      !(removedTaskKeys.has(scopedLedgerTaskKey(tokenUsage)) || (removedTaskIds.has(tokenUsage.task_id) && !hasConflictingLedgerScope(tokenUsage, context)))
+    );
     this.#state.ledger_token_assessments = this.#state.ledger_token_assessments.filter(
-      (assessment) => !removedTaskIds.has(assessment.task_id)
+      (assessment) =>
+        !matchesLedgerContext(assessment, context) &&
+        !(removedTaskKeys.has(scopedLedgerTaskKey(assessment)) || (removedTaskIds.has(assessment.task_id) && !hasConflictingLedgerScope(assessment, context)))
     );
     this.#state.ledger_events = this.#state.ledger_events.filter((event) => !matchesLedgerContext(event, context));
     this.#state.ledger_checkpoints = this.#state.ledger_checkpoints.filter((checkpoint) => !matchesLedgerContext(checkpoint, context));
@@ -146,15 +157,15 @@ export class MemorySukaStore implements SukaStore {
   }
 
   upsertLedgerTask(task: TaskEntry): void {
-    this.#state.ledger_tasks = upsertByKey(this.#state.ledger_tasks, task, "task_id");
+    this.#state.ledger_tasks = upsertByIdentity(this.#state.ledger_tasks, task, scopedLedgerTaskKey);
   }
 
   upsertLedgerTokenUsage(tokenUsage: TokenUsage): void {
-    this.#state.ledger_token_usage = upsertByKey(this.#state.ledger_token_usage, tokenUsage, "task_id");
+    this.#state.ledger_token_usage = upsertByIdentity(this.#state.ledger_token_usage, tokenUsage, scopedTokenUsageKey);
   }
 
   upsertLedgerTokenAssessment(assessment: TokenAssessment): void {
-    this.#state.ledger_token_assessments = upsertByKey(this.#state.ledger_token_assessments, assessment, "task_id");
+    this.#state.ledger_token_assessments = upsertByIdentity(this.#state.ledger_token_assessments, assessment, scopedLedgerTaskKey);
   }
 
   appendLedgerEvent(event: LedgerEvent): void {
@@ -227,6 +238,25 @@ function upsertByKey<T, K extends keyof T>(items: T[], item: T, key: K): T[] {
   const next = [...items];
   next[index] = item;
   return next;
+}
+
+function upsertByIdentity<T>(items: T[], item: T, identity: (value: T) => string): T[] {
+  const itemKey = identity(item);
+  const index = items.findIndex((candidate) => identity(candidate) === itemKey);
+  if (index === -1) {
+    return [...items, item];
+  }
+
+  const next = [...items];
+  next[index] = item;
+  return next;
+}
+
+function scopedTokenUsageKey(item: TokenUsage): string {
+  return [
+    scopedLedgerTaskKey(item),
+    item.source_run_id ?? ""
+  ].join("\u001f");
 }
 
 function matchesContext(item: CoordinationContext, context: CoordinationContext): boolean {

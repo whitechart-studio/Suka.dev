@@ -16,7 +16,11 @@
     "test": "npm run test --workspaces --if-present",
     "typecheck": "tsc -b --pretty false && npm run typecheck --workspace @suka/dashboard"
   },
+  "overrides": {
+    "postcss": "8.5.25"
+  },
   "devDependencies": {
+    "postcss": "8.5.25",
     "@types/node": "^26.0.0",
     "@types/ws": "^8.18.1",
     "danger": "^13.0.8",

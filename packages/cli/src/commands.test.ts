@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { runCli } from "./index.js";
@@ -1633,6 +1633,18 @@ test("ledger token commands record usage and assessment", async () => {
       "user",
       "--confidence",
       "high",
+      "--workspace",
+      "workspace-a",
+      "--repo-id",
+      "repo-a",
+      "--session",
+      "session-a",
+      "--agent",
+      "codex-local",
+      "--tool",
+      "codex",
+      "--checkpoint-id",
+      "checkpoint_pr_196",
       "--reason",
       "Useful implementation output."
     ],
@@ -1651,17 +1663,233 @@ test("ledger token commands record usage and assessment", async () => {
   assert.equal(assessmentResult.exitCode, 0);
   assert.equal(requests[1]?.url, "http://suka.test/api/ledger/token-assessments");
   const assessment = JSON.parse(String(requests[1]?.init?.body)) as {
+    agent_id: string;
+    checkpoint_id: string;
     confidence: string;
+    repo_id: string;
     reason: string;
+    session_id: string;
     task_id: string;
+    tool: string;
     usefulness_score: number;
     value_category: string;
+    workspace_id: string;
   };
   assert.equal(assessment.task_id, "task_cli_01");
+  assert.equal(assessment.workspace_id, "workspace-a");
+  assert.equal(assessment.repo_id, "repo-a");
+  assert.equal(assessment.session_id, "session-a");
+  assert.equal(assessment.agent_id, "codex-local");
+  assert.equal(assessment.tool, "codex");
+  assert.equal(assessment.checkpoint_id, "checkpoint_pr_196");
   assert.equal(assessment.value_category, "delivery");
   assert.equal(assessment.usefulness_score, 86);
   assert.equal(assessment.confidence, "high");
   assert.equal(assessment.reason, "Useful implementation output.");
+});
+
+test("ledger token collect ingests Codex and Claude usage fixtures", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-token-collect-"));
+  try {
+    const codexFixture = join(tempDir, "codex-usage.json");
+    const claudeFixture = join(tempDir, "claude-usage.json");
+    writeFileSync(codexFixture, JSON.stringify({
+      id: "codex-run-01",
+      model: "gpt-5-codex",
+      usage: {
+        input_tokens: 1200,
+        output_tokens: 500,
+        cached_input_tokens: 200,
+        reasoning_tokens: 100,
+        tool_call_tokens: 40,
+        total_tokens: 1700
+      },
+      estimated_cost_usd: 0.31
+    }), "utf8");
+    writeFileSync(claudeFixture, JSON.stringify({
+      session_id: "claude-session-01",
+      model: "claude-sonnet-4.5",
+      usage: {
+        input_tokens: 900,
+        output_tokens: 300,
+        cache_creation_input_tokens: 50,
+        cache_read_input_tokens: 70
+      },
+      total_cost_usd: 0.22
+    }), "utf8");
+
+    const requests: Array<{ init?: RequestInit; url: string }> = [];
+    const fetch = async (url: string | URL | Request, init?: RequestInit) => {
+      const request: { init?: RequestInit; url: string } = { url: String(url) };
+      if (init !== undefined) request.init = init;
+      requests.push(request);
+      return jsonResponse(201, JSON.parse(String(init?.body)) as unknown);
+    };
+
+    const codexResult = await runCli({
+      argv: [
+        "ledger",
+        "token",
+        "collect",
+        "task_collect_01",
+        "--server",
+        "http://suka.test",
+        "--from",
+        "codex",
+        "--file",
+        codexFixture,
+        "--workspace",
+        "workspace-a",
+        "--repo-id",
+        "repo-a",
+        "--session",
+        "session-a",
+        "--agent",
+        "codex-local",
+        "--checkpoint-id",
+        "checkpoint_pr_200"
+      ],
+      env: {},
+      fetch,
+      io: silentIo()
+    });
+    const claudeResult = await runCli({
+      argv: [
+        "ledger",
+        "token",
+        "collect",
+        "task_collect_02",
+        "--server",
+        "http://suka.test",
+        "--from",
+        "claude",
+        "--file",
+        claudeFixture,
+        "--repo-id",
+        "repo-a",
+        "--session",
+        "session-a"
+      ],
+      env: {},
+      fetch,
+      io: silentIo()
+    });
+
+    assert.equal(codexResult.exitCode, 0);
+    assert.equal(claudeResult.exitCode, 0);
+    assert.equal(requests[0]?.url, "http://suka.test/api/ledger/token-usage");
+    assert.equal(requests[1]?.url, "http://suka.test/api/ledger/token-usage");
+    const codexUsage = JSON.parse(String(requests[0]?.init?.body)) as Record<string, unknown>;
+    assert.equal(codexUsage.provider, "openai");
+    assert.equal(codexUsage.model, "gpt-5-codex");
+    assert.equal(codexUsage.input_tokens, 1200);
+    assert.equal(codexUsage.output_tokens, 500);
+    assert.equal(codexUsage.cached_input_tokens, 200);
+    assert.equal(codexUsage.reasoning_tokens, 100);
+    assert.equal(codexUsage.tool_call_tokens, 40);
+    assert.equal(codexUsage.total_tokens, 1700);
+    assert.equal(codexUsage.estimated_cost, 0.31);
+    assert.equal(codexUsage.measurement_source, "agent_reported");
+    assert.equal(codexUsage.source_run_id, "codex-run-01");
+    assert.equal(codexUsage.workspace_id, "workspace-a");
+    assert.equal(codexUsage.repo_id, "repo-a");
+    assert.equal(codexUsage.session_id, "session-a");
+    assert.equal(codexUsage.agent_id, "codex-local");
+    assert.equal(codexUsage.tool, "codex");
+    assert.equal(codexUsage.checkpoint_id, "checkpoint_pr_200");
+
+    const claudeUsage = JSON.parse(String(requests[1]?.init?.body)) as Record<string, unknown>;
+    assert.equal(claudeUsage.provider, "anthropic");
+    assert.equal(claudeUsage.model, "claude-sonnet-4.5");
+    assert.equal(claudeUsage.input_tokens, 900);
+    assert.equal(claudeUsage.output_tokens, 300);
+    assert.equal(claudeUsage.cached_input_tokens, 120);
+    assert.equal(claudeUsage.total_tokens, 1320);
+    assert.equal(claudeUsage.estimated_cost, 0.22);
+    assert.equal(claudeUsage.measurement_source, "transcript");
+    assert.equal(claudeUsage.source_run_id, "claude-session-01");
+    assert.equal(claudeUsage.tool, "claude-code");
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
+test("ledger token collect rejects malformed usage fixtures before publishing", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-token-collect-invalid-"));
+  try {
+    const invalidFixture = join(tempDir, "codex-invalid.json");
+    writeFileSync(invalidFixture, JSON.stringify({ model: "gpt-5-codex", usage: { total_tokens: 10 } }), "utf8");
+    const requests: unknown[] = [];
+    const errors: string[] = [];
+    const result = await runCli({
+      argv: [
+        "ledger",
+        "token",
+        "collect",
+        "task_collect_invalid",
+        "--server",
+        "http://suka.test",
+        "--from",
+        "codex",
+        "--file",
+        invalidFixture
+      ],
+      env: {},
+      fetch: async (url, init) => {
+        requests.push({ init, url });
+        return jsonResponse(201, {});
+      },
+      io: {
+        stdout: { write: () => undefined },
+        stderr: { write: (value: string) => errors.push(value) }
+      }
+    });
+
+    assert.equal(result.exitCode, 1);
+    assert.equal(requests.length, 0);
+    assert.match(errors.join(""), /Codex input tokens must be a non-negative integer/);
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
+test("ledger token collect reports unreadable usage files clearly", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "suka-token-collect-unreadable-"));
+  try {
+    const invalidJson = join(tempDir, "codex-invalid-json.json");
+    writeFileSync(invalidJson, "{", "utf8");
+    const requests: unknown[] = [];
+    const errors: string[] = [];
+    const result = await runCli({
+      argv: [
+        "ledger",
+        "token",
+        "collect",
+        "task_collect_invalid_json",
+        "--server",
+        "http://suka.test",
+        "--from",
+        "codex",
+        "--file",
+        invalidJson
+      ],
+      env: {},
+      fetch: async (url, init) => {
+        requests.push({ init, url });
+        return jsonResponse(201, {});
+      },
+      io: {
+        stdout: { write: () => undefined },
+        stderr: { write: (value: string) => errors.push(value) }
+      }
+    });
+
+    assert.equal(result.exitCode, 1);
+    assert.equal(requests.length, 0);
+    assert.match(errors.join(""), /ledger token collect could not read or parse --file/);
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
+  }
 });
 
 test("ledger token record validates required token counts before publishing", async () => {
