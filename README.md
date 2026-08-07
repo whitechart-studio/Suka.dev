@@ -365,4 +365,6 @@ Dashboard screenshot:
 
 ## License
 
-License selection is pending while the project is pre-release.
+Suka.dev is licensed under the [Apache License 2.0](LICENSE).
+
+You may use, modify, and distribute this project in accordance with the terms of the license.
